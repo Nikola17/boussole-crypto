@@ -1,0 +1,26 @@
+node_modules/
+dist/
+release/
+*.log
+
+# Données personnelles : exports de plateformes et sauvegardes de l'application (à garder hors du dépôt)
+*.pdf
+*.csv
+boussole-sauvegarde-*.json
+.env
+.env.*
+
+# Android : fichiers générés et secrets de signature
+android/local.properties
+android/keystore.properties
+android/*.jks
+android/app/build/
+android/build/
+android/.gradle/
+android/app/src/main/assets/public/
+
+# Éditeurs / système
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
