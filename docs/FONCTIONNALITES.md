@@ -102,27 +102,35 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Cohérence** : tous les montants de l'interface passent par `lib/format.ts` ; « Prix payé » du DCA affiche son unité ; la promesse du simulateur dit depuis quand chaque historique remonte.
 - **Transparence IA** : écran « Voir ce qui part vers l'IA » dans Réglages (dossier exact envoyé au fournisseur : profil, positions, ordre du jour, marché) et option « Anonymiser » (pourcentages à la place des montants, pas de prénom). Les mentions « tes données restent sur ton appareil » sont corrigées dans l'application et dans le README.
 
+### v1.8.0 — Synchronisation chiffrée PC ↔ téléphone
+- **Modèle de données v2** : chaque élément (transactions, comptes, plans, thèses, alertes, paris…) porte sa date de dernière modification ; les rubriques sans identifiant (profil, watchlist, panier, enveloppe) sont datées dans `syncStamp` ; chaque appareil a son identifiant. Migration v1 → v2 automatique (registres amorcés à vide, sauvegarde de précaution avant).
+- **Fusion pure et testée** : la version la plus récente de chaque élément l'emporte ; les suppressions se propagent (une modification postérieure à la suppression ressuscite l'élément) ; des horloges décalées ne perdent rien ; jamais synchronisés : clés API, jeton, phrase de passe, réglages propres à un appareil, rapports IA et conversations.
+- **Chiffrement de bout en bout** : AES-GCM 256 bits, clé dérivée de la phrase de passe par PBKDF2-SHA256 (600 000 itérations). GitHub ne reçoit qu'un fichier illisible ; une phrase fautive est refusée explicitement.
+- **Transport** : dépôt GitHub **privé** (ex : `boussole-sync`) + jeton fine-grained limité à ce seul dépôt (« Contents : Read and write ») + un seul fichier. L'écriture vérifie l'empreinte du fichier lu : une modification faite depuis l'autre appareil n'est jamais écrasée.
+- **Rythme** : au lancement, après tes modifications (regroupées), toutes les 15 minutes ; état visible dans Réglages (« synchronisé il y a 2 min »). Un appareil vierge n'envoie rien.
+- **Import manuel** : « Fusionner » devient le choix par défaut (les deux états combinés, sans rien effacer) ; « Remplacer tout » reste possible, avec copie de sécurité automatique.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute
-1. **Synchronisation automatique PC ↔ téléphone** chiffrée de bout en bout, à la place de l'export/import manuel.
-2. **Import CSV des autres plateformes** (Binance, Coinbase, Kraken, Bitpanda) sur le modèle de l'import Crypto.com.
-3. **Alertes Android plus complètes** (changement de zone du marché, euphorie) : elles demandent de porter le calcul de la température dans le script d'arrière-plan.
-4. **Calendrier des déblocages de tokens** (Tokenomist) sur les positions et la watchlist, avec alerte J-7 : aucune source gratuite fiable aujourd'hui.
+1. **Import CSV des autres plateformes** (Binance, Coinbase, Kraken, Bitpanda) sur le modèle de l'import Crypto.com.
+2. **Alertes Android plus complètes** (changement de zone du marché, euphorie) : elles demandent de porter le calcul de la température dans le script d'arrière-plan.
+3. **Calendrier des déblocages de tokens** (Tokenomist) sur les positions et la watchlist, avec alerte J-7 : aucune source gratuite fiable aujourd'hui.
 
 ### Priorité moyenne
-5. **Suivi des « smart money »** : wallets publics de fonds et de traders réputés, avec alerte quand ils achètent un token.
-6. **Backtest des signaux** Boussole sur chaque crypto (performance de la stratégie vs achat-conservation).
-7. **Délai de réflexion de 24 h** obligatoire avant un achat hors panier sur une crypto à +50 % en 7 jours (le panier applique déjà la règle).
-8. **Révocation des approbations** : détection des autorisations à risque sur les wallets EVM suivis.
+4. **Suivi des « smart money »** : wallets publics de fonds et de traders réputés, avec alerte quand ils achètent un token.
+5. **Backtest des signaux** Boussole sur chaque crypto (performance de la stratégie vs achat-conservation).
+6. **Délai de réflexion de 24 h** obligatoire avant un achat hors panier sur une crypto à +50 % en 7 jours (le panier applique déjà la règle).
+7. **Révocation des approbations** : détection des autorisations à risque sur les wallets EVM suivis.
 
 ### Pour plus tard
-9. Lecture des positions DeFi (prêts, pools de liquidité, staking) sur les wallets suivis.
-10. Widget Android (température du marché et valeur du portefeuille sur l'écran d'accueil).
-11. Rapport mensuel PDF (performance, respect des règles).
-12. Version iOS (Capacitor la permet, mais il faut un Mac pour compiler).
+8. Lecture des positions DeFi (prêts, pools de liquidité, staking) sur les wallets suivis.
+9. Widget Android (température du marché et valeur du portefeuille sur l'écran d'accueil).
+10. Rapport mensuel PDF (performance, respect des règles).
+11. Version iOS (Capacitor la permet, mais il faut un Mac pour compiler).
 
 ## Limites connues
+- La synchronisation tourne quand l'application est ouverte (au lancement, après tes modifications, toutes les 15 minutes) : une saisie faite hors ligne sur un appareil n'arrive sur l'autre qu'au prochain cycle des deux côtés. La phrase de passe et le jeton ne sont pas récupérables : garde-les (coffre-fort de mots de passe).
 - Les API gratuites (surtout CoinGecko sans clé) limitent le nombre de requêtes : ajoute une clé « Demo » gratuite.
 - Alertes application fermée : sous Windows, elles exigent que Boussole reste dans la zone de notification (option activée par défaut). Sous Android, le script d'arrière-plan couvre les alertes de prix et les paliers de vente (vérification toutes les 30 minutes environ, au bon vouloir du système et des économiseurs de batterie) ; les autres alertes (marché, euphorie) n'arrivent que lorsque l'application est ouverte.
 - Le CSV Crypto.com est lu d'après le format connu de l'application : un export réel peut contenir des natures d'opération inédites, que Boussole te demande alors de classer.

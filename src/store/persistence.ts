@@ -28,7 +28,16 @@ export const useStorageStatus = create<{ status: StorageStatus; setStatus: (s: S
  */
 export function migrateState(persisted: unknown, version: number): unknown {
   if (version > DATA_VERSION) return persisted; // données plus récentes : lues telles quelles, mais jamais réécrites (voir guardedStorage)
-  // version 1 → rien à transformer pour l'instant.
+  if (version < 2) {
+    // v1 → v2 (synchronisation 1.8.0) : les éléments n'ont pas encore d'horodatage de modification.
+    // On laisse `updatedAt` absent (la fusion les considère comme très anciens) et on amorce les registres vides :
+    // la première écriture de chaque appareil leur donnera des valeurs.
+    if (typeof persisted === 'object' && persisted !== null) {
+      const s = persisted as Record<string, unknown>;
+      if (!Array.isArray(s.deletions)) s.deletions = [];
+      if (typeof s.syncStamp !== 'object' || s.syncStamp === null) s.syncStamp = {};
+    }
+  }
   return persisted;
 }
 

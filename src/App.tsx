@@ -20,6 +20,7 @@ import { EMPTY_WATCH, syncRunner, watchAlerts } from './lib/runnerSync';
 import { fmtPrice, isoDay } from './lib/format';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAutoBackup } from './hooks/useBackup';
+import { useSyncLifecycle } from './hooks/useSync';
 import Dashboard from './pages/Dashboard';
 
 const Market = lazy(() => import('./pages/Market'));
@@ -72,6 +73,7 @@ function AppEffects() {
   const autoStart = useStore((s) => s.settings.autoStart);
   useSmartAlerts();
   useAutoBackup();
+  useSyncLifecycle();
   const exit = useExitPlan();
 
   // Les alertes ne servent à rien sans l'autorisation du système : on la demande une fois, au démarrage.

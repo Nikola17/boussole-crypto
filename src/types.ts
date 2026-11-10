@@ -31,6 +31,27 @@ export interface Settings {
   disclaimerAccepted: boolean;
   taxRatePct: number;
   scanSize: 50 | 100;
+  // Synchronisation PC ↔ téléphone : réglages propres à CET appareil, jamais synchronisés ni exportés.
+  syncEnabled: boolean;
+  /** Dépôt GitHub privé du transport (ex : Nikola17/boussole-sync). */
+  syncRepo: string;
+  /** Jeton d'accès fine-grained limité à ce seul dépôt (Contents : lecture + écriture). */
+  syncToken: string;
+  /** Phrase de passe de laquelle découle la clé de chiffrement (AES-GCM, données illisibles pour GitHub). */
+  syncPassphrase: string;
+  /** Dernière synchronisation réussie (horodatage en secondes), pour l'affichage « il y a N min ». */
+  syncLastAt: number;
+  /** Identifiant de cet appareil, utile aux journalisations ; généré au premier usage. */
+  deviceId: string;
+}
+
+/** Horodatage de la dernière modification d'un élément synchronisé (ISO 8601). Absent = inconnu (la plus ancienne). */
+export type UpdatedAt = string;
+
+/** Une suppression à propager : `collection/identifiant` et moment (ISO 8601). */
+export interface SyncDeletion {
+  key: string;
+  at: string;
 }
 
 export type Bucket = 'btc' | 'eth' | 'large' | 'mid' | 'small' | 'stable';
@@ -76,6 +97,8 @@ export interface CoinRef {
 export type TxType = 'buy' | 'sell' | 'deposit' | 'withdraw' | 'reward' | 'transfer';
 
 export interface Transaction extends CoinRef {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   date: string; // AAAA-MM-JJ
   type: TxType;
@@ -111,6 +134,8 @@ export interface CustomToken {
 }
 
 export interface WalletAddress {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   label: string;
   chain: WalletChain;
@@ -127,6 +152,8 @@ export type AccountKind = 'exchange' | 'hardware' | 'hot';
 
 /** Un endroit où sont rangées tes cryptos (plateforme, Ledger, Phantom…). */
 export interface Account {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   name: string;
   kind: AccountKind;
@@ -136,6 +163,8 @@ export interface Account {
 }
 
 export interface DcaPlan extends CoinRef {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   amount: number;
   frequency: Frequency;
@@ -150,6 +179,8 @@ export interface DcaPlan extends CoinRef {
 }
 
 export interface DcaExecution {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   planId: string;
   periodKey: string;
@@ -164,6 +195,8 @@ export interface DcaExecution {
 }
 
 export interface TradeEntry {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   coinId: string;
   symbol: string;
@@ -184,6 +217,8 @@ export interface TradeEntry {
 }
 
 export interface PriceAlert {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   coinId: string;
   symbol: string;
@@ -206,6 +241,8 @@ export interface AirdropTask {
 export type AirdropStatus = 'idee' | 'farming' | 'eligible' | 'claimable' | 'claimed' | 'abandoned';
 
 export interface AirdropItem {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   name: string;
   ecosystem: string;
@@ -228,6 +265,8 @@ export interface ThesisHypothesis {
 }
 
 export interface Thesis extends CoinRef {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   createdAt: string;
   buyPrice?: number;
@@ -278,6 +317,8 @@ export interface ChatMessage {
 }
 
 export interface WatchedToken {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string; // chainId:address
   chainId: string;
   address: string;
@@ -296,6 +337,8 @@ export interface BasketCoin extends CoinRef {
 }
 
 export interface BasketPlan {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   name: string;
   active: boolean;
@@ -326,6 +369,8 @@ export interface BasketOrderLog extends CoinRef {
 }
 
 export interface BasketExecution {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   basketId: string;
   /** AAAA-MM-JJ de l'échéance concernée. */
@@ -359,6 +404,8 @@ export interface DefiEnvelope {
 }
 
 export interface DefiBet {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
   id: string;
   date: string;
   symbol: string;

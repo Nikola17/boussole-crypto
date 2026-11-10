@@ -4,19 +4,23 @@
 import type { AiReport, Settings } from '../types';
 import { sanitizeReportData } from './reportData';
 
-/** Version du format des données (stockage et fichiers de sauvegarde). À augmenter avec une migration dans store/persistence.ts. */
-export const DATA_VERSION = 1;
+/**
+ * Version du format des données (stockage et fichiers de sauvegarde). À augmenter avec une migration dans store/persistence.ts.
+ * v2 (1.8.0) : horodatages des éléments (`updatedAt`), suppressions à propager (`deletions`) et horodatages par rubrique (`syncStamp`).
+ */
+export const DATA_VERSION = 2;
 
 /** Toutes les données de l'utilisateur : le stockage et la sauvegarde partent de cette seule liste. */
 export const BACKUP_KEYS = [
   'settings', 'profile', 'watchlist', 'watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions',
   'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'checklist', 'accounts', 'basket', 'basketExecutions', 'exitDone', 'coreTrims', 'envelope', 'defiBets', 'cdcSeen',
+  'deletions', 'syncStamp',
 ] as const;
 export type BackupKey = (typeof BACKUP_KEYS)[number];
 
 const STRING_LISTS: BackupKey[] = ['watchlist', 'cdcSeen'];
-const OBJECT_LISTS: BackupKey[] = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'accounts', 'basketExecutions', 'defiBets'];
-const PLAIN_OBJECTS: BackupKey[] = ['settings', 'profile', 'checklist', 'exitDone', 'coreTrims', 'envelope'];
+const OBJECT_LISTS: BackupKey[] = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'accounts', 'basketExecutions', 'defiBets', 'deletions'];
+const PLAIN_OBJECTS: BackupKey[] = ['settings', 'profile', 'checklist', 'exitDone', 'coreTrims', 'envelope', 'syncStamp'];
 
 /**
  * Réglages repris d'une sauvegarde. Jamais : clés API, adresse du serveur d'IA, fournisseur d'IA (un fichier piégé pourrait
@@ -121,6 +125,14 @@ export function validateBackup(raw: unknown): BackupCheck {
     const clean: Record<string, number[]> = {};
     for (const [coin, list] of Object.entries(data.exitDone)) if (Array.isArray(list)) clean[coin] = list.filter(isNum);
     data.exitDone = clean;
+  }
+  if (isObj(data.syncStamp)) {
+    const clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(data.syncStamp)) if (typeof v === 'string' && v) clean[k] = v;
+    data.syncStamp = clean;
+  }
+  if (Array.isArray(data.deletions)) {
+    data.deletions = (data.deletions as unknown[]).filter((d): d is { key: string; at: string } => isObj(d) && isStr(d.key) && isStr(d.at) && /^\d{4}-\d{2}-\d{2}T/.test(d.at));
   }
   if (isObj(data.coreTrims)) {
     const clean: Record<string, string> = {};

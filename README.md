@@ -14,15 +14,17 @@ La méthode d'analyse s'inspire du projet open source [AI Berkshire](https://git
 
 | Plateforme | Fichier | Installation |
 |---|---|---|
-| Windows | `release/Boussole-Crypto-Setup-1.7.0.exe` | Double-clic → installe l'app et crée un raccourci. Windows SmartScreen peut afficher « éditeur inconnu » (app non signée) : *Informations complémentaires → Exécuter quand même*. |
-| Windows (sans installation) | `release/Boussole-Crypto-Portable-1.7.0.exe` | Se lance directement, par exemple depuis une clé USB. |
-| Android | `release/Boussole-Crypto-1.7.0.apk` | Copie le fichier sur le téléphone (câble, Drive, e-mail) → ouvre-le → autorise « installer des applications inconnues » pour l'app utilisée. |
+| Windows | `release/Boussole-Crypto-Setup-1.8.0.exe` | Double-clic → installe l'app et crée un raccourci. Windows SmartScreen peut afficher « éditeur inconnu » (app non signée) : *Informations complémentaires → Exécuter quand même*. |
+| Windows (sans installation) | `release/Boussole-Crypto-Portable-1.8.0.exe` | Se lance directement, par exemple depuis une clé USB. |
+| Android | `release/Boussole-Crypto-1.8.0.apk` | Copie le fichier sur le téléphone (câble, Drive, e-mail) → ouvre-le → autorise « installer des applications inconnues » pour l'app utilisée. |
 
 Au premier lancement : accepte l'avertissement, puis remplis ton **profil investisseur** (2 minutes). Ensuite, dans **Réglages** :
 1. **Clé API pour l'IA** : choisis ton fournisseur. *Nous Portal* (par défaut, économique) : clé créée sur [portal.nousresearch.com](https://portal.nousresearch.com), modèle **DeepSeek V4.1 Flash** proposé par défaut. *Claude (Anthropic)* : clé créée sur [console.anthropic.com](https://console.anthropic.com/settings/keys). Colle la clé, puis clique sur *Tester la connexion*.
 2. **Clé CoinGecko « Demo »** (gratuite, recommandée) : [coingecko.com/fr/api/pricing](https://www.coingecko.com/fr/api/pricing). Sans elle, l'API publique limite fortement le nombre de requêtes et certaines pages se chargent lentement.
 
-Pour retrouver tes données sur le PC et le téléphone : *Réglages → Exporter* sur un appareil, *Importer* sur l'autre (l'import remplace les données après confirmation et copie de sécurité). Une sauvegarde automatique est aussi faite chaque jour (PC : `Documents\Boussole\sauvegardes` ; Android : `Documents/Boussole`).
+**Synchronisation PC ↔ téléphone (v1.8)** : dans *Réglages → Synchronisation*, indique un dépôt GitHub **privé** vide (ex : `boussole-sync`), un jeton d'accès fine-grained limité à ce seul dépôt (« Contents : Read and write ») et une phrase de passe. Boussole chiffre tes données (AES-256, la phrase ne quitte jamais l'appareil) et les fusionne entre les appareils : la version la plus récente de chaque élément gagne, les suppressions se propagent, jamais d'écrasement d'une modification de l'autre appareil (vérification d'empreinte). Synchronisation au lancement, après tes modifications et toutes les 15 minutes.
+
+L'export/import manuel reste disponible, avec « **Fusionner** » par défaut (l'import combine les deux états) ; « Remplacer tout » reste possible, avec copie de sécurité automatique. Une sauvegarde automatique est aussi faite chaque jour (PC : `Documents\Boussole\sauvegardes` ; Android : `Documents/Boussole`).
 
 Pour que les alertes (paliers de vente, échéances du panier, marché) arrivent même fenêtre fermée : sous Windows, laisse l'option *Rester actif en arrière-plan* activée (Boussole se réduit près de l'horloge ; « Quitter » dans le menu de son icône l'arrête) ; sous Android, autorise les notifications et désactive l'optimisation de batterie pour Boussole.
 
@@ -61,7 +63,7 @@ Deux fournisseurs au choix dans *Réglages* :
 ---
 
 ## Données et confidentialité
-- **Tes données sont stockées sur ton appareil** : transactions, wallets, plans, journal, rapports IA. Il n'y a ni serveur Boussole ni compte à créer. Les seules données qui sortent de l'appareil : le dossier résumé envoyé à ton fournisseur IA pour les analyses (contenu exact visible dans *Réglages → Voir ce qui part vers l'IA*), et les adresses publiques requises pour lire tes wallets.
+- **Tes données sont stockées sur ton appareil** : transactions, wallets, plans, journal, rapports IA. Il n'y a ni serveur Boussole ni compte à créer. Les seules données qui sortent de l'appareil : le dossier résumé envoyé à ton fournisseur IA pour les analyses (contenu exact visible dans *Réglages → Voir ce qui part vers l'IA*), les adresses publiques requises pour lire tes wallets, et — si tu actives la synchronisation — un fichier chiffré AES-256 dans ton propre dépôt GitHub privé (GitHub ne peut pas le lire sans ta phrase de passe).
 - **Option « Anonymiser »** (*Réglages*) : le dossier IA part sans ton prénom et sans montants, remplacés par des pourcentages. Le reste de l'analyse est inchangé.
 - Les wallets sont lus en **lecture seule** à partir d'adresses publiques ou de clés publiques étendues (xpub). L'app ne demande jamais de phrase secrète ni de clé privée, et refuse une clé privée étendue (xprv) si tu la colles par erreur.
 - Ton fichier CSV Crypto.com est lu sur l'appareil ; seuls les noms des cryptos peuvent être recherchés en ligne.

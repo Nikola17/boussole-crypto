@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
-  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, PriceAlert, Profile, Settings, Thesis,
+  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, PriceAlert, Profile, Settings, SyncDeletion, Thesis,
   TradeEntry, Transaction, WalletAddress, WatchedToken,
 } from '../types';
 import { defaultProfile, rulesOf } from '../lib/profile';
@@ -40,6 +40,10 @@ export interface AppState {
   defiBets: DefiBet[];
   /** Cryptos que tu as confirmé voir dans l'application Crypto.com. */
   cdcSeen: string[];
+  /** Suppressions à propager à l'autre appareil (`collection/identifiant` → date). */
+  deletions: SyncDeletion[];
+  /** Dernière modification de chaque rubrique sans identifiant (profil, watchlist, panier…), pour la fusion PC ↔ téléphone. */
+  syncStamp: Record<string, string>;
 
   setSettings: (patch: Partial<Settings>) => void;
   setProfile: (patch: Partial<Profile>) => void;
@@ -109,6 +113,12 @@ export const defaultSettings: Settings = {
   disclaimerAccepted: false,
   taxRatePct: 31.4,
   scanSize: 50,
+  syncEnabled: false,
+  syncRepo: 'Nikola17/boussole-sync',
+  syncToken: '',
+  syncPassphrase: '',
+  syncLastAt: 0,
+  deviceId: '',
 };
 
 function upsert<T extends { id: string }>(list: T[], item: T): T[] {
@@ -117,6 +127,25 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
   const copy = [...list];
   copy[i] = item;
   return copy;
+}
+
+// ------------------------------------------------------------------ Horodatage et registre des suppressions (synchronisation)
+
+const nowIso = (): string => new Date().toISOString();
+
+/** Horodate un élément modifié : la fusion PC ↔ téléphone garde la version la plus récente. */
+function touch<T>(item: T): T {
+  return { ...item, updatedAt: nowIso() };
+}
+
+/** Note qu'une rubrique entière (profil, watchlist, panier…) vient de changer. */
+function bump(s: { syncStamp: Record<string, string> }, key: string): { syncStamp: Record<string, string> } {
+  return { syncStamp: { ...s.syncStamp, [key]: nowIso() } };
+}
+
+/** Enregistre une suppression pour qu'elle se propage à l'autre appareil. */
+function dropped(s: { deletions: SyncDeletion[] }, key: string): { deletions: SyncDeletion[] } {
+  return { deletions: [...s.deletions.filter((d) => d.key !== key), { key, at: nowIso() }] };
 }
 
 // Plafonds : les rapports IA (surtout ceux du comité) et le chat sont les plus gros consommateurs du stockage local (≈ 5 Mo).
@@ -149,6 +178,8 @@ const initialData = () => ({
   envelope: { ...DEFAULT_ENVELOPE },
   defiBets: [] as DefiBet[],
   cdcSeen: [] as string[],
+  deletions: [] as SyncDeletion[],
+  syncStamp: {} as Record<string, string>,
 });
 
 const system = systemStorage();
@@ -160,36 +191,49 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       ...initialData(),
       setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
-      setProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch } })),
-      toggleWatch: (coinId) => set((s) => ({ watchlist: s.watchlist.includes(coinId) ? s.watchlist.filter((x) => x !== coinId) : [...s.watchlist, coinId] })),
-      addWatchedToken: (t) => set((s) => ({ watchedTokens: [t, ...s.watchedTokens.filter((x) => x.id !== t.id)] })),
-      removeWatchedToken: (id) => set((s) => ({ watchedTokens: s.watchedTokens.filter((x) => x.id !== id) })),
-      upsertTransaction: (tx) => set((s) => ({ transactions: upsert(s.transactions, tx) })),
-      removeTransaction: (id) => set((s) => ({ transactions: s.transactions.filter((x) => x.id !== id) })),
-      addTransactions: (txs) => set((s) => ({ transactions: [...txs, ...s.transactions] })),
-      upsertWallet: (w) => set((s) => ({ wallets: upsert(s.wallets, w) })),
+      setProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch }, ...bump(s, 'profile') })),
+      toggleWatch: (coinId) => set((s) => ({ watchlist: s.watchlist.includes(coinId) ? s.watchlist.filter((x) => x !== coinId) : [...s.watchlist, coinId], ...bump(s, 'watchlist') })),
+      addWatchedToken: (t) => set((s) => ({ watchedTokens: [touch(t), ...s.watchedTokens.filter((x) => x.id !== t.id)] })),
+      removeWatchedToken: (id) => set((s) => ({ watchedTokens: s.watchedTokens.filter((x) => x.id !== id), ...dropped(s, `watchedTokens/${id}`) })),
+      upsertTransaction: (tx) => set((s) => ({ transactions: upsert(s.transactions, touch(tx)) })),
+      removeTransaction: (id) => set((s) => ({ transactions: s.transactions.filter((x) => x.id !== id), ...dropped(s, `transactions/${id}`) })),
+      addTransactions: (txs) => set((s) => ({ transactions: [...txs.map(touch), ...s.transactions] })),
+      upsertWallet: (w) => set((s) => ({ wallets: upsert(s.wallets, touch(w)) })),
       removeWallet: (id) => set((s) => ({
         wallets: s.wallets.filter((x) => x.id !== id),
-        accounts: s.accounts.map((a) => (a.walletIds.includes(id) ? { ...a, walletIds: a.walletIds.filter((w) => w !== id) } : a)),
+        accounts: s.accounts.map((a) => (a.walletIds.includes(id) ? touch({ ...a, walletIds: a.walletIds.filter((w) => w !== id) }) : a)),
+        ...dropped(s, `wallets/${id}`),
       })),
-      upsertDcaPlan: (p) => set((s) => ({ dcaPlans: upsert(s.dcaPlans, p) })),
-      removeDcaPlan: (id) => set((s) => ({ dcaPlans: s.dcaPlans.filter((x) => x.id !== id), dcaExecutions: s.dcaExecutions.filter((e) => e.planId !== id) })),
+      upsertDcaPlan: (p) => set((s) => ({ dcaPlans: upsert(s.dcaPlans, touch(p)) })),
+      removeDcaPlan: (id) => set((s) => {
+        let deletions = [...s.deletions.filter((d) => d.key !== `dcaPlans/${id}`), { key: `dcaPlans/${id}`, at: nowIso() }];
+        for (const e of s.dcaExecutions.filter((x) => x.planId === id)) deletions = [...deletions.filter((d) => d.key !== `dcaExecutions/${e.id}`), { key: `dcaExecutions/${e.id}`, at: nowIso() }];
+        return { dcaPlans: s.dcaPlans.filter((x) => x.id !== id), dcaExecutions: s.dcaExecutions.filter((e) => e.planId !== id), deletions };
+      }),
       addDcaExecution: (e, txs) => set((s) => ({
-        dcaExecutions: [txs?.length ? { ...e, txIds: txs.map((t) => t.id) } : e, ...s.dcaExecutions],
-        transactions: txs?.length ? [...txs, ...s.transactions] : s.transactions,
+        dcaExecutions: [txs?.length ? { ...touch(e), txIds: txs.map((t) => t.id) } : touch(e), ...s.dcaExecutions],
+        transactions: txs?.length ? [...txs.map(touch), ...s.transactions] : s.transactions,
       })),
       removeDcaExecution: (id) => set((s) => {
+        // Ses transactions disparaissent avec elle : les suppressions de l'une et des autres partent ensemble.
         const gone = new Set(s.dcaExecutions.find((x) => x.id === id)?.txIds ?? []);
-        return { dcaExecutions: s.dcaExecutions.filter((x) => x.id !== id), transactions: gone.size ? s.transactions.filter((t) => !gone.has(t.id)) : s.transactions };
+        let deletions = s.deletions;
+        for (const tid of gone) deletions = [...deletions.filter((d) => d.key !== `transactions/${tid}`), { key: `transactions/${tid}`, at: nowIso() }];
+        deletions = [...deletions.filter((d) => d.key !== `dcaExecutions/${id}`), { key: `dcaExecutions/${id}`, at: nowIso() }];
+        return {
+          dcaExecutions: s.dcaExecutions.filter((x) => x.id !== id),
+          transactions: gone.size ? s.transactions.filter((t) => !gone.has(t.id)) : s.transactions,
+          deletions,
+        };
       }),
-      upsertTrade: (t) => set((s) => ({ trades: upsert(s.trades, t) })),
-      removeTrade: (id) => set((s) => ({ trades: s.trades.filter((x) => x.id !== id) })),
-      upsertAlert: (a) => set((s) => ({ alerts: upsert(s.alerts, a) })),
-      removeAlert: (id) => set((s) => ({ alerts: s.alerts.filter((x) => x.id !== id) })),
-      upsertAirdrop: (a) => set((s) => ({ airdrops: upsert(s.airdrops, a) })),
-      removeAirdrop: (id) => set((s) => ({ airdrops: s.airdrops.filter((x) => x.id !== id) })),
-      upsertThesis: (t) => set((s) => ({ theses: upsert(s.theses, t) })),
-      removeThesis: (id) => set((s) => ({ theses: s.theses.filter((x) => x.id !== id) })),
+      upsertTrade: (t) => set((s) => ({ trades: upsert(s.trades, touch(t)) })),
+      removeTrade: (id) => set((s) => ({ trades: s.trades.filter((x) => x.id !== id), ...dropped(s, `trades/${id}`) })),
+      upsertAlert: (a) => set((s) => ({ alerts: upsert(s.alerts, touch(a)) })),
+      removeAlert: (id) => set((s) => ({ alerts: s.alerts.filter((x) => x.id !== id), ...dropped(s, `alerts/${id}`) })),
+      upsertAirdrop: (a) => set((s) => ({ airdrops: upsert(s.airdrops, touch(a)) })),
+      removeAirdrop: (id) => set((s) => ({ airdrops: s.airdrops.filter((x) => x.id !== id), ...dropped(s, `airdrops/${id}`) })),
+      upsertThesis: (t) => set((s) => ({ theses: upsert(s.theses, touch(t)) })),
+      removeThesis: (id) => set((s) => ({ theses: s.theses.filter((x) => x.id !== id), ...dropped(s, `theses/${id}`) })),
       addReport: (r) => set((s) => ({
         reports: [r, ...s.reports.filter((x) => x.id !== r.id)].slice(0, MAX_REPORTS).map((x, i) => (i >= KEEP_PARTS && x.parts ? { ...x, parts: undefined } : x)),
       })),
@@ -197,39 +241,47 @@ export const useStore = create<AppState>()(
       addChat: (m) => set((s) => ({ chat: [...s.chat, m].slice(-MAX_CHAT) })),
       clearChat: () => set({ chat: [] }),
       setChecklist: (c) => set({ checklist: c }),
-      upsertAccount: (a) => set((s) => ({ accounts: upsert(s.accounts, a) })),
+      upsertAccount: (a) => set((s) => ({ accounts: upsert(s.accounts, touch(a)) })),
       removeAccount: (id) => set((s) => ({
         accounts: s.accounts.filter((x) => x.id !== id),
         // Les opérations de ce compte redeviennent « sans compte » au lieu de disparaître.
         transactions: s.transactions.map((t) => (t.accountId === id || t.toAccountId === id
-          ? { ...t, accountId: t.accountId === id ? undefined : t.accountId, toAccountId: t.toAccountId === id ? undefined : t.toAccountId }
+          ? touch({ ...t, accountId: t.accountId === id ? undefined : t.accountId, toAccountId: t.toAccountId === id ? undefined : t.toAccountId })
           : t)),
+        ...dropped(s, `accounts/${id}`),
       })),
-      setBasket: (b) => set({ basket: b }),
+      setBasket: (b) => set((s) => ({ basket: b, ...bump(s, 'basket') })),
       addBasketExecution: (e, txs) => set((s) => ({
-        basketExecutions: [txs?.length ? { ...e, txIds: txs.map((t) => t.id) } : e, ...s.basketExecutions.filter((x) => x.id !== e.id)],
-        transactions: txs?.length ? [...txs, ...s.transactions] : s.transactions,
-        basket: s.basket && s.basket.id === e.basketId ? { ...s.basket, reserveUsd: Math.max(0, Math.round((s.basket.reserveUsd + e.reserveDeltaUsd) * 100) / 100) } : s.basket,
+        // La réserve d'USDC vit dans le panier : l'écrire avec l'échéance la date aussi.
+        basketExecutions: [txs?.length ? { ...touch(e), txIds: txs.map((t) => t.id) } : touch(e), ...s.basketExecutions.filter((x) => x.id !== e.id)],
+        transactions: txs?.length ? [...txs.map(touch), ...s.transactions] : s.transactions,
+        basket: s.basket && s.basket.id === e.basketId ? { ...touch(s.basket), reserveUsd: Math.max(0, Math.round((s.basket.reserveUsd + e.reserveDeltaUsd) * 100) / 100) } : s.basket,
+        ...bump(s, 'basket'),
       })),
       removeBasketExecution: (id) => set((s) => {
         const e = s.basketExecutions.find((x) => x.id === id);
         const gone = new Set(e?.txIds ?? []);
+        let deletions = s.deletions;
+        for (const tid of gone) deletions = [...deletions.filter((d) => d.key !== `transactions/${tid}`), { key: `transactions/${tid}`, at: nowIso() }];
+        deletions = [...deletions.filter((d) => d.key !== `basketExecutions/${id}`), { key: `basketExecutions/${id}`, at: nowIso() }];
         return {
           basketExecutions: s.basketExecutions.filter((x) => x.id !== id),
           transactions: gone.size ? s.transactions.filter((t) => !gone.has(t.id)) : s.transactions,
-          basket: e && s.basket && s.basket.id === e.basketId ? { ...s.basket, reserveUsd: Math.max(0, Math.round((s.basket.reserveUsd - e.reserveDeltaUsd) * 100) / 100) } : s.basket,
+          basket: e && s.basket && s.basket.id === e.basketId ? { ...touch(s.basket), reserveUsd: Math.max(0, Math.round((s.basket.reserveUsd - e.reserveDeltaUsd) * 100) / 100) } : s.basket,
+          deletions,
+          ...bump(s, 'basket'),
         };
       }),
-      setEnvelope: (patch) => set((s) => ({ envelope: { ...s.envelope, ...patch } })),
-      upsertDefiBet: (b) => set((s) => ({ defiBets: upsert(s.defiBets, b) })),
-      removeDefiBet: (id) => set((s) => ({ defiBets: s.defiBets.filter((x) => x.id !== id) })),
+      setEnvelope: (patch) => set((s) => ({ envelope: { ...s.envelope, ...patch }, ...bump(s, 'envelope') })),
+      upsertDefiBet: (b) => set((s) => ({ defiBets: upsert(s.defiBets, touch(b)) })),
+      removeDefiBet: (id) => set((s) => ({ defiBets: s.defiBets.filter((x) => x.id !== id), ...dropped(s, `defiBets/${id}`) })),
       toggleExitDone: (coinId, multiple) => set((s) => {
         const cur = s.exitDone[coinId] ?? [];
-        return { exitDone: { ...s.exitDone, [coinId]: cur.includes(multiple) ? cur.filter((m) => m !== multiple) : [...cur, multiple] } };
+        return { exitDone: { ...s.exitDone, [coinId]: cur.includes(multiple) ? cur.filter((m) => m !== multiple) : [...cur, multiple] }, ...bump(s, 'exitDone') };
       }),
-      markCoreTrim: (coinId) => set((s) => ({ coreTrims: { ...s.coreTrims, [coinId]: new Date().toISOString() } })),
-      clearCoreTrim: (coinId) => set((s) => { const next = { ...s.coreTrims }; delete next[coinId]; return { coreTrims: next }; }),
-      toggleCdcSeen: (coinId) => set((s) => ({ cdcSeen: s.cdcSeen.includes(coinId) ? s.cdcSeen.filter((x) => x !== coinId) : [...s.cdcSeen, coinId] })),
+      markCoreTrim: (coinId) => set((s) => ({ coreTrims: { ...s.coreTrims, [coinId]: nowIso() }, ...bump(s, 'coreTrims') })),
+      clearCoreTrim: (coinId) => set((s) => { const next = { ...s.coreTrims }; delete next[coinId]; return { coreTrims: next, ...bump(s, 'coreTrims') }; }),
+      toggleCdcSeen: (coinId) => set((s) => ({ cdcSeen: s.cdcSeen.includes(coinId) ? s.cdcSeen.filter((x) => x !== coinId) : [...s.cdcSeen, coinId], ...bump(s, 'cdcSeen') })),
       // Une seule écriture : les saisies remplacées sortent et les lignes importées (plus d'éventuels soldes d'ouverture) entrent ensemble.
       importTransactions: (txs, opts) => {
         const replace = new Set(opts?.replaceIds ?? []);
@@ -237,7 +289,12 @@ export const useStore = create<AppState>()(
         const fresh = txs.filter((t, i) => !known.has(t.id) && txs.findIndex((u) => u.id === t.id) === i);
         const extra = (opts?.extra ?? []).filter((t, i, all) => !known.has(t.id) && all.findIndex((u) => u.id === t.id) === i);
         const removed = get().transactions.filter((t) => replace.has(t.id)).length;
-        if (fresh.length || extra.length || removed) set((s) => ({ transactions: [...fresh, ...extra, ...s.transactions.filter((t) => !replace.has(t.id))] }));
+        if (fresh.length || extra.length || removed) set((s) => {
+          let deletions = s.deletions;
+          // Les saisies remplacées sont supprimées : la suppression se propage à l'autre appareil.
+          for (const id of replace) deletions = [...deletions.filter((d) => d.key !== `transactions/${id}`), { key: `transactions/${id}`, at: nowIso() }];
+          return { transactions: [...fresh, ...extra, ...s.transactions.filter((t) => !replace.has(t.id))].map(touch), deletions };
+        });
         return { added: fresh.length, skipped: txs.length - fresh.length, replaced: removed, extra: extra.length };
       },
       importAll: (data) => set((s) => {
@@ -278,14 +335,16 @@ export const useStore = create<AppState>()(
 );
 
 /**
- * Contenu d'un fichier de sauvegarde. Jamais les clés API (Claude, Nous Portal, CoinGecko) : le fichier contient en revanche
- * tout l'historique, les adresses suivies et les clés publiques étendues (xpub) : à ranger comme un document financier.
+ * Contenu d'un fichier de sauvegarde. Jamais les clés API (Claude, Nous Portal, CoinGecko) ni les secrets de
+ * synchronisation (jeton GitHub, phrase de passe) : le fichier contient en revanche tout l'historique, les
+ * adresses suivies et les clés publiques étendues (xpub) : à ranger comme un document financier.
  */
 export function exportBackup(includeKeys = false): string {
   const s = useStore.getState();
   const data: Record<string, unknown> = { app: 'boussole-crypto', version: DATA_VERSION, exportedAt: new Date().toISOString() };
   for (const k of BACKUP_KEYS) data[k] = s[k];
   if (!includeKeys) data.settings = { ...s.settings, anthropicKey: '', compatKey: '', coingeckoKey: '' };
+  data.settings = { ...(data.settings as Settings), syncToken: '', syncPassphrase: '' };
   return JSON.stringify(data, null, 2);
 }
 

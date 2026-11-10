@@ -1,7 +1,8 @@
-import { CandlestickChart, Download, ExternalLink, Eye, EyeOff, FolderOpen, Gem, KeyRound, RotateCcw, Save, Upload } from 'lucide-react';
+import { CandlestickChart, Download, ExternalLink, Eye, EyeOff, FolderOpen, Gem, KeyRound, RefreshCw, RotateCcw, Save, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { clsx } from 'clsx';
 import { useStore, exportBackup } from '../store/useStore';
-import { countsOf, validateBackup, type BackupCheck } from '../lib/backup';
+import { countsOf, importableSettings, validateBackup, type BackupCheck } from '../lib/backup';
 import { describeBackupAge } from '../lib/autoBackup';
 import { backupNow, canAutoBackup, noteManualBackup, useLastBackup } from '../hooks/useBackup';
 import { MODEL_INFO } from '../ai/claude';
@@ -11,11 +12,14 @@ import { useCompatModels } from '../hooks/useAiModels';
 import { backupFolderLabel, ensureNotificationPermission, isElectron, isNative, openBackupFolder, openExternal, platformLabel, saveTextFile } from '../lib/platform';
 import { Link } from '../router';
 import { useAiContext } from '../ai/context';
+import { checkPassphrase } from '../lib/sync/crypto';
+import { runSync, useSyncStatus } from '../hooks/useSync';
+import { mergeBackupInto } from '../lib/sync/merge';
 import { describeRunnerStatus, readRunnerStatus } from '../lib/runnerSync';
 import { useQuery } from '@tanstack/react-query';
-import { fmtNum, isoDay } from '../lib/format';
+import { fmtNum, fmtRelative, isoDay } from '../lib/format';
 import { Banner, Button, Card, Field, Input, Modal, NumberInput, PageHeader, Segmented, Select, Spinner, Toggle } from '../components/ui';
-import type { AiModel, AiProvider, ThemeMode } from '../types';
+import type { AiModel, AiProvider, Settings as SettingsType, ThemeMode } from '../types';
 
 /** Modèles proposés en priorité sur Nous Portal (identifiants vérifiés dans son catalogue). */
 // Les notes « Vending-Bench 2 » viennent du classement andonlabs.com (agent qui gère un distributeur simulé
@@ -112,8 +116,8 @@ export default function Settings() {
     }
   }
 
-  /** Étape 2 : copie de sécurité de l'état actuel, puis remplacement. */
-  async function confirmImport(skipSnapshot: boolean) {
+  /** Étape 2 : copie de sécurité de l'état actuel, puis fusion ou remplacement. */
+  async function confirmImport(mode: 'merge' | 'replace', skipSnapshot = false) {
     if (!pending) return;
     setBusy(true);
     if (!skipSnapshot) {
@@ -124,8 +128,15 @@ export default function Settings() {
         return;
       }
     }
-    importAll(pending.check.data as Parameters<typeof importAll>[0]);
-    setBackupMsg(`Sauvegarde restaurée (${pending.name}).${skipSnapshot ? '' : ' Une copie de tes données d’avant l’import a été gardée.'}`);
+    if (mode === 'merge') {
+      const merged = mergeBackupInto(useStore.getState(), pending.check.data as Record<string, unknown>);
+      useStore.setState(merged, false);
+      useStore.getState().setSettings(importableSettings(pending.check.data.settings as unknown) as Partial<SettingsType>);
+      setBackupMsg(`Sauvegarde fusionnée (${pending.name}) : les deux états sont combinés, la version la plus récente de chaque élément l’emporte.${skipSnapshot ? '' : ' Une copie de tes données d’avant l’import a été gardée.'}`);
+    } else {
+      importAll(pending.check.data as Parameters<typeof importAll>[0]);
+      setBackupMsg(`Sauvegarde restaurée (${pending.name}) : les rubriques du fichier remplacent celles de cet appareil.${skipSnapshot ? '' : ' Une copie de tes données d’avant l’import a été gardée.'}`);
+    }
     setPending(null);
     setBusy(false);
   }
@@ -253,7 +264,9 @@ export default function Settings() {
           </div>
         </Card>
 
-        <Card title="Sauvegarde" subtitle="Tes données vivent uniquement sur cet appareil : une réinstallation ou un téléphone perdu les efface. Les clés API ne sont jamais sauvegardées.">
+        <SyncCard />
+
+        <Card title="Sauvegarde" subtitle="Tes données vivent sur cet appareil (et dans ton dépôt de synchronisation si tu l'actives) : une réinstallation ou un téléphone perdu les efface. Les clés API ne sont jamais sauvegardées.">
           <p className="mb-3 text-sm text-ink-2">
             {describeBackupAge(lastBackup)}
             {canAutoBackup && <> Une copie est faite automatiquement chaque jour dans <b className="text-ink">{backupFolderLabel}</b> (les 14 dernières sont gardées).</>}
@@ -287,13 +300,14 @@ export default function Settings() {
       <Modal
         open={!!pending}
         onClose={() => { if (!busy) setPending(null); }}
-        title="Remplacer tes données par cette sauvegarde ?"
+        title="Importer cette sauvegarde ?"
         footer={pending ? (
           <>
             <Button variant="ghost" disabled={busy} onClick={() => setPending(null)}>Annuler</Button>
+            <Button variant="primary" loading={busy} onClick={() => void confirmImport('merge')}>Fusionner (recommandé)</Button>
             {snapshotError
-              ? <Button variant="danger" loading={busy} onClick={() => void confirmImport(true)}>Continuer sans copie</Button>
-              : <Button variant="primary" loading={busy} onClick={() => void confirmImport(false)}>Remplacer mes données</Button>}
+              ? <Button variant="danger" loading={busy} disabled={busy} onClick={() => void confirmImport('replace', true)}>Continuer sans copie</Button>
+              : <Button variant="secondary" loading={busy} disabled={busy} onClick={() => void confirmImport('replace')}>Remplacer tout</Button>}
           </>
         ) : undefined}
       >
@@ -314,7 +328,7 @@ export default function Settings() {
                 })}
               </tbody>
             </table>
-            <p>Les rubriques présentes dans le fichier <b className="text-ink">remplacent</b> celles de cet appareil (tes clés API et le serveur d’IA ne changent jamais). Un nombre plus petit dans le fichier signifie que tu perdrais des éléments récents.</p>
+            <p><b className="text-ink">Fusionner</b> (recommandé) combine les deux états : chaque élément garde la version la plus récente, les cryptos absentes du fichier sont conservées, rien n'est effacé. <b className="text-ink">Remplacer tout</b> écrase les rubriques de cet appareil par celles du fichier (tes clés API et le serveur d'IA ne changent jamais ; un nombre plus petit dans le fichier signifie alors que tu perdrais des éléments récents).</p>
             {pending.check.warnings.map((w) => <p key={w} className="text-warn">{w}</p>)}
             {snapshotError
               ? <Banner tone="warn" title="Copie de sécurité impossible">{snapshotError}. Exporte d’abord tes données actuelles, ou continue sans copie.<div className="mt-2"><Button size="sm" onClick={() => void doExport()}>Exporter mes données actuelles</Button></div></Banner>
@@ -327,6 +341,47 @@ export default function Settings() {
         <p className="text-sm text-ink-2">Toutes tes données locales (transactions, wallets, plans DCA, journal, thèses, rapports IA, réglages) seront supprimées de cet appareil. Exporte une sauvegarde avant si besoin.</p>
       </Modal>
     </div>
+  );
+}
+
+/** Synchronisation chiffrée PC ↔ téléphone : dépôt GitHub privé + phrase de passe (AES-GCM) + fusion automatique. */
+function SyncCard() {
+  const s = useStore((st) => st.settings);
+  const set = useStore((st) => st.setSettings);
+  const { busy, error, lastAt } = useSyncStatus();
+  const [showSecrets, setShowSecrets] = useState(false);
+  const passErr = checkPassphrase(s.syncPassphrase);
+  const ready = !!s.syncRepo.trim() && !!s.syncToken.trim() && !passErr;
+  const eye = <Button variant="ghost" icon={showSecrets ? <EyeOff className="size-4" /> : <Eye className="size-4" />} aria-label={showSecrets ? 'Masquer' : 'Afficher'} onClick={() => setShowSecrets(!showSecrets)} />;
+  return (
+    <Card title={<span className="inline-flex items-center gap-2"><RefreshCw className="size-4 text-accent" />Synchronisation PC ↔ téléphone</span>} subtitle="Le même dossier sur tes deux appareils, chiffré de bout en bout dans un dépôt GitHub privé. GitHub ne voit jamais le contenu ; la fusion garde la version la plus récente de chaque élément et propage les suppressions.">
+      <div className="space-y-4">
+        <Toggle checked={s.syncEnabled} onChange={(v) => { set({ syncEnabled: v }); if (v) setTimeout(() => void runSync(), 300); }} label="Synchroniser automatiquement" hint="Au lancement, après tes modifications (regroupées) et toutes les 15 minutes." />
+        <Field label="Dépôt GitHub privé" hint={<>Crée sur GitHub un dépôt <b className="text-ink">privé</b> et vide (ex : <code>boussole-sync</code>). Il ne recevra qu'un seul fichier chiffré.</>}>
+          <Input value={s.syncRepo} onChange={(e) => set({ syncRepo: e.target.value.trim() })} placeholder="Nikola17/boussole-sync" spellCheck={false} />
+        </Field>
+        <Field label="Jeton d'accès GitHub (fine-grained, limité à ce dépôt)" hint={<>Crée-le sur <button type="button" className="text-accent underline" onClick={() => openExternal('https://github.com/settings/personal-access-tokens/new')}>github.com/settings/personal-access-tokens/new</button> : « Only select repositories » → ton dépôt de synchronisation, puis permission « Contents : Read and write ». Il est conservé sur cet appareil uniquement.</>}>
+          <div className="flex gap-2">
+            <Input type={showSecrets ? 'text' : 'password'} value={s.syncToken} onChange={(e) => set({ syncToken: e.target.value.trim() })} placeholder="github_pat_…" autoComplete="off" spellCheck={false} />
+            {eye}
+          </div>
+        </Field>
+        <Field label="Phrase de passe de chiffrement" hint="Au moins 8 caractères, la même sur tes deux appareils. Elle ne quitte jamais cet appareil : GitHub ne reçoit que du chiffré (AES-256). Si tu la perds, chaque appareil garde ses données mais la synchronisation s'arrête.">
+          <div className="flex gap-2">
+            <Input type={showSecrets ? 'text' : 'password'} value={s.syncPassphrase} onChange={(e) => set({ syncPassphrase: e.target.value })} autoComplete="off" spellCheck={false} />
+            {eye}
+          </div>
+        </Field>
+        {passErr && <p className="-mt-2 text-xs text-warn">{passErr}</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="primary" icon={<RefreshCw className="size-4" />} disabled={!s.syncEnabled || !ready} loading={busy} onClick={() => void runSync()}>Synchroniser maintenant</Button>
+          <span className={clsx('text-sm', error ? 'text-down' : 'text-ink-2')}>
+            {error ?? (busy ? 'Synchronisation en cours…' : lastAt > 0 ? `Synchronisé ${fmtRelative(lastAt).replace('il y a', 'il y a')}` : 'Jamais synchronisé.')}
+          </span>
+        </div>
+        <p className="text-xs text-muted">Ce qui part vers GitHub : tes transactions, comptes, wallets, plans DCA et panier, thèses, alertes, réglages de profil — chiffrés. Jamais : tes clés API (IA, CoinGecko), ni ce jeton, ni cette phrase, ni les rapports IA et conversations propres à chaque appareil.</p>
+      </div>
+    </Card>
   );
 }
 

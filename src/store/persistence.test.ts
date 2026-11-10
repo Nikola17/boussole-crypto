@@ -31,6 +31,22 @@ describe('migration des données enregistrées', () => {
     const s = { x: 1 };
     expect(migrateState(s, DATA_VERSION + 3)).toBe(s);
   });
+
+  it('v1 → v2 : les registres de synchronisation sont amorcés, les données existantes intactes', () => {
+    const v1 = { transactions: [{ id: 'a', quantity: 1 }], watchlist: ['bitcoin'] };
+    const out = migrateState(JSON.parse(JSON.stringify(v1)), 1) as Record<string, unknown>;
+    expect(out.transactions).toEqual(v1.transactions);
+    expect(out.watchlist).toEqual(v1.watchlist);
+    expect(out.deletions).toEqual([]);
+    expect(out.syncStamp).toEqual({});
+  });
+
+  it('v1 → v2 : des registres déjà présents ne sont pas écrasés', () => {
+    const s = { transactions: [], deletions: [{ key: 'transactions/x', at: '2026-11-09T08:00:00.000Z' }], syncStamp: { profile: '2026-11-09T08:00:00.000Z' } };
+    const out = migrateState(s, 1) as Record<string, unknown>;
+    expect(out.deletions).toHaveLength(1);
+    expect(out.syncStamp).toEqual({ profile: '2026-11-09T08:00:00.000Z' });
+  });
 });
 
 describe('stockage protégé', () => {
