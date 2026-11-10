@@ -118,13 +118,14 @@ async function single(cfg: AiConfig, opts: SingleOpts): Promise<RunResult> {
 
 // ------------------------------------------------------------------ Brief quotidien
 
-export async function runBriefing(cfg: AiConfig, ctx: { market: unknown; portfolio: unknown; dca: unknown; profile: unknown; watchlist: unknown }, onProgress?: (p: Progress) => void, signal?: AbortSignal): Promise<AiReport> {
+export async function runBriefing(cfg: AiConfig, ctx: { market: unknown; portfolio: unknown; dca: unknown; profile: unknown; watchlist: unknown; today?: unknown }, onProgress?: (p: Progress) => void, signal?: AbortSignal): Promise<AiReport> {
   const prompt = [
     BRIEFING_TASK,
     toJsonBlock('profil', ctx.profile),
     toJsonBlock('marche', ctx.market),
     toJsonBlock('portefeuille', ctx.portfolio),
     toJsonBlock('plans_dca', ctx.dca),
+    ...(ctx.today ? [toJsonBlock('ordre_du_jour', ctx.today)] : []),
     toJsonBlock('signaux_watchlist', ctx.watchlist),
   ].join('\n\n');
   const watch = Array.isArray(ctx.watchlist) ? (ctx.watchlist as { actif?: string; nom?: string }[]) : [];

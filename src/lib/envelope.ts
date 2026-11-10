@@ -2,6 +2,9 @@
 
 import type { DefiBet, DefiEnvelope } from '../types';
 
+/** Liquidité minimale d'un pool, en valeur absolue : « 50 × ton achat » seul laisserait passer un pool de 1 250 $ pour un achat de 25 $. */
+export const MIN_POOL_LIQUIDITY_USD = 25_000;
+
 export const DEFAULT_ENVELOPE: DefiEnvelope = { enabled: false, capPct: 3, maxPerBuyUsd: 25, takeProfitMultiple: 2, pauseDrawdownPct: 50 };
 
 export interface EnvelopeStatus {
@@ -55,7 +58,7 @@ export interface PreBuyInput {
   liquidityUsd: number | null;
   volume24hUsd: number | null;
   ageHours: number | null;
-  securityVerdict: 'Plutôt sain' | 'Prudence' | 'Danger' | null;
+  securityVerdict: 'Plutôt sain' | 'Prudence' | 'Danger' | 'Données insuffisantes' | null;
   top10Pct: number | null;
 }
 
@@ -84,16 +87,20 @@ export function preBuyChecks(i: PreBuyInput): PreBuyResult {
   add('Enveloppe active', i.env.enabled && !i.status.paused, true, !i.env.enabled ? 'L’enveloppe est désactivée.' : i.status.paused ? `En pause jusqu’au ${i.env.pausedUntil}.` : 'Oui.');
   add('Montant dans la limite d’un achat', i.amountUsd <= i.env.maxPerBuyUsd, true, `${fmt(i.amountUsd)} $ pour un maximum de ${fmt(i.env.maxPerBuyUsd)} $.`);
   add('Place restante dans l’enveloppe', i.amountUsd <= i.status.roomUsd, true, `${fmt(i.status.roomUsd)} $ disponibles (plafond ${fmt(i.status.capUsd)} $, déjà engagé ${fmt(i.status.exposureUsd)} $).`);
-  add('Scan de sécurité', i.securityVerdict == null ? null : i.securityVerdict === 'Danger' ? false : i.securityVerdict === 'Prudence' ? null : true, true,
-    i.securityVerdict == null ? 'Scan indisponible : n’achète pas sans l’avoir fait.' : `Verdict : ${i.securityVerdict}.`);
-  add('Liquidité d’au moins 50 × ton achat', i.liquidityUsd == null ? null : i.liquidityUsd >= need, true,
-    i.liquidityUsd == null ? 'Liquidité inconnue.' : `${fmt(i.liquidityUsd)} $ de liquidité pour ${fmt(need)} $ requis.`);
+  // Une donnée qui manque BLOQUE l'achat (ok = false) : on n'achète pas sur des informations qu'on n'a pas.
+  const sv = i.securityVerdict;
+  add('Scan de sécurité', sv == null || sv === 'Danger' || sv === 'Données insuffisantes' ? false : sv === 'Prudence' ? null : true, true,
+    sv == null ? 'Scan indisponible : achat bloqué tant qu’il n’a pas pu être fait.' : sv === 'Données insuffisantes' ? 'Données insuffisantes : le scan n’a pas assez d’informations pour juger. Achat bloqué.' : `Verdict : ${sv}.`);
+  add('Liquidité minimale du pool', i.liquidityUsd == null ? false : i.liquidityUsd >= MIN_POOL_LIQUIDITY_USD, true,
+    i.liquidityUsd == null ? 'Liquidité inconnue : achat bloqué.' : `${fmt(i.liquidityUsd)} $ pour un minimum de ${fmt(MIN_POOL_LIQUIDITY_USD)} $, quel que soit le montant.`);
+  add('Liquidité d’au moins 50 × ton achat', i.liquidityUsd == null ? false : i.liquidityUsd >= need, true,
+    i.liquidityUsd == null ? 'Liquidité inconnue : achat bloqué.' : `${fmt(i.liquidityUsd)} $ de liquidité pour ${fmt(need)} $ requis.`);
   add('Volume sur 24 h d’au moins 50 × ton achat', i.volume24hUsd == null ? null : i.volume24hUsd >= need, false,
     i.volume24hUsd == null ? 'Volume inconnu.' : `${fmt(i.volume24hUsd)} $ échangés sur 24 h.`);
-  add('Ancienneté du token', i.ageHours == null ? null : i.ageHours >= 24 * 7 ? true : i.ageHours >= 24 ? null : false, true,
-    i.ageHours == null ? 'Âge inconnu.' : i.ageHours < 24 ? 'Moins de 24 h : le risque d’arnaque est maximal.' : `${Math.round(i.ageHours / 24)} jour${Math.round(i.ageHours / 24) > 1 ? 's' : ''}${i.ageHours < 24 * 7 ? ' : très récent' : ''}.`);
-  add('Concentration des gros portefeuilles', i.top10Pct == null ? null : i.top10Pct <= 30 ? true : i.top10Pct <= 50 ? null : false, true,
-    i.top10Pct == null ? 'Concentration inconnue.' : `Top 10 : ${Math.round(i.top10Pct)} %.`);
+  add('Ancienneté du token', i.ageHours == null ? false : i.ageHours >= 24 * 7 ? true : i.ageHours >= 24 ? null : false, true,
+    i.ageHours == null ? 'Âge inconnu : achat bloqué.' : i.ageHours < 24 ? 'Moins de 24 h : le risque d’arnaque est maximal.' : `${Math.round(i.ageHours / 24)} jour${Math.round(i.ageHours / 24) > 1 ? 's' : ''}${i.ageHours < 24 * 7 ? ' : très récent' : ''}.`);
+  add('Concentration des gros portefeuilles', i.top10Pct == null ? false : i.top10Pct <= 30 ? true : i.top10Pct <= 50 ? null : false, true,
+    i.top10Pct == null ? 'Concentration inconnue : achat bloqué.' : `Top 10 : ${Math.round(i.top10Pct)} %.`);
 
   const blocked = c.some((x) => x.hard && x.ok === false);
   const doubt = c.some((x) => x.ok === null || x.ok === false);
@@ -104,4 +111,17 @@ export function preBuyChecks(i: PreBuyInput): PreBuyResult {
       ? 'À manier avec prudence : certaines informations manquent ou sont limites.'
       : 'Les règles sont respectées. Cela ne garantit pas le résultat : ne mise que ce que tu peux perdre.';
   return { checks: c, verdict, summary };
+}
+
+/**
+ * Raisons pour lesquelles un achat noté « à la main » sort de l'enveloppe. Un journal exact vaut mieux qu'un journal truqué :
+ * on peut noter l'achat, mais il est marqué « hors règles » et la raison est affichée.
+ */
+export function betViolations(env: DefiEnvelope, status: EnvelopeStatus, amountUsd: number): string[] {
+  const out: string[] = [];
+  if (!env.enabled) out.push('l’enveloppe est désactivée');
+  if (status.paused) out.push(`l’enveloppe est en pause jusqu’au ${env.pausedUntil}`);
+  if (amountUsd > env.maxPerBuyUsd) out.push(`la mise dépasse ton maximum par achat (${Math.round(env.maxPerBuyUsd)} $)`);
+  if (amountUsd > status.roomUsd + 0.005) out.push(`la mise dépasse la place restante dans l’enveloppe (${Math.round(status.roomUsd)} $)`);
+  return out;
 }

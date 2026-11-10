@@ -216,7 +216,7 @@ function SecurityPanel({ report }: { report: SecurityReport }) {
     <div className="rounded-lg border border-line p-3">
       <div className="flex items-center justify-between">
         <span className="inline-flex items-center gap-2 text-sm font-medium text-ink"><ShieldCheck className="size-4" />Scan de sécurité</span>
-        <Badge tone={report.verdict === 'Danger' ? 'down' : report.verdict === 'Prudence' ? 'warn' : 'up'}>{report.verdict} · {report.score}/100</Badge>
+        <Badge tone={report.verdict === 'Danger' ? 'down' : report.verdict === 'Plutôt sain' ? 'up' : 'warn'}>{report.verdict} · {report.score}/100</Badge>
       </div>
       <ul className="mt-2 space-y-1 text-sm">
         {report.flags.map((f, i) => (

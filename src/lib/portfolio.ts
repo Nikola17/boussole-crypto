@@ -174,6 +174,19 @@ export function rebalance(alloc: Record<Bucket, number>, target: Record<Bucket, 
   });
 }
 
+export type RebalanceAction = 'ok' | 'buy' | 'trim' | 'hold';
+
+/**
+ * Que faire d'un écart à la cible ? Le cœur (Bitcoin, Ethereum) n'est jamais allégé hors euphorie :
+ * un excès se corrige en orientant le DCA vers les autres poches (« hold »), pas en vendant.
+ */
+export function rebalanceAction(l: RebalanceLine, euphoria: boolean): RebalanceAction {
+  if (Math.abs(l.currentPct - l.targetPct) < 3) return 'ok';
+  if (l.diffValue > 0) return 'buy';
+  if ((l.bucket === 'btc' || l.bucket === 'eth') && !euphoria) return 'hold';
+  return 'trim';
+}
+
 /** Indice de concentration (Herfindahl) normalisé 0-100 : 100 = tout sur un seul actif. */
 export function concentration(values: number[]): number {
   const total = values.reduce((s, v) => s + Math.max(0, v), 0);

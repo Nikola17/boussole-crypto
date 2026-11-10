@@ -154,3 +154,19 @@ describe('sauvegarde automatique : calendrier et nettoyage', () => {
     expect(backupsToPrune(names, 'avant-import', 1)).toEqual(['boussole-avant-import-2026-11-01_100000.json']);
   });
 });
+
+describe('liens écrits par l’IA', () => {
+  it('https uniquement ; le vrai domaine est affiché ; seuls les sites connus sont ouverts sans confirmation', async () => {
+    const { linkInfo } = await import('./links');
+    expect(linkInfo('https://www.coingecko.com/fr/coins/bitcoin')).toEqual({ ok: true, host: 'coingecko.com', trusted: true });
+    expect(linkInfo('https://api.github.com/x').trusted).toBe(true);
+    expect(linkInfo('https://coingecko.com.pirate.example/claim')).toEqual({ ok: true, host: 'coingecko.com.pirate.example', trusted: false });
+    expect(linkInfo('https://evilcoingecko.com/').trusted).toBe(false);
+    expect(linkInfo('https://xn--coingeko-abc.com/').trusted).toBe(false);
+    expect(linkInfo('http://coingecko.com').ok).toBe(false);
+    expect(linkInfo('javascript:alert(1)').ok).toBe(false);
+    expect(linkInfo('file:///c:/secret').ok).toBe(false);
+    expect(linkInfo('pas une adresse')).toEqual({ ok: false, host: '', trusted: false });
+    expect(linkInfo(undefined).ok).toBe(false);
+  });
+});

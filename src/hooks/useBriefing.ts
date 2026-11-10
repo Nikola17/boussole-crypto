@@ -6,7 +6,10 @@ import { useAiConfig } from '../components/AiBlocks';
 import { summarizeAnalysis, useAiContext } from '../ai/context';
 import { runBriefing } from '../ai/tasks';
 import { useScan } from './useMarket';
-import { useFocusCoins } from './useGuidance';
+import { useFocusCoins, useGuidance } from './useGuidance';
+import { useBasket } from './useBasket';
+import { todayContext } from '../ai/today';
+import { rulesOf } from '../lib/profile';
 import { isoDay } from '../lib/format';
 
 export function useBriefing() {
@@ -16,6 +19,9 @@ export function useBriefing() {
   const addReport = useStore((s) => s.addReport);
   const reports = useStore((s) => s.reports);
   const focus = useFocusCoins();
+  const guidance = useGuidance();
+  const basket = useBasket();
+  const profile = useStore((s) => s.profile);
   const scan = useScan(focus, ctx.cycle?.temperature);
   const latest = reports.find((r) => r.kind === 'briefing') ?? null;
   const todays = latest && latest.day === isoDay() ? latest : null;
@@ -34,6 +40,7 @@ export function useBriefing() {
         dca: ctx.dca(ctx.cycle?.temperature, mayerBy),
         profile: ctx.profile(),
         watchlist: watch,
+        today: todayContext({ guidance, basketDue: basket.due, plan: basket.plan, rules: rulesOf(profile), portfolioComplete: ctx.portfolioComplete, temperature: ctx.cycle?.temperature ?? null }),
       }, (p) => useBriefingRun.getState().set({ progress: p }), controller.signal);
       addReport(report);
       return report;

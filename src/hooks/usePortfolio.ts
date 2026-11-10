@@ -68,7 +68,7 @@ export function useWalletBalances() {
   const wallets = useStore((s) => s.wallets);
   const results = useQueries({
     queries: wallets.map((w) => ({
-      queryKey: ['wallet', w.id, w.address, w.btcScript ?? '', (w.evmChains ?? []).join(','), (w.customTokens ?? []).length],
+      queryKey: ['wallet', w.id, w.address, w.btcScript ?? '', (w.evmChains ?? []).join(','), (w.customTokens ?? []).map((t) => `${t.chain}:${t.address}`).join(',')],
       queryFn: () => fetchWallet(w),
       // Une clé publique étendue demande des dizaines de lectures : on la rafraîchit moins souvent.
       staleTime: isExtendedKey(w.address) ? 30 * 60_000 : 5 * 60_000,
@@ -243,6 +243,8 @@ export function usePortfolio() {
   const alloc = useMemo(() => allocation(holdings.map((h) => ({ coinId: h.coinId ?? h.key, symbol: h.symbol, bucket: h.bucket, value: h.value }))), [holdings]);
 
   const walletsLoading = results.some((r) => r.isLoading);
+  // Au moins un wallet n'a pas pu être lu (erreur réseau, ou erreur sur un de ses tokens) : le portefeuille affiché est partiel.
+  const walletsIncomplete = results.some((r) => r.isError || (r.data?.errors.length ?? 0) > 0);
   return {
     holdings,
     totals,
@@ -256,6 +258,7 @@ export function usePortfolio() {
     journal,
     accountByWallet,
     loading: markets.isLoading || walletsLoading,
+    walletsIncomplete,
     rate,
     fx,
     currency,

@@ -35,7 +35,7 @@ function VoteIcon({ vote }: { vote: number }) {
 
 function SignalCard({ title, help, result }: { title: string; help: string; result: SignalResult }) {
   return (
-    <Card title={<span className="inline-flex items-center gap-1">{title}<InfoTip>{help}</InfoTip></span>} actions={<SignalBadge label={result.label} tone={result.tone} strength={result.strength} score={result.score} />}>
+    <Card title={<span className="inline-flex items-center gap-1">{title}<InfoTip>{help}</InfoTip></span>} actions={<SignalBadge label={result.label} tone={result.tone} strength={result.strength} score={result.score} confidence={result.confidence} limited={result.limitedBy} />}>
       <p className="mb-2 text-xs text-muted">Score {result.score > 0 ? '+' : ''}{result.score} sur ±100 · confiance {result.confidence}</p>
       <ul className="space-y-2.5">
         {result.factors.map((f: Factor) => (
@@ -228,14 +228,16 @@ export default function CoinDetail({ id }: { id: string }) {
                   <div className="text-xs text-ink-2">{analysis.price <= analysis.accumulation.high ? 'Le prix est dans ou sous la zone : DCA renforcé pertinent si la thèse tient.' : `Le prix est ${fmtPct(((analysis.price / analysis.accumulation.high) - 1) * 100)} au-dessus de la zone.`}</div>
                 </div>
               )}
-              {analysis.plan && (
+              {analysis.plan && analysis.trader.tone === 'up' && (
                 <>
+                  <div className="col-span-2 text-xs text-ink-2">Si tu entres (le signal trader est haussier) :</div>
                   <div><div className="text-xs text-muted">Entrée (cours actuel)</div><div className="tnum font-medium text-ink">{fmtPrice(analysis.plan.entry * rate, currency)}</div></div>
                   <div><div className="text-xs text-muted">Stop suggéré</div><div className="tnum font-medium text-down">{fmtPrice(analysis.plan.stop * rate, currency)} <span className="text-xs text-muted">(−{fmtNum(analysis.plan.riskPct, 1)} %)</span></div></div>
                   <div><div className="text-xs text-muted">Objectif 1 (1,5 R)</div><div className="tnum font-medium text-up">{fmtPrice(analysis.plan.tp1 * rate, currency)}</div></div>
                   <div><div className="text-xs text-muted">Objectif 2 (3 R)</div><div className="tnum font-medium text-up">{fmtPrice(analysis.plan.tp2 * rate, currency)}</div></div>
                 </>
               )}
+              {analysis.plan && analysis.trader.tone !== 'up' && <div className="col-span-2 rounded-lg bg-surface-2 p-3 text-xs text-ink-2">Pas de plan d’entrée : le signal trader n’est pas haussier ({analysis.trader.label.toLowerCase()}). Un stop et des objectifs affichés maintenant se liraient comme « achète ».</div>}
               {analysis.profitZone && <div className="col-span-2 text-xs text-ink-2">Zone de prises de profits historique (multiple de Mayer ≥ 2) : au-dessus de <span className="tnum font-medium text-ink">{fmtPrice(analysis.profitZone * rate, currency)}</span>.</div>}
             </div>
           </Card>
@@ -329,7 +331,7 @@ export default function CoinDetail({ id }: { id: string }) {
       <TransactionModal open={modal === 'tx'} onClose={() => setModal(null)} presetCoin={coinRef} />
       <DcaPlanModal open={modal === 'dca'} onClose={() => setModal(null)} presetCoin={coinRef} />
       <AlertModal open={modal === 'alert'} onClose={() => setModal(null)} presetCoin={coinRef} />
-      <TradeModal open={modal === 'trade'} onClose={() => setModal(null)} preset={analysis?.plan ? { coinId: id, symbol: symbol.toLowerCase(), entryPrice: Math.round(analysis.plan.entry * 1e6) / 1e6, stopLoss: Math.round(analysis.plan.stop * 1e6) / 1e6, takeProfit: Math.round(analysis.plan.tp1 * 1e6) / 1e6 } : { coinId: id, symbol: symbol.toLowerCase() }} />
+      <TradeModal open={modal === 'trade'} onClose={() => setModal(null)} preset={analysis?.plan && analysis.trader.tone === 'up' ? { coinId: id, symbol: symbol.toLowerCase(), entryPrice: Math.round(analysis.plan.entry * 1e6) / 1e6, stopLoss: Math.round(analysis.plan.stop * 1e6) / 1e6, takeProfit: Math.round(analysis.plan.tp1 * 1e6) / 1e6 } : { coinId: id, symbol: symbol.toLowerCase() }} />
       <ThesisModal open={modal === 'thesis'} onClose={() => setModal(null)} coin={coinRef} initial={thesis} />
     </div>
   );

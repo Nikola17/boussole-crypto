@@ -2,6 +2,7 @@
 // éprouvés sur Bitcoin. 0 = peur extrême / capitulation, 100 = euphorie.
 
 import { rsi, sma, toWeekly, type Candle } from './indicators';
+import { TEMPERATURE } from './thresholds';
 
 export interface CycleComponent {
   key: string;
@@ -48,10 +49,10 @@ export function piecewise(x: number, points: [number, number][]): number {
 }
 
 export function zoneFor(t: number): CycleZone {
-  if (t < 20) return { key: 'capitulation', label: 'Peur extrême', action: "Zone d'achat historique : renforce ton DCA (×2) sur BTC/ETH, par paliers, sans tout miser d'un coup.", dcaMultiplier: 2, tone: 'up' };
-  if (t < 40) return { key: 'accumulation', label: 'Accumulation', action: 'Bon moment pour accumuler : DCA renforcé (×1,5), privilégie la qualité.', dcaMultiplier: 1.5, tone: 'up' };
-  if (t < 60) return { key: 'neutre', label: 'Neutre', action: 'DCA normal, aucun excès : respecte ton plan et ta répartition cible.', dcaMultiplier: 1, tone: 'neutral' };
-  if (t < 80) return { key: 'chaleur', label: 'Marché chaud', action: 'DCA réduit (×0,5) et prépare tes prises de profits par paliers sur les positions en gain.', dcaMultiplier: 0.5, tone: 'down' };
+  if (t < TEMPERATURE.extremeFear) return { key: 'capitulation', label: 'Peur extrême', action: "Zone d'achat historique : renforce ton DCA (×2) sur BTC/ETH, par paliers, sans tout miser d'un coup.", dcaMultiplier: 2, tone: 'up' };
+  if (t < TEMPERATURE.fear) return { key: 'accumulation', label: 'Accumulation', action: 'Bon moment pour accumuler : DCA renforcé (×1,5), privilégie la qualité.', dcaMultiplier: 1.5, tone: 'up' };
+  if (t < TEMPERATURE.warm) return { key: 'neutre', label: 'Neutre', action: 'DCA normal, aucun excès : respecte ton plan et ta répartition cible.', dcaMultiplier: 1, tone: 'neutral' };
+  if (t < TEMPERATURE.euphoria) return { key: 'chaleur', label: 'Marché chaud', action: 'DCA réduit (×0,5) et prépare tes prises de profits par paliers sur les positions en gain.', dcaMultiplier: 0.5, tone: 'down' };
   return { key: 'euphorie', label: 'Euphorie', action: 'Prends des profits progressivement, stoppe les achats d’altcoins, remonte ta part de stablecoins.', dcaMultiplier: 0.25, tone: 'down' };
 }
 

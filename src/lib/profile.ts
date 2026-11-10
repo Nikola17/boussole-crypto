@@ -23,6 +23,12 @@ export const ARCHETYPES: Record<Archetype, { target: Record<Bucket, number>; rul
     rules: { maxPerGemPct: 5, maxPerAltPct: 15, cashReservePct: 5, riskPerTradePct: 2, maxLines: 20, minLinePct: 1, maxDiscoveryLines: 5 },
     pitch: 'Chasseur de multiplicateurs. Tu dois être prêt à voir -80 % sur une partie du portefeuille.',
   },
+  // Les règles de docs/STRATEGIE.md : un socle BTC/ETH à 85 %, une petite poche d'altcoins, DCA modulé, peu de lignes.
+  'Ma stratégie': {
+    target: { btc: 65, eth: 20, large: 6, mid: 4, small: 5, stable: 0 },
+    rules: { maxPerGemPct: 3, maxPerAltPct: 5, cashReservePct: 5, riskPerTradePct: 1, maxLines: 12, minLinePct: 1, maxDiscoveryLines: 5 },
+    pitch: 'Ta stratégie : un socle Bitcoin/Ethereum à 85 %, 15 % d’altcoins au plus, un DCA modulé par la température du marché et peu de lignes. Un excès de Bitcoin se corrige en orientant le DCA, jamais en vendant.',
+  },
 };
 
 /** Règles complètes : complète les profils enregistrés avant l'ajout des règles anti-éparpillement. */

@@ -3,10 +3,12 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { useFx, useMarkets } from '../hooks/useMarket';
+import { useCycle, useFx, useMarkets } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { FREQUENCY_LABEL, STRATEGY_HELP, STRATEGY_LABEL, type DcaStrategy, type Frequency } from '../lib/dca';
 import { fmtMoney, isoDay, uid } from '../lib/format';
+import { isStable } from '../lib/portfolio';
+import { outsideDcaCheck } from '../lib/rules';
 import type { CoinRef, DcaPlan, PriceAlert, Thesis, TradeEntry, Transaction, TxType } from '../types';
 import type { Currency } from '../lib/format';
 import { CoinPicker } from './CoinPicker';
@@ -42,6 +44,8 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
   const [account, setAccount] = useState('');
   const [toAccount, setToAccount] = useState('');
   const livePrice = usePriceOf(coin?.coinId);
+  const cycle = useCycle();
+  const reserveUsd = useStore((s) => s.basket?.reserveUsd ?? null);
 
   useEffect(() => {
     if (!open) return;
@@ -109,6 +113,12 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
     setTotal(v);
     if (v !== '' && price !== '' && price > 0) setQuantity(Math.round((v / price) * 1e8) / 1e8);
   };
+
+  // Règle de ta stratégie : un achat hors DCA n'est autorisé qu'avec la réserve d'USDC et si le marché a vraiment peur.
+  const totalUsd = total === '' ? 0 : currency === 'EUR' ? Number(total) / (fx || 0.9) : Number(total);
+  const outside = !initial && type === 'buy' && coin && !isStable(coin.symbol, coin.coinId) && date === isoDay()
+    ? outsideDcaCheck({ temperature: cycle.data?.temperature ?? null, reserveUsd, amountUsd: totalUsd })
+    : null;
 
   const valid = coin && quantity !== '' && quantity > 0 && (type === 'transfer' ? !!account && !!toAccount && account !== toAccount : price !== '' && price >= 0);
 
@@ -191,6 +201,11 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
           </>
         )}
         <Field label="Note (facultatif)"><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Plateforme, raison de l'achat…" /></Field>
+        {outside && !outside.allowed && (
+          <Banner tone="warn" title="Achat hors DCA : ta règle dit non">
+            Ta stratégie n’autorise un achat hors DCA qu’avec la réserve d’USDC et quand le marché a vraiment peur : {outside.reasons.join(' ; ')}. Tu peux l’enregistrer, mais demande-toi si ce n’est pas du FOMO.
+          </Banner>
+        )}
       </div>
     </Modal>
   );

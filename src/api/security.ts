@@ -1,5 +1,7 @@
 // Scan de sécurité des tokens : GoPlus (EVM & Solana) et RugCheck (Solana).
 // Objectif : repérer honeypots, taxes cachées, mint illimité, liquidité non verrouillée...
+// Règle d'or : l'absence de données n'est JAMAIS une bonne nouvelle. Un scan qui n'a presque rien reçu dit « Données insuffisantes »,
+// jamais « Plutôt sain », et un seul avertissement suffit à retirer le feu vert.
 
 import { getJson } from './http';
 
@@ -9,9 +11,11 @@ export interface SecurityFlag {
   detail?: string;
 }
 
+export type SecurityVerdict = 'Plutôt sain' | 'Prudence' | 'Danger' | 'Données insuffisantes';
+
 export interface SecurityReport {
   score: number; // 0-100, 100 = aucun signal d'alerte détecté
-  verdict: 'Plutôt sain' | 'Prudence' | 'Danger';
+  verdict: SecurityVerdict;
   flags: SecurityFlag[];
   top10HoldersPct: number | null;
   holders: number | null;
@@ -21,7 +25,7 @@ export interface SecurityReport {
 type Bit = '0' | '1' | undefined | null | string;
 const on = (v: Bit) => v === '1';
 
-interface GoPlusEvm {
+export interface GoPlusEvm {
   is_honeypot?: Bit;
   buy_tax?: string;
   sell_tax?: string;
@@ -42,29 +46,46 @@ interface GoPlusEvm {
   is_in_dex?: Bit;
 }
 
-function finalize(flags: SecurityFlag[], top10: number | null, holders: number | null, sources: string[]): SecurityReport {
+/** Liquidité verrouillée ou brûlée : sous ce seuil, le créateur peut retirer la liquidité d'un coup (« rug pull »). */
+export const LP_LOCKED_DANGER_PCT = 30;
+export const LP_LOCKED_OK_PCT = 80;
+
+interface FinalizeOpts {
+  /** Trop peu de données reçues pour juger : jamais « Plutôt sain ». */
+  insufficient?: boolean;
+  /** Une seule source a répondu : l'analyse est incomplète, au mieux « Prudence ». */
+  partial?: boolean;
+}
+
+export function finalize(flags: SecurityFlag[], top10: number | null, holders: number | null, sources: string[], opts: FinalizeOpts = {}): SecurityReport {
   let score = 100;
   for (const f of flags) score -= f.severity === 'danger' ? 35 : f.severity === 'warn' ? 12 : 0;
   score = Math.max(0, score);
   const hasDanger = flags.some((f) => f.severity === 'danger');
-  return {
-    score,
-    verdict: hasDanger || score < 40 ? 'Danger' : score < 75 ? 'Prudence' : 'Plutôt sain',
-    flags,
-    top10HoldersPct: top10,
-    holders,
-    sources,
-  };
+  const hasWarn = flags.some((f) => f.severity === 'warn');
+  let verdict: SecurityVerdict;
+  if (hasDanger || score < 40) verdict = 'Danger';
+  else if (opts.insufficient) verdict = 'Données insuffisantes';
+  else if (hasWarn || opts.partial || score < 75) verdict = 'Prudence';
+  else verdict = 'Plutôt sain';
+  return { score, verdict, flags, top10HoldersPct: top10, holders, sources };
 }
 
-export async function scanEvm(chainId: string, address: string): Promise<SecurityReport> {
+/** Champs que GoPlus doit renseigner pour qu'on puisse juger un contrat EVM. */
+const EVM_KEY_FIELDS: (keyof GoPlusEvm)[] = ['is_honeypot', 'is_open_source', 'buy_tax', 'sell_tax', 'is_mintable', 'owner_change_balance', 'hidden_owner', 'cannot_sell_all'];
+const known = (v: unknown) => v !== undefined && v !== null && v !== '';
+
+/** Construit le rapport d'un contrat EVM à partir de la réponse GoPlus (fonction pure : testée sans réseau). */
+export function evmReportFrom(response: { code?: number; result?: Record<string, GoPlusEvm> } | null | undefined, address: string): SecurityReport {
   const addr = address.toLowerCase();
-  const r = await getJson<{ code: number; result: Record<string, GoPlusEvm> }>(
-    `https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${addr}`,
-  );
-  const d = r.result?.[addr];
+  const d = response?.result?.[addr];
   if (!d) throw new Error('GoPlus ne connaît pas encore ce token (trop récent ?).');
   const flags: SecurityFlag[] = [];
+  // GoPlus répond « code 1 » quand l'analyse est complète. Un champ absent ne veut pas dire « pas de risque ».
+  const knownFields = EVM_KEY_FIELDS.filter((k) => known(d[k])).length;
+  const insufficient = response?.code !== 1 || !known(d.is_honeypot) || !known(d.is_open_source) || knownFields < 6;
+  if (insufficient) flags.push({ label: `Analyse incomplète : ${knownFields} contrôles sur ${EVM_KEY_FIELDS.length} ont pu être faits`, severity: 'warn', detail: 'GoPlus n’a pas renvoyé assez d’informations sur ce contrat. N’en déduis rien de rassurant.' });
+
   if (on(d.is_honeypot)) flags.push({ label: 'Honeypot : impossible de revendre', severity: 'danger' });
   if (on(d.cannot_sell_all)) flags.push({ label: 'Impossible de tout revendre', severity: 'danger' });
   const buyTax = Number(d.buy_tax ?? 0) * 100;
@@ -91,14 +112,23 @@ export async function scanEvm(chainId: string, address: string): Promise<Securit
   const lp = d.lp_holders ?? [];
   if (lp.length) {
     const lockedPct = lp.filter((h) => h.is_locked || /burn|dead|null/i.test(h.tag ?? '')).reduce((s, h) => s + Number(h.percent || 0) * 100, 0);
-    if (lockedPct < 50) flags.push({ label: `Liquidité verrouillée/brûlée : ${lockedPct.toFixed(0)} % seulement`, severity: 'warn' });
+    if (lockedPct < LP_LOCKED_DANGER_PCT) flags.push({ label: `Liquidité verrouillée/brûlée : ${lockedPct.toFixed(0)} % seulement`, severity: 'danger', detail: 'Le créateur peut retirer presque toute la liquidité d’un coup.' });
+    else if (lockedPct < 50) flags.push({ label: `Liquidité verrouillée/brûlée : ${lockedPct.toFixed(0)} % seulement`, severity: 'warn' });
     else flags.push({ label: `Liquidité verrouillée/brûlée : ${lockedPct.toFixed(0)} %`, severity: 'ok' });
   }
-  if (!flags.some((f) => f.severity !== 'ok')) flags.push({ label: 'Aucun piège classique détecté', severity: 'ok' });
-  return finalize(flags, holders.length ? top10 : null, d.holder_count ? Number(d.holder_count) : null, ['GoPlus Security']);
+  if (!insufficient && !flags.some((f) => f.severity !== 'ok')) flags.push({ label: 'Aucun piège classique détecté', severity: 'ok' });
+  return finalize(flags, holders.length ? top10 : null, d.holder_count ? Number(d.holder_count) : null, ['GoPlus Security'], { insufficient });
 }
 
-interface GoPlusSol {
+export async function scanEvm(chainId: string, address: string): Promise<SecurityReport> {
+  const addr = address.toLowerCase();
+  const r = await getJson<{ code?: number; result?: Record<string, GoPlusEvm> }>(
+    `https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${addr}`,
+  );
+  return evmReportFrom(r, addr);
+}
+
+export interface GoPlusSol {
   mintable?: { status?: Bit };
   freezable?: { status?: Bit };
   closable?: { status?: Bit };
@@ -110,62 +140,74 @@ interface GoPlusSol {
   trusted_token?: Bit | number;
 }
 
-interface RugSummary {
+export interface RugSummary {
   score?: number;
   score_normalised?: number;
   risks?: { name: string; description: string; level: string; value?: string }[];
   lpLockedPct?: number;
 }
 
-export async function scanSolana(mint: string): Promise<SecurityReport> {
+/** Rapport d'un token Solana à partir de ce que GoPlus et RugCheck ont renvoyé (null = la source n'a pas répondu). */
+export function solanaReportFrom(gp: GoPlusSol | null | undefined, rug: RugSummary | null | undefined): SecurityReport {
   const flags: SecurityFlag[] = [];
   const sources: string[] = [];
   let top10: number | null = null;
-  let gotSomething = false;
 
-  try {
-    const r = await getJson<{ result: Record<string, GoPlusSol> }>(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${mint}`, { retries: 1 });
-    const d = r.result?.[mint] ?? Object.values(r.result ?? {})[0];
-    if (d) {
-      gotSomething = true;
-      sources.push('GoPlus Security');
-      if (on(d.mintable?.status)) flags.push({ label: 'Autorité de mint active : offre illimitée possible', severity: 'danger' });
-      if (on(d.freezable?.status)) flags.push({ label: 'Autorité de gel active : tes tokens peuvent être bloqués', severity: 'danger' });
-      if (on(d.balance_mutable_authority?.status)) flags.push({ label: 'Les soldes peuvent être modifiés', severity: 'danger' });
-      if (on(d.closable?.status)) flags.push({ label: 'Le compte du token peut être fermé', severity: 'warn' });
-      if (on(d.metadata_mutable?.status)) flags.push({ label: 'Métadonnées modifiables', severity: 'warn' });
-      if (on(d.non_transferable as Bit)) flags.push({ label: 'Token non transférable', severity: 'danger' });
-      const holders = d.holders ?? [];
-      if (holders.length) {
-        top10 = holders.slice(0, 10).filter((h) => !h.is_locked).reduce((s, h) => s + Number(h.percent || 0) * 100, 0);
-        if (top10 > 50) flags.push({ label: `Top 10 détenteurs : ${top10.toFixed(0)} %`, severity: 'danger' });
-        else if (top10 > 30) flags.push({ label: `Top 10 détenteurs : ${top10.toFixed(0)} %`, severity: 'warn' });
-      }
+  if (gp) {
+    sources.push('GoPlus Security');
+    if (on(gp.mintable?.status)) flags.push({ label: 'Autorité de mint active : offre illimitée possible', severity: 'danger' });
+    if (on(gp.freezable?.status)) flags.push({ label: 'Autorité de gel active : tes tokens peuvent être bloqués', severity: 'danger' });
+    if (on(gp.balance_mutable_authority?.status)) flags.push({ label: 'Les soldes peuvent être modifiés', severity: 'danger' });
+    if (on(gp.closable?.status)) flags.push({ label: 'Le compte du token peut être fermé', severity: 'warn' });
+    if (on(gp.metadata_mutable?.status)) flags.push({ label: 'Métadonnées modifiables', severity: 'warn' });
+    if (on(gp.non_transferable as Bit)) flags.push({ label: 'Token non transférable', severity: 'danger' });
+    const holders = gp.holders ?? [];
+    if (holders.length) {
+      top10 = holders.slice(0, 10).filter((h) => !h.is_locked).reduce((s, h) => s + Number(h.percent || 0) * 100, 0);
+      if (top10 > 50) flags.push({ label: `Top 10 détenteurs : ${top10.toFixed(0)} %`, severity: 'danger' });
+      else if (top10 > 30) flags.push({ label: `Top 10 détenteurs : ${top10.toFixed(0)} %`, severity: 'warn' });
     }
-  } catch {
-    /* on tente RugCheck */
   }
 
-  try {
-    const r = await getJson<RugSummary>(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, { retries: 1 });
-    gotSomething = true;
+  if (rug) {
     sources.push('RugCheck');
-    for (const risk of r.risks ?? []) {
+    for (const risk of rug.risks ?? []) {
       const sev: SecurityFlag['severity'] = risk.level === 'danger' ? 'danger' : 'warn';
       if (!flags.some((f) => f.label.toLowerCase().includes(risk.name.toLowerCase().slice(0, 8)))) {
         flags.push({ label: risk.name, severity: sev, detail: risk.description });
       }
     }
-    if (r.lpLockedPct != null) {
+    if (rug.lpLockedPct != null) {
+      const p = rug.lpLockedPct;
       flags.push({
-        label: `Liquidité verrouillée : ${r.lpLockedPct.toFixed(0)} %`,
-        severity: r.lpLockedPct >= 80 ? 'ok' : r.lpLockedPct >= 30 ? 'warn' : 'warn',
+        label: `Liquidité verrouillée : ${p.toFixed(0)} %`,
+        severity: p >= LP_LOCKED_OK_PCT ? 'ok' : p >= LP_LOCKED_DANGER_PCT ? 'warn' : 'danger',
+        detail: p < LP_LOCKED_DANGER_PCT ? 'Le créateur peut retirer presque toute la liquidité d’un coup.' : undefined,
       });
     }
-  } catch {
-    /* ignore */
   }
-  if (!gotSomething) throw new Error('Scan indisponible pour ce token pour le moment.');
-  if (!flags.some((f) => f.severity !== 'ok')) flags.push({ label: 'Aucun piège classique détecté', severity: 'ok' });
-  return finalize(flags, top10, null, sources);
+  if (!sources.length) throw new Error('Scan indisponible pour ce token pour le moment.');
+
+  // Une source seule ne voit pas tout : GoPlus ne donne pas la liquidité verrouillée, RugCheck ne voit pas toutes les autorités.
+  const partial = sources.length < 2;
+  if (partial) flags.push({ label: `Une seule source a répondu (${sources[0]}) : analyse incomplète`, severity: 'warn' });
+  if (!partial && !flags.some((f) => f.severity !== 'ok')) flags.push({ label: 'Aucun piège classique détecté', severity: 'ok' });
+  return finalize(flags, top10, null, sources, { partial });
+}
+
+export async function scanSolana(mint: string): Promise<SecurityReport> {
+  let gp: GoPlusSol | null = null;
+  let rug: RugSummary | null = null;
+  try {
+    const r = await getJson<{ result?: Record<string, GoPlusSol> }>(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${mint}`, { retries: 1 });
+    gp = r.result?.[mint] ?? Object.values(r.result ?? {})[0] ?? null;
+  } catch {
+    /* on tente RugCheck */
+  }
+  try {
+    rug = await getJson<RugSummary>(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, { retries: 1 });
+  } catch {
+    /* la source manquante est signalée dans le rapport */
+  }
+  return solanaReportFrom(gp, rug);
 }

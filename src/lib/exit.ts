@@ -1,6 +1,8 @@
 // Plan de sortie : paliers de prise de profits (×2, ×3, ×5…) pour les altcoins, et allègement par tranches en euphorie
 // pour Bitcoin et Ethereum. Les calculs sont faits sur ton prix de revient moyen.
 
+import { MIN_RUNG_VALUE_USD } from './thresholds';
+
 export interface LadderStep {
   multiple: number;
   /** Part de la position de départ vendue à ce palier (en %). */
@@ -40,9 +42,9 @@ export function exitLadder(i: { avgCostUsd: number; priceUsd: number; quantity: 
     });
 }
 
-/** Paliers atteints mais pas encore vendus. */
-export function pendingRungs(rungs: Rung[]): Rung[] {
-  return rungs.filter((r) => r.reached && !r.done);
+/** Paliers atteints mais pas encore vendus, et assez gros pour valoir la peine (sous ≈ 20 $, frais et impôt mangent l'intérêt). */
+export function pendingRungs(rungs: Rung[], minValueUsd = MIN_RUNG_VALUE_USD): Rung[] {
+  return rungs.filter((r) => r.reached && !r.done && r.valueUsd >= minValueUsd);
 }
 
 export interface EuphoriaStep {

@@ -62,7 +62,7 @@ export default function Market() {
   const sig = (a: Analysis | null, h: Horizon) => {
     if (!a) return <span className="text-xs text-muted">—</span>;
     const r = h === 'investor' ? a.investor : a.trader;
-    return <SignalBadge label={r.label} tone={r.tone} strength={r.strength} score={r.score} />;
+    return <SignalBadge label={r.label} tone={r.tone} strength={r.strength} score={r.score} confidence={r.confidence} limited={r.limitedBy} />;
   };
 
   return (
@@ -113,7 +113,7 @@ export default function Market() {
               <span>Trader</span>{sig(a, 'trader')}
               <CdcBadge status={cdc.status(m.id)} ready={cdc.ready} />
             </div>
-            {a && a.setups.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{a.setups.map((s) => <Badge key={s.key} tone={s.bias === 'bull' ? 'up' : 'down'}>{s.label}</Badge>)}</div>}
+            {a && a.setups.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{a.setups.map((s) => <Badge key={s.key} tone={s.bias === 'bull' ? 'up' : s.bias === 'bear' ? 'down' : 'neutral'}>{s.label}</Badge>)}</div>}
           </Link>
         ))}
       </div>
@@ -132,7 +132,7 @@ export default function Market() {
                 </Link>
                 <div className="mt-1 flex flex-wrap gap-1 pl-[3.6rem]">
                   <CdcBadge status={cdc.status(m.id)} ready={cdc.ready} />
-                  {a && a.setups.slice(0, 2).map((s) => <Badge key={s.key} tone={s.bias === 'bull' ? 'up' : 'down'}>{s.label}</Badge>)}
+                  {a && a.setups.slice(0, 2).map((s) => <Badge key={s.key} tone={s.bias === 'bull' ? 'up' : s.bias === 'bear' ? 'down' : 'neutral'}>{s.label}</Badge>)}
                 </div>
               </Td>
               <Td className="text-ink">{fmtPrice(m.current_price * rate, currency)}</Td>

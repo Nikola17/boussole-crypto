@@ -1,0 +1,142 @@
+import { describe, expect, it } from 'vitest';
+import { brokenThesisCoins, isTinyLine, lagsBitcoin, outsideDcaCheck, trimStatus } from './rules';
+import { rebalance, rebalanceAction } from './portfolio';
+import { exitLadder, pendingRungs, DEFAULT_LADDER } from './exit';
+import { ARCHETYPES } from './profile';
+import { fngMultiplier } from './dca';
+import { zoneFor } from './cycle';
+import { fngLabel } from '../api/feargreed';
+import { TEMPERATURE } from './thresholds';
+import { todayContext } from '../ai/today';
+import { planBasketOrder } from './basket';
+
+describe('Ma stratégie : le préréglage correspond à docs/STRATEGIE.md', () => {
+  const p = ARCHETYPES['Ma stratégie'];
+  it('cible : socle BTC/ETH à 85 %, altcoins à 15 %, total 100', () => {
+    expect(p.target.btc + p.target.eth).toBe(85);
+    expect(p.target.large + p.target.mid + p.target.small).toBe(15);
+    expect(Object.values(p.target).reduce((s, v) => s + v, 0)).toBe(100);
+  });
+  it('règles : 1 % minimum par ligne, 5 lignes découverte, 12 lignes au plus', () => {
+    expect(p.rules).toMatchObject({ minLinePct: 1, maxDiscoveryLines: 5, maxLines: 12 });
+  });
+});
+
+describe('rééquilibrage : le cœur n’est jamais allégé hors euphorie', () => {
+  // ≈ ta situation : 75 % de Bitcoin pour une cible générique de 45 %
+  const alloc = { btc: 3920, eth: 980, large: 150, mid: 100, small: 100, stable: 0 };
+  const lines = rebalance(alloc, { btc: 45, eth: 20, large: 15, mid: 5, small: 5, stable: 10 });
+  const btc = lines.find((l) => l.bucket === 'btc')!;
+
+  it('Bitcoin 75 % pour 45 % visés : « hold » (oriente le DCA), pas « trim »', () => {
+    expect(btc.diffValue).toBeLessThan(0);
+    expect(rebalanceAction(btc, false)).toBe('hold');
+  });
+  it('en euphorie, une tranche devient possible', () => {
+    expect(rebalanceAction(btc, true)).toBe('trim');
+  });
+  it('un excès hors cœur reste « trim », un manque reste « buy », un petit écart « ok »', () => {
+    expect(rebalanceAction({ bucket: 'small', currentPct: 12, targetPct: 5, diffValue: -300 }, false)).toBe('trim');
+    expect(rebalanceAction({ bucket: 'btc', currentPct: 30, targetPct: 45, diffValue: 500 }, false)).toBe('buy');
+    expect(rebalanceAction({ bucket: 'btc', currentPct: 46, targetPct: 45, diffValue: -50 }, false)).toBe('ok');
+  });
+  it('avec « Ma stratégie », Bitcoin à 75 % pour 65 % reste en « hold »', () => {
+    const mine = rebalance(alloc, ARCHETYPES['Ma stratégie'].target).find((l) => l.bucket === 'btc')!;
+    expect(mine.currentPct - mine.targetPct).toBeLessThan(15);
+    expect(rebalanceAction(mine, false)).toBe('hold');
+  });
+});
+
+describe('plan de sortie : montants minimaux et délai entre tranches', () => {
+  it('un palier atteint mais de moins de 20 $ n’est pas conseillé', () => {
+    const rungs = exitLadder({ avgCostUsd: 1, priceUsd: 2.5, quantity: 4, steps: DEFAULT_LADDER, doneMultiples: [] }); // ×2 atteint, 25 % de 4 = 1 unité ≈ 2,5 $
+    expect(rungs[0].reached).toBe(true);
+    expect(pendingRungs(rungs)).toHaveLength(0);
+    expect(pendingRungs(rungs, 1)).toHaveLength(1);
+  });
+  it('un palier assez gros est conseillé', () => {
+    const rungs = exitLadder({ avgCostUsd: 10, priceUsd: 25, quantity: 20, steps: DEFAULT_LADDER, doneMultiples: [] }); // 5 unités à 25 $ = 125 $
+    expect(pendingRungs(rungs).map((r) => r.multiple)).toEqual([2]);
+  });
+  it('délai de 30 jours après une tranche du cœur', () => {
+    const now = new Date('2026-11-10T12:00:00Z');
+    expect(trimStatus(undefined, now).allowed).toBe(true);
+    expect(trimStatus('not-a-date', now).allowed).toBe(true);
+    const recent = trimStatus('2026-11-01T12:00:00Z', now);
+    expect(recent.allowed).toBe(false);
+    expect(recent.daysLeft).toBe(21);
+    expect(recent.nextDate?.toISOString().slice(0, 10)).toBe('2026-12-01');
+    expect(trimStatus('2026-10-01T12:00:00Z', now).allowed).toBe(true);
+  });
+  it('une ligne sous la ligne minimale est « à regrouper »', () => {
+    expect(isTinyLine(30, 5250, 1)).toBe(true);
+    expect(isTinyLine(100, 5250, 1)).toBe(false);
+    expect(isTinyLine(10, 0, 1)).toBe(false);
+  });
+});
+
+describe('règles de STRATEGIE.md traduites en avertissements', () => {
+  it('« thèse cassée = sortie »', () => {
+    const t = (coinId: string, statuses: ('ok' | 'weak' | 'broken' | 'dead')[], verdict?: string) => ({
+      coinId, hypotheses: statuses.map((status, i) => ({ id: String(i), label: 'h', status })), lastCheck: verdict ? { date: 'x', verdict } : undefined,
+    });
+    expect(brokenThesisCoins([t('a', ['ok', 'weak']), t('b', ['ok', 'broken']), t('c', ['dead']), t('d', ['ok'], 'cassée'), t('e', ['ok'], 'intacte')])).toEqual(['b', 'c', 'd']);
+  });
+  it('« 6 mois sous Bitcoin sans progrès » : 10 points d’écart sur 200 jours', () => {
+    expect(lagsBitcoin(-20, 15)).toBe(true);
+    expect(lagsBitcoin(10, 15)).toBe(false); // 5 points : pas assez
+    expect(lagsBitcoin(40, 15)).toBe(false);
+    expect(lagsBitcoin(null, 15)).toBe(false);
+    expect(lagsBitcoin(-20, undefined)).toBe(false);
+    expect(lagsBitcoin(NaN, 5)).toBe(false);
+  });
+  it('« achat hors DCA : réserve et température sous 30 »', () => {
+    expect(outsideDcaCheck({ temperature: 22, reserveUsd: 100, amountUsd: 50 }).allowed).toBe(true);
+    expect(outsideDcaCheck({ temperature: 52, reserveUsd: 100, amountUsd: 50 }).reasons[0]).toContain('pas assez peur');
+    expect(outsideDcaCheck({ temperature: 22, reserveUsd: 20, amountUsd: 50 }).reasons[0]).toContain('dépasse ta réserve');
+    expect(outsideDcaCheck({ temperature: null, reserveUsd: null, amountUsd: 50 }).allowed).toBe(false);
+    expect(outsideDcaCheck({ temperature: 22, reserveUsd: null, amountUsd: 50 }).allowed).toBe(true); // pas de panier : seule la température compte
+  });
+});
+
+describe('seuils partagés (Fear & Greed, zones de température)', () => {
+  it('la peur extrême commence au même endroit partout (Fear & Greed ≤ 24)', () => {
+    expect(fngLabel(24)).toBe('Peur extrême');
+    expect(fngMultiplier(24)).toBe(2);
+    expect(fngLabel(25)).toBe('Peur');
+    expect(fngMultiplier(25)).toBe(1.5);
+  });
+  it('les zones de température du cycle utilisent les mêmes bornes que les signaux', () => {
+    expect(zoneFor(TEMPERATURE.extremeFear - 1).key).toBe('capitulation');
+    expect(zoneFor(TEMPERATURE.extremeFear).key).toBe('accumulation');
+    expect(zoneFor(TEMPERATURE.euphoria).key).toBe('euphorie');
+  });
+});
+
+describe('ordre du jour transmis à l’IA', () => {
+  const basket = {
+    id: 'b', name: 'P', active: true, amountUsd: 25, daysOfWeek: [2, 5], startDate: '2026-01-01', discoveryMaxPct: 50,
+    core: [{ coinId: 'bitcoin', symbol: 'btc', name: 'Bitcoin', weight: 100 }], discovery: [], reserveUsd: 0, minOrderUsd: 5, reminder: true, createdAt: '',
+  };
+  const plan = planBasketOrder(basket, {
+    temperature: 50, totalValueUsd: 5000, altTargetPct: 15, altCurrentPct: 7, values: {}, change7d: {}, cdc: null, scores: {},
+    rules: { maxPerGemPct: 3, minLinePct: 1, maxDiscoveryLines: 5 }, discoveryLinesOpen: 0,
+  });
+  const rules = ARCHETYPES['Ma stratégie'].rules;
+
+  it('reprend les montants du panier et les règles fixes', () => {
+    const c = todayContext({ guidance: [{ title: 'Panier DCA', detail: '25 USDC' }], basketDue: true, plan, rules, portfolioComplete: true, temperature: 50.4 });
+    const panier = c.panierDca as { ordres: { montantUsdc: number }[]; totalInvestiUsdc: number };
+    expect(panier.ordres.reduce((s, o) => s + o.montantUsdc, 0)).toBe(panier.totalInvestiUsdc);
+    expect(c.actionsDuJour).toEqual(['Panier DCA — 25 USDC']);
+    expect((c.reglesFixes as string[]).join(' ')).toContain('jamais en vendant');
+    expect(c.temperatureMarche).toBe(50);
+    expect(c.avertissement).toBeNull();
+  });
+  it('signale un portefeuille partiel et l’absence de panier', () => {
+    const c = todayContext({ guidance: [], basketDue: false, plan: null, rules, portfolioComplete: false, temperature: null });
+    expect(c.panierDca).toBeNull();
+    expect(String(c.avertissement)).toContain('partiel');
+    expect(c.temperatureMarche).toBeNull();
+  });
+});

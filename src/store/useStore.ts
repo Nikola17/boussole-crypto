@@ -34,6 +34,8 @@ export interface AppState {
   basketExecutions: BasketExecution[];
   /** Paliers de sortie déjà vendus : identifiant de crypto → multiples (×2, ×3…). */
   exitDone: Record<string, number[]>;
+  /** Dernière tranche du cœur (Bitcoin, Ethereum) allégée en euphorie : identifiant de crypto → date ISO. */
+  coreTrims: Record<string, string>;
   envelope: DefiEnvelope;
   defiBets: DefiBet[];
   /** Cryptos que tu as confirmé voir dans l'application Crypto.com. */
@@ -73,6 +75,9 @@ export interface AppState {
   removeBasketExecution: (id: string) => void;
   toggleCdcSeen: (coinId: string) => void;
   toggleExitDone: (coinId: string, multiple: number) => void;
+  /** Note qu'une tranche du cœur vient d'être vendue (démarre le délai avant la suivante). */
+  markCoreTrim: (coinId: string) => void;
+  clearCoreTrim: (coinId: string) => void;
   setEnvelope: (patch: Partial<DefiEnvelope>) => void;
   upsertDefiBet: (b: DefiBet) => void;
   removeDefiBet: (id: string) => void;
@@ -136,6 +141,7 @@ const initialData = () => ({
   basket: null as BasketPlan | null,
   basketExecutions: [] as BasketExecution[],
   exitDone: {} as Record<string, number[]>,
+  coreTrims: {} as Record<string, string>,
   envelope: { ...DEFAULT_ENVELOPE },
   defiBets: [] as DefiBet[],
   cdcSeen: [] as string[],
@@ -207,6 +213,8 @@ export const useStore = create<AppState>()(
         const cur = s.exitDone[coinId] ?? [];
         return { exitDone: { ...s.exitDone, [coinId]: cur.includes(multiple) ? cur.filter((m) => m !== multiple) : [...cur, multiple] } };
       }),
+      markCoreTrim: (coinId) => set((s) => ({ coreTrims: { ...s.coreTrims, [coinId]: new Date().toISOString() } })),
+      clearCoreTrim: (coinId) => set((s) => { const next = { ...s.coreTrims }; delete next[coinId]; return { coreTrims: next }; }),
       toggleCdcSeen: (coinId) => set((s) => ({ cdcSeen: s.cdcSeen.includes(coinId) ? s.cdcSeen.filter((x) => x !== coinId) : [...s.cdcSeen, coinId] })),
       importTransactions: (txs) => {
         const known = new Set(get().transactions.map((t) => t.id));

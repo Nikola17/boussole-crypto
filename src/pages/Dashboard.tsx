@@ -105,19 +105,10 @@ export default function Dashboard() {
           {cycle.error && <ErrorNote error={cycle.error} />}
         </Card>
 
-        {/* Que faire aujourd'hui */}
-        <Card className="lg:col-span-2" title="Que faire aujourd’hui ?" subtitle={briefActions ? 'D’après ton brief IA du jour' : 'Selon ton profil, ton DCA et le cycle'}>
+        {/* Que faire aujourd'hui : toujours calculé par tes règles ; l'avis de l'IA vient après, séparément. */}
+        <Card className="lg:col-span-2" title="Que faire aujourd’hui ?" subtitle="Selon tes règles, ton DCA et le cycle du marché">
           <ul className="space-y-2.5">
-            {(briefActions ?? []).slice(0, 5).map((a, i) => (
-              <li key={i} className="rounded-lg bg-surface-2 p-3">
-                <div className="flex items-center gap-2">
-                  <Badge tone={/ACHAT|DCA/.test(a.type) ? 'up' : /VENTE|PROFITS/.test(a.type) ? 'down' : 'neutral'}>{a.type}</Badge>
-                  <span className="text-sm font-medium text-ink">{a.asset}</span>
-                </div>
-                <p className="mt-1 text-sm text-ink-2">{a.detail}</p>
-              </li>
-            ))}
-            {!briefActions && guidance.map((g) => (
+            {guidance.map((g) => (
               <li key={g.key}>
                 <button type="button" disabled={!g.to} onClick={() => g.to && navigate(g.to)} className="w-full rounded-lg bg-surface-2 p-3 text-left enabled:hover:bg-surface-3">
                   <div className="flex items-start gap-2">
@@ -131,6 +122,22 @@ export default function Dashboard() {
               </li>
             ))}
           </ul>
+          {briefActions && (
+            <div className="mt-4 border-t border-line pt-3">
+              <p className="text-xs font-medium text-ink-2">Avis de l’IA (brief du jour) — à comparer avec ta liste ci-dessus : en cas de désaccord, ce sont tes règles qui font foi.</p>
+              <ul className="mt-2 space-y-2">
+                {briefActions.slice(0, 5).map((a, i) => (
+                  <li key={i} className="rounded-lg border border-line p-2.5">
+                    <div className="flex items-center gap-2">
+                      <Badge tone={/ACHAT|DCA/.test(a.type) ? 'up' : /VENTE|PROFITS/.test(a.type) ? 'down' : 'neutral'}>{a.type || 'AVIS'}</Badge>
+                      <span className="text-sm font-medium text-ink">{a.asset}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-ink-2">{a.detail}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -183,7 +190,7 @@ export default function Dashboard() {
                     <div className="text-xs"><Delta value={coin.price_change_percentage_24h} /></div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <SignalBadge label={a!.investor.label} tone={a!.investor.tone} strength={a!.investor.strength} compact />
+                    <SignalBadge label={a!.investor.label} tone={a!.investor.tone} strength={a!.investor.strength} confidence={a!.investor.confidence} limited={a!.investor.limitedBy} compact />
                     <span className="text-[0.65rem] text-muted">Trader : {a!.trader.label}</span>
                   </div>
                 </Link>

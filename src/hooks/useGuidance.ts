@@ -7,7 +7,8 @@ import { useBasketDue } from './useBasket';
 import { useExitPlan } from './useExitPlan';
 import { usePortfolio } from './usePortfolio';
 import { lastOccurrence, multiplierFor, nextOccurrences, periodKey } from '../lib/dca';
-import { BUCKET_LABEL, rebalance } from '../lib/portfolio';
+import { BUCKET_LABEL, isStable, isWrappedOrStaked, rebalance, rebalanceAction } from '../lib/portfolio';
+import { brokenThesisCoins, lagsBitcoin } from '../lib/rules';
 import { fmtMoney } from '../lib/format';
 import { rulesOf } from '../lib/profile';
 import { scatterReport } from '../lib/scatter';
@@ -40,7 +41,8 @@ export function useFocusCoins() {
   const markets = useMarkets();
   return useMemo(() => {
     const ids = new Set<string>([...watchlist, ...plans.map((p) => p.coinId), ...transactions.map((t) => t.coinId)]);
-    return (markets.data ?? []).filter((m) => ids.has(m.id)).slice(0, 40);
+    // Les stablecoins (l'USDC du panier) et les jetons « wrapped » n'ont pas de signal d'achat qui ait un sens.
+    return (markets.data ?? []).filter((m) => ids.has(m.id) && !isStable(m.symbol, m.id) && !isWrappedOrStaked(m.symbol, m.name, m.id)).slice(0, 40);
   }, [watchlist, plans, transactions, markets.data]);
 }
 
@@ -81,7 +83,9 @@ export function useGuidance(): Guidance[] {
   const bd = useBasketDue();
   const exit = useExitPlan();
   const profile = useStore((s) => s.profile);
+  const theses = useStore((s) => s.theses);
   const currency = useStore((s) => s.settings.currency);
+  const markets = useMarkets();
 
   return useMemo(() => {
     const out: Guidance[] = [];
@@ -103,8 +107,9 @@ export function useGuidance(): Guidance[] {
         to: '/portefeuille',
       });
     }
-    if (exit.euphoria.active && exit.coins.some((c) => c.core)) {
-      out.push({ key: 'euphoria', tone: 'down', title: 'Marché en euphorie : allège Bitcoin et Ethereum', detail: exit.euphoria.label, to: '/portefeuille' });
+    // Une tranche du cœur à la fois, avec un délai minimal entre deux : on ne le répète pas chaque jour d'une euphorie qui dure.
+    if (exit.euphoria.active && exit.coins.some((c) => c.core && c.trim?.allowed)) {
+      out.push({ key: 'euphoria', tone: 'down', title: 'Marché en euphorie : une tranche de Bitcoin et Ethereum peut être allégée', detail: `${exit.euphoria.label} Une seule tranche, puis au moins 30 jours avant la suivante.`, to: '/portefeuille' });
     }
     for (const d of dca.filter((x) => x.due)) {
       out.push({
@@ -139,18 +144,19 @@ export function useGuidance(): Guidance[] {
       } else if (sc.tooManyDiscovery) {
         out.push({ key: 'discovery-lines', tone: 'warn', title: `${sc.discoveryLines} lignes « découverte » ouvertes (maximum : ${rules.maxDiscoveryLines})`, detail: 'Finis une ligne avant d’en ouvrir une autre : renforce celles qui existent déjà.', to: '/portefeuille' });
       }
+      // Rééquilibrage : le cœur (Bitcoin, Ethereum) n'est jamais à « alléger » hors euphorie ; un excès se corrige par le DCA.
       const lines = rebalance(pf.alloc, profile.target);
-      const worst = [...lines].sort((a, b) => Math.abs(b.currentPct - b.targetPct) - Math.abs(a.currentPct - a.targetPct))[0];
+      const actionable = lines.filter((l) => ['buy', 'trim'].includes(rebalanceAction(l, exit.euphoria.active)));
+      const worst = [...actionable].sort((a, b) => Math.abs(b.currentPct - b.targetPct) - Math.abs(a.currentPct - a.targetPct))[0];
       if (worst && Math.abs(worst.currentPct - worst.targetPct) >= 10) {
         out.push({
           key: 'rebalance',
           tone: 'warn',
           title: `Rééquilibrage conseillé : ${BUCKET_LABEL[worst.bucket]}`,
-          detail: `${Math.round(worst.currentPct)} % de ton portefeuille contre ${Math.round(worst.targetPct)} % visé. ${worst.diffValue > 0 ? 'Renforce' : 'Allège'} d’environ ${fmtMoney(Math.abs(worst.diffValue), currency, 0)}.`,
+          detail: `${Math.round(worst.currentPct)} % de ton portefeuille contre ${Math.round(worst.targetPct)} % visé. ${worst.diffValue > 0 ? 'Renforce' : 'Allège'} d’environ ${fmtMoney(Math.abs(worst.diffValue), currency, 0)}${worst.diffValue > 0 ? ' : ton prochain DCA va dans ce sens.' : '.'}`,
           to: '/portefeuille',
         });
       }
-      const hot = cycle.data && cycle.data.temperature >= 60;
       for (const h of pf.holdings) {
         const weight = (h.value / total) * 100;
         if ((h.bucket === 'small') && weight > profile.rules.maxPerGemPct * 1.5) {
@@ -158,8 +164,28 @@ export function useGuidance(): Guidance[] {
         } else if ((h.bucket === 'mid' || h.bucket === 'large') && weight > profile.rules.maxPerAltPct * 1.5) {
           out.push({ key: `alt-${h.key}`, tone: 'warn', title: `${h.symbol} pèse ${Math.round(weight)} % de ton portefeuille`, detail: `Ta limite par altcoin est de ${profile.rules.maxPerAltPct} %.`, to: '/portefeuille' });
         }
-        if (hot && h.pnlPct != null && h.pnlPct >= 100 && h.bucket !== 'stable') {
-          out.push({ key: `tp-${h.key}`, tone: 'down', title: `Sécurise une partie de tes gains sur ${h.symbol} (+${Math.round(h.pnlPct)} %)`, detail: 'Marché chaud : vendre 20 à 30 % pour récupérer ta mise réduit le risque sans quitter la tendance.', to: '/portefeuille' });
+      }
+      // « Thèse cassée = sortie » (STRATEGIE.md) : quel que soit le prix.
+      const held = new Set(pf.holdings.filter((h) => h.value > 0).map((h) => h.coinId));
+      for (const coinId of brokenThesisCoins(theses).filter((id) => held.has(id)).slice(0, 2)) {
+        const t = theses.find((x) => x.coinId === coinId);
+        out.push({ key: `broken-${coinId}`, tone: 'down', title: `Thèse cassée sur ${(t?.symbol ?? coinId).toUpperCase()} : ta règle est de sortir`, detail: 'Une hypothèse de ta thèse est cassée. Sors de la ligne quel que soit le prix d’achat : ne la garde pas « pour revenir à zéro ».', to: `/coin/${coinId}` });
+      }
+      // « 6 mois sous Bitcoin sans progrès = bascule vers Bitcoin ».
+      const btc200 = markets.data?.find((m) => m.id === 'bitcoin')?.price_change_percentage_200d_in_currency;
+      if (btc200 != null) {
+        const lagging = pf.holdings
+          .filter((h) => h.coinId && !['btc', 'eth', 'stable'].includes(h.bucket) && h.valueUsd >= 20)
+          .map((h) => ({ h, alt200: markets.data?.find((m) => m.id === h.coinId)?.price_change_percentage_200d_in_currency }))
+          .filter((x) => lagsBitcoin(x.alt200, btc200));
+        if (lagging.length) {
+          out.push({
+            key: 'lag-btc',
+            tone: 'warn',
+            title: `${lagging.length > 1 ? `${lagging.length} lignes font` : `${lagging[0].h.symbol} fait`} moins bien que Bitcoin depuis environ 6 mois`,
+            detail: `${lagging.slice(0, 3).map((x) => `${x.h.symbol} ${Math.round(x.alt200 ?? 0)} %`).join(', ')} contre Bitcoin ${Math.round(btc200)} % sur 200 jours. Ta règle : sans progrès, bascule vers Bitcoin (échange crypto contre crypto).`,
+            to: '/dca',
+          });
         }
       }
     } else {
@@ -167,5 +193,5 @@ export function useGuidance(): Guidance[] {
     }
     if (!profile.completed) out.unshift({ key: 'profile', tone: 'neutral', title: 'Définis ton profil investisseur (2 min)', detail: 'Boussole adaptera l’allocation, les tailles de position et les conseils à ton profil.', to: '/guide' });
     return out.slice(0, 7);
-  }, [cycle.data, dca, pf, profile, currency, bd, exit]);
+  }, [cycle.data, dca, pf, profile, currency, bd, exit, theses, markets.data]);
 }

@@ -7,8 +7,12 @@ import {
   atr, bollinger, changePct, highest, last, lastCross, lowest, macd, rsi, sma, slopePct,
   supportResistance, toWeekly, volumeRatio, type Candle,
 } from './indicators';
+import { TEMPERATURE } from './thresholds';
 
 export type Tone = 'up' | 'neutral' | 'down';
+
+/** Historique minimal (jours) pour qu'un signal d'achat soit émis : il faut au moins la moyenne mobile 200 jours. */
+export const MIN_BARS_FOR_BUY = 200;
 
 export interface Factor {
   key: string;
@@ -25,6 +29,8 @@ export interface SignalResult {
   strength: 0 | 1 | 2; // 0 neutre, 1 modéré, 2 fort
   factors: Factor[];
   confidence: 'haute' | 'moyenne' | 'faible';
+  /** Renseigné quand le signal a été limité (historique trop court) : à afficher à côté du libellé. */
+  limitedBy?: string;
 }
 
 export interface TradePlan {
@@ -41,7 +47,8 @@ export interface TradePlan {
 export interface Setup {
   key: string;
   label: string;
-  bias: 'bull' | 'bear';
+  /** « neutral » : un mouvement se prépare mais son sens n'est pas connu (ex. compression de volatilité). */
+  bias: 'bull' | 'bear' | 'neutral';
   detail: string;
 }
 
@@ -88,9 +95,15 @@ function combine(factors: Factor[], horizon: 'investor' | 'trader', bars: number
   const wsum = usable.reduce((s, f) => s + f.weight, 0);
   const raw = usable.reduce((s, f) => s + f.vote * f.weight, 0);
   const score = wsum > 0 ? Math.round((raw / (2 * wsum)) * 100) : 0;
-  const l = labelFor(score, horizon);
+  let l = labelFor(score, horizon);
   const confidence = bars >= 200 && usable.length >= 4 ? 'haute' : bars >= 100 ? 'moyenne' : 'faible';
-  return { score, ...l, factors: usable, confidence };
+  // Sans 200 jours d'historique, pas de moyenne mobile 200 jours ni de multiple de Mayer : jamais de « Accumuler » (ni d'Achat) sur ce seul score.
+  let limitedBy: string | undefined;
+  if (bars < MIN_BARS_FOR_BUY && l.tone === 'up') {
+    l = { label: horizon === 'investor' ? 'Conserver' : 'Neutre', tone: 'neutral', strength: 0 };
+    limitedBy = `Seulement ${bars} jours d’historique : moins de 200, donc pas de signal d’achat (le score ${score > 0 ? '+' : ''}${score} est indicatif).`;
+  }
+  return { score, ...l, factors: usable, confidence, limitedBy };
 }
 
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1).replace('.', ',')} %`;
@@ -173,10 +186,10 @@ export function analyze(candles: Candle[], ctx: AnalysisContext = {}): Analysis 
     const t = ctx.temperature;
     let vote = 0;
     let detail = `Température du marché ${Math.round(t)}/100 : neutre.`;
-    if (t < 25) { vote = 2; detail = `Température ${Math.round(t)}/100 : peur extrême, les meilleures opportunités naissent ici.`; }
-    else if (t < 45) { vote = 1; detail = `Température ${Math.round(t)}/100 : climat d'accumulation.`; }
-    else if (t >= 80) { vote = -2; detail = `Température ${Math.round(t)}/100 : euphorie générale, sécurise des gains.`; }
-    else if (t >= 62) { vote = -1; detail = `Température ${Math.round(t)}/100 : marché chaud, sois sélectif.`; }
+    if (t < TEMPERATURE.extremeFear) { vote = 2; detail = `Température ${Math.round(t)}/100 : peur extrême, les meilleures opportunités naissent ici.`; }
+    else if (t < TEMPERATURE.fear) { vote = 1; detail = `Température ${Math.round(t)}/100 : climat d'accumulation.`; }
+    else if (t >= TEMPERATURE.euphoria) { vote = -2; detail = `Température ${Math.round(t)}/100 : euphorie générale, sécurise des gains.`; }
+    else if (t >= TEMPERATURE.warm) { vote = -1; detail = `Température ${Math.round(t)}/100 : marché chaud, sois sélectif.`; }
     inv.push({ key: 'cycle', label: 'Contexte de marché (cycle)', detail, vote, weight: 2 });
   }
 
@@ -336,7 +349,7 @@ export function detectSetups(candles: Candle[], s: SetupSeries): Setup[] {
   const w = s.bbWidth.slice(-120).filter(Number.isFinite);
   const wNow = s.bbWidth[n - 1];
   if (w.length > 60 && Number.isFinite(wNow) && wNow <= Math.min(...w) * 1.08) {
-    out.push({ key: 'squeeze', label: 'Compression de volatilité', bias: 'bull', detail: 'Bandes de Bollinger au plus serré depuis 4 mois : un mouvement violent se prépare (sens à confirmer).' });
+    out.push({ key: 'squeeze', label: 'Compression de volatilité', bias: 'neutral', detail: 'Bandes de Bollinger au plus serré depuis 4 mois : un mouvement violent se prépare (sens à confirmer).' });
   }
   if (rsi14 < 30 && price > prev.close) out.push({ key: 'oversold', label: 'Survente + rebond', bias: 'bull', detail: `RSI ${Math.round(rsi14)} et première bougie verte.` });
   if (rsi14 > 75) out.push({ key: 'overbought', label: 'Surachat', bias: 'bear', detail: `RSI ${Math.round(rsi14)} : prise de profits probable à court terme.` });

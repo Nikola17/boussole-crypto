@@ -51,7 +51,9 @@ export function useBasket() {
   const scan = useScan(coins, cycle.data?.temperature);
   const cdc = useCryptoCom(coins);
 
-  const ready = !!basket && !pf.loading && !!cycle.data && !!markets.data && (missing.length === 0 || !!bm.data || bm.isError);
+  // Le cycle peut manquer (Binance injoignable) : l'ordre est alors calculé à ×1 avec un avertissement, au lieu de disparaître un jour de DCA.
+  const cycleSettled = !!cycle.data || !!cycle.error;
+  const ready = !!basket && !pf.loading && cycleSettled && !!markets.data && (missing.length === 0 || !!bm.data || bm.isError);
   const loadError = (markets.error ?? cycle.error ?? null) as Error | null;
 
   const ctx = useMemo((): BasketContext | null => {

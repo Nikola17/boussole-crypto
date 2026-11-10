@@ -3,8 +3,9 @@ import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../store/useStore';
 import { usePortfolio } from '../hooks/usePortfolio';
-import { useFx } from '../hooks/useMarket';
-import { BUCKET_LABEL, BUCKET_ORDER, concentration, rebalance, stressTest } from '../lib/portfolio';
+import { useCycle, useFx } from '../hooks/useMarket';
+import { BUCKET_LABEL, BUCKET_ORDER, concentration, rebalance, rebalanceAction, stressTest } from '../lib/portfolio';
+import { TEMPERATURE } from '../lib/thresholds';
 import { computeFrenchTax, simulateSale, EXEMPTION_THRESHOLD_EUR } from '../lib/tax';
 import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtQty, shortAddress, uid } from '../lib/format';
 import { detectChain, EVM_CHAINS } from '../api/wallets';
@@ -79,6 +80,8 @@ function Positions() {
   const [move, setMove] = useState(-30);
   const total = pf.totals.value;
   const lines = rebalance(pf.alloc, profile.target);
+  const cycle = useCycle();
+  const euphoria = (cycle.data?.temperature ?? 0) >= TEMPERATURE.euphoria;
   const stress = stressTest(pf.alloc, move);
   const conc = concentration(pf.holdings.map((h) => h.value));
 
@@ -104,9 +107,17 @@ function Positions() {
                     <td className="py-2"><span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-sm" style={{ background: BUCKET_COLOR[l.bucket] }} />{BUCKET_LABEL[l.bucket]}</span></td>
                     <td className="py-2 text-right">{fmtNum(l.currentPct, 1)} %</td>
                     <td className="py-2 text-right text-ink-2">{fmtNum(l.targetPct, 0)} %</td>
-                    <td className={`py-2 text-right ${Math.abs(l.currentPct - l.targetPct) < 3 ? 'text-muted' : l.diffValue > 0 ? 'text-up' : 'text-down'}`}>
-                      {Math.abs(l.currentPct - l.targetPct) < 3 ? 'OK' : `${l.diffValue > 0 ? 'Acheter' : 'Vendre'} ${fmtMoney(Math.abs(l.diffValue), currency, 0)}`}
-                    </td>
+                    {(() => {
+                      const action = rebalanceAction(l, euphoria);
+                      return (
+                        <td className={`py-2 text-right ${action === 'ok' ? 'text-muted' : action === 'buy' ? 'text-up' : action === 'hold' ? 'text-ink-2' : 'text-down'}`}>
+                          {action === 'ok' && 'OK'}
+                          {action === 'buy' && `Acheter ${fmtMoney(Math.abs(l.diffValue), currency, 0)}`}
+                          {action === 'trim' && `Vendre ${fmtMoney(Math.abs(l.diffValue), currency, 0)}`}
+                          {action === 'hold' && 'Au-dessus de la cible : ne vends pas, oriente le DCA ailleurs'}
+                        </td>
+                      );
+                    })()}
                   </tr>
                 ))}
               </tbody>

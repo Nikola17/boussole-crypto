@@ -65,12 +65,12 @@ describe('contrôle avant achat', () => {
     expect(preBuyChecks({ ...good, status: { ...status, paused: true } }).verdict).toBe('non');
   });
 
-  it('des informations manquantes ou limites donnent « prudence », jamais « passe »', () => {
-    expect(preBuyChecks({ ...good, securityVerdict: null }).verdict).toBe('prudence');
+  it('des informations limites donnent « prudence » ; une information manquante bloque (« non »)', () => {
     expect(preBuyChecks({ ...good, securityVerdict: 'Prudence' }).verdict).toBe('prudence');
     expect(preBuyChecks({ ...good, ageHours: 24 * 3 }).verdict).toBe('prudence');
     expect(preBuyChecks({ ...good, volume24hUsd: 100 }).verdict).toBe('prudence');
-    expect(preBuyChecks({ ...good, liquidityUsd: null }).verdict).toBe('prudence');
+    expect(preBuyChecks({ ...good, securityVerdict: null }).verdict).toBe('non');
+    expect(preBuyChecks({ ...good, liquidityUsd: null }).verdict).toBe('non');
   });
 
   it('plus de place dans l\'enveloppe : « non »', () => {

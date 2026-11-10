@@ -1,6 +1,7 @@
 // DCA (investissement programmé) : calendrier, multiplicateurs « intelligents » et backtest.
 
 import { maxDrawdown, sma } from './indicators';
+import { FNG } from './thresholds';
 
 export type Frequency = 'daily' | 'weekly' | 'biweekly' | 'monthly';
 export type DcaStrategy = 'classic' | 'fear_greed' | 'mayer' | 'cycle';
@@ -21,7 +22,7 @@ export const STRATEGY_LABEL: Record<DcaStrategy, string> = {
 
 export const STRATEGY_HELP: Record<DcaStrategy, string> = {
   classic: 'Le même montant à chaque échéance, quoi qu’il arrive. Simple et redoutablement efficace.',
-  fear_greed: 'Investit plus quand le marché a peur (×2 en peur extrême) et moins quand il est avide (×0,25 en avidité extrême).',
+  fear_greed: 'Investit plus quand le marché a peur (×2 en peur extrême, Fear & Greed de 24 ou moins) et moins quand il est avide (×0,25 au-delà de 89).',
   mayer: 'Investit plus quand le prix est sous sa moyenne 200 jours (soldes) et moins quand il s’en éloigne fortement (surchauffe).',
   cycle: 'Suit la température globale du marché calculée par Boussole (peur extrême ×2 → euphorie ×0,25).',
 };
@@ -35,8 +36,8 @@ export interface DcaPlanLike {
 
 export function fngMultiplier(fng: number): number {
   if (!Number.isFinite(fng)) return 1;
-  if (fng <= 20) return 2;
-  if (fng <= 35) return 1.5;
+  if (fng <= FNG.extremeFearMax) return 2;
+  if (fng <= FNG.fearMax) return 1.5;
   if (fng <= 55) return 1;
   if (fng <= 75) return 0.75;
   if (fng <= 89) return 0.5;

@@ -170,7 +170,8 @@ export function useAiContext() {
     centresInteret: Object.entries(profile.interests).filter(([, v]) => v).map(([k]) => k),
   }), [profile]);
 
-  return { market, portfolio, dca, profile: profileCtx, cycle: cycle.data, ready: !!markets.data };
+  // Prêt seulement quand le portefeuille est complètement chargé : sinon l'IA décrirait un portefeuille sans le Ledger.
+  return { market, portfolio, dca, profile: profileCtx, cycle: cycle.data, ready: !!markets.data && !pf.loading, portfolioComplete: !pf.walletsIncomplete };
 }
 
 export function toJsonBlock(label: string, data: unknown): string {

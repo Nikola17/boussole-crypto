@@ -3,6 +3,7 @@
 
 import type { BasketCoin, BasketPlan, CoinRef } from '../types';
 import { temperatureMultiplier } from './dca';
+import { FOMO_7D_PCT } from './thresholds';
 import { isoDay } from './format';
 
 export const MAX_DISCOVERY = 5;
@@ -147,7 +148,7 @@ function pickDiscovery(
     const share = total > 0 ? (value / total) * 100 : 0;
     const ch = ctx.change7d[c.coinId];
     if (ctx.cdc && ctx.cdc[c.coinId] === 'unknown') excluded.push({ symbol: sym, reason: 'absente de la liste Crypto.com' });
-    else if (ch != null && ch > 50) excluded.push({ symbol: sym, reason: `+${Math.round(ch)} % en 7 jours (FOMO)` });
+    else if (ch != null && ch > FOMO_7D_PCT) excluded.push({ symbol: sym, reason: `+${Math.round(ch)} % en 7 jours (FOMO)` });
     else if (share >= maxPerGemPct && total >= 20 * b.amountUsd) excluded.push({ symbol: sym, reason: `plafond de ${pct(maxPerGemPct)} atteint` });
     else if (value <= 0 && ctx.discoveryLinesOpen >= maxDiscoveryLines) excluded.push({ symbol: sym, reason: `déjà ${ctx.discoveryLinesOpen} lignes découverte ouvertes (maximum ${maxDiscoveryLines})` });
     else cands.push({ coin: c, value, pct: share, score: ctx.scores[c.coinId] ?? null });
@@ -187,44 +188,51 @@ export function planBasketOrder(b: BasketPlan, ctx: BasketContext): BasketPlanRe
   const mult = t == null ? 1 : temperatureMultiplier(t);
   const share = discoveryShare(b.discoveryMaxPct, ctx.altTargetPct, ctx.altCurrentPct);
   const factor = discoveryTemperatureFactor(t);
-  let coreWanted = base * (1 - share) * mult;
+  const coreWanted = base * (1 - share) * mult;
   const discWanted = base * share * factor;
 
-  // La réserve finance un éventuel dépassement du budget (marché qui a peur) ; sans réserve, on s'arrête au budget.
-  const extra = coreWanted + discWanted - base;
-  if (extra > 0.005) {
-    const allowed = Math.min(extra, Math.max(0, b.reserveUsd));
-    if (allowed < extra) {
-      coreWanted -= extra - allowed;
-      notes.push(`Réserve insuffisante (${usd(b.reserveUsd)}) : le cœur est limité pour ne pas dépasser le budget.`);
-    } else notes.push(`Marché qui a peur : ${usd(extra)} puisés dans ta réserve.`);
-  }
-
-  if (t != null) notes.unshift(`Température du marché ${Math.round(t)}/100 : cœur ×${String(mult).replace('.', ',')}.`);
-  else warnings.push('Température du marché indisponible : les montants ne sont pas modulés.');
+  if (t != null) notes.push(`Température du marché ${Math.round(t)}/100 : cœur ×${String(mult).replace('.', ',')}.`);
+  else warnings.push('Température du marché indisponible : les montants ne sont pas modulés (×1). Revérifie quand la connexion revient.');
   if (share === 0 && b.discoveryMaxPct > 0) notes.push(`Part découverte à 0 % : tes altcoins (${pct(ctx.altCurrentPct)}) ont atteint ta cible (${pct(ctx.altTargetPct)}).`);
   else if (share > 0 && share < b.discoveryMaxPct / 100 - 0.001) notes.push(`Part découverte réduite à ${pct(share * 100)} (maximum ${pct(b.discoveryMaxPct)}) : tes altcoins pèsent ${pct(ctx.altCurrentPct)} pour ${pct(ctx.altTargetPct)} visés.`);
   if (share > 0 && factor === 0) notes.push('Marché très chaud : aucune ligne découverte.');
   else if (share > 0 && factor < 1) notes.push('Marché chaud : ligne découverte réduite de moitié.');
 
-  const orders: PlannedOrder[] = [];
-  if (coreWanted >= b.minOrderUsd) {
-    const c = pickCore(b, ctx, coreWanted);
-    if (c) {
-      if (ctx.cdc && ctx.cdc[c.coin.coinId] === 'unknown') warnings.push(`${c.coin.symbol.toUpperCase()} n'apparaît pas dans la liste Crypto.com : vérifie dans l'application.`);
-      orders.push({ ...refOf(c.coin), usd: round2(coreWanted), kind: 'core', reason: c.reason });
-    } else warnings.push('Le cœur du panier est vide : ajoute au moins une crypto.');
-  } else if (coreWanted > 0.005) notes.push(`Part du cœur (${usd(coreWanted)}) sous le minimum de ${usd(b.minOrderUsd)} : mise en réserve.`);
-
+  // 1. La ligne découverte est décidée en premier : elle peut être refusée par tes règles.
+  let disc: { coin: CoinRef; usd: number; reason: string } | null = null;
   if (discWanted > 0.005) {
-    if (!b.discovery.length) notes.push('Liste découverte vide : ajoute des cryptos à étudier.');
-    else if (discWanted < b.minOrderUsd) notes.push(`Part découverte (${usd(discWanted)}) sous le minimum de ${usd(b.minOrderUsd)} : mise en réserve.`);
+    if (!b.discovery.length) notes.push('Liste découverte vide : ajoute des cryptos à étudier. Le montant revient au cœur.');
+    else if (discWanted < b.minOrderUsd) notes.push(`Part découverte (${usd(discWanted)}) sous le minimum de ${usd(b.minOrderUsd)} : elle revient au cœur.`);
     else {
-      const d = pickDiscovery(b, ctx, discWanted, excluded);
-      if (d) orders.push({ ...d.coin, usd: d.usd, kind: 'discovery', reason: d.reason });
-      else notes.push('Aucune ligne découverte ne passe tes règles aujourd’hui : le montant va en réserve.');
+      disc = pickDiscovery(b, ctx, discWanted, excluded);
+      if (!disc) notes.push('Aucune ligne découverte ne passe tes règles aujourd’hui : le montant revient au cœur.');
     }
   }
+  const discSpent = disc ? disc.usd : 0;
+
+  // 2. Ce que la découverte n'a pas dépensé de ce qu'elle voulait revient au cœur (jamais vers la réserve : on n'a pas peur de rater un achat).
+  let core = coreWanted + Math.max(0, discWanted - discSpent);
+
+  // 3. La réserve finance un éventuel dépassement du budget (marché qui a peur) ; sans réserve, on s'arrête au budget.
+  const extra = core + discSpent - base;
+  if (extra > 0.005) {
+    const allowed = Math.min(extra, Math.max(0, b.reserveUsd));
+    if (allowed < extra) {
+      core -= extra - allowed;
+      notes.push(`Réserve insuffisante (${usd(b.reserveUsd)}) : le cœur est limité pour ne pas dépasser le budget.`);
+    } else notes.push(`Marché qui a peur : ${usd(extra)} puisés dans ta réserve.`);
+  }
+
+  const orders: PlannedOrder[] = [];
+  if (core >= b.minOrderUsd) {
+    const c = pickCore(b, ctx, core);
+    if (c) {
+      if (ctx.cdc && ctx.cdc[c.coin.coinId] === 'unknown') warnings.push(`${c.coin.symbol.toUpperCase()} n'apparaît pas dans la liste Crypto.com : vérifie dans l'application.`);
+      orders.push({ ...refOf(c.coin), usd: round2(core), kind: 'core', reason: c.reason });
+    } else warnings.push('Le cœur du panier est vide : ajoute au moins une crypto.');
+  } else if (core > 0.005) notes.push(`Part du cœur (${usd(core)}) sous le minimum de ${usd(b.minOrderUsd)} : mise en réserve.`);
+  if (disc) orders.push({ ...disc.coin, usd: disc.usd, kind: 'discovery', reason: disc.reason });
+
   const invest = round2(orders.reduce((s, o) => s + o.usd, 0));
   return { baseUsd: base, investUsd: invest, reserveDeltaUsd: round2(base - invest), multiplier: mult, discoveryShare: share, orders, notes, warnings, excluded };
 }

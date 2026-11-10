@@ -1,6 +1,7 @@
 // Indice Fear & Greed (alternative.me) — historique depuis février 2018.
 
 import { getJson } from './http';
+import { FNG } from '../lib/thresholds';
 
 export interface FngPoint {
   value: number;
@@ -26,9 +27,9 @@ export async function getFearGreed(limit = 60): Promise<FngPoint[]> {
 }
 
 export function fngLabel(v: number): string {
-  if (v <= 24) return 'Peur extrême';
-  if (v <= 44) return 'Peur';
-  if (v <= 55) return 'Neutre';
-  if (v <= 75) return 'Avidité';
+  if (v <= FNG.extremeFearMax) return 'Peur extrême';
+  if (v <= FNG.fearMax) return 'Peur';
+  if (v <= FNG.neutralMax) return 'Neutre';
+  if (v <= FNG.greedMax) return 'Avidité';
   return 'Avidité extrême';
 }

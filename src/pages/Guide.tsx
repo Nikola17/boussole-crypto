@@ -6,7 +6,7 @@ import { ARCHETYPES, BUY_CHECKLIST, GOLDEN_RULES, archetypeFor, rulesOf, scorePr
 import { BUCKET_LABEL, BUCKET_ORDER } from '../lib/portfolio';
 import { setQuery, useHashPath } from '../router';
 import { Badge, Banner, Button, Card, Field, Input, NumberInput, PageHeader, Segmented, Toggle } from '../components/ui';
-import type { Profile } from '../types';
+import type { Archetype, Profile } from '../types';
 
 type Tab = 'profil' | 'methode' | 'checklist' | 'glossaire';
 
@@ -51,11 +51,20 @@ export function ProfileTab() {
   const currency = useStore((s) => s.settings.currency);
   const [draft, setDraft] = useState<Profile>(profile);
   const score = scoreProfile(draft);
-  const arch = archetypeFor(score);
+  const [mine, setMine] = useState(profile.archetype === 'Ma stratégie');
+  const arch: Archetype = mine ? 'Ma stratégie' : archetypeFor(score);
   const set = (p: Partial<Profile>) => setDraft({ ...draft, ...p });
 
   function validate() {
-    setProfile({ ...draft, archetype: arch, target: { ...ARCHETYPES[arch].target }, rules: { ...ARCHETYPES[arch].rules }, completed: true });
+    // « Ma stratégie » déjà active : revalider garde ta cible et tes règles personnalisées (elles ne sont plus écrasées).
+    const keep = arch === 'Ma stratégie' && profile.archetype === 'Ma stratégie';
+    setProfile({
+      ...draft,
+      archetype: arch,
+      target: keep ? { ...profile.target } : { ...ARCHETYPES[arch].target },
+      rules: keep ? { ...profile.rules } : { ...ARCHETYPES[arch].rules },
+      completed: true,
+    });
   }
 
   return (
@@ -82,7 +91,14 @@ export function ProfileTab() {
         </div>
       </Card>
       <div className="space-y-4 lg:col-span-2">
-        <Card title="Ton profil" subtitle={`Score ${score}/18`}>
+        <Card title="Ton profil" subtitle={mine ? 'Ta stratégie (docs/STRATEGIE.md)' : `Score ${score}/18`}>
+          <div className="mb-3">
+            <Segmented<'quiz' | 'mine'>
+              value={mine ? 'mine' : 'quiz'}
+              onChange={(v) => setMine(v === 'mine')}
+              options={[{ value: 'quiz', label: 'Selon le questionnaire' }, { value: 'mine', label: 'Ma stratégie' }]}
+            />
+          </div>
           <div className="flex items-center gap-3"><Compass className="size-8 text-accent" /><div><p className="text-2xl font-semibold text-ink">{arch}</p>{profile.completed && profile.archetype === arch && <Badge tone="up">Profil actif</Badge>}</div></div>
           <p className="mt-2 text-sm text-ink-2">{ARCHETYPES[arch].pitch}</p>
           <ul className="mt-4 space-y-1.5 text-sm">

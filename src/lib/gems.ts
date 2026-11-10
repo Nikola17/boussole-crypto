@@ -6,6 +6,7 @@
 import { clamp } from './format';
 import { piecewise } from './cycle';
 import { isGold, isStable, isWrappedOrStaked } from './portfolio';
+import { FOMO_7D_PCT } from './thresholds';
 
 export interface GemFlag {
   label: string;
@@ -70,8 +71,8 @@ export function scoreSmallCap(c: SmallCapInput): GemScore {
   const c7 = c.change7d ?? 0;
   const c30 = c.change30d ?? 0;
   let sMom = piecewise(c30, [[-30, 0], [0, 35], [25, 75], [80, 100], [200, 70], [400, 30]]) * 0.6
-    + piecewise(c7, [[-15, 0], [0, 40], [15, 85], [40, 100], [100, 50]]) * 0.4;
-  if (c30 > 200 || c7 > 80) flags.push({ label: 'Déjà fortement monté — risque FOMO', tone: 'warn' });
+    + piecewise(c7, [[-15, 0], [0, 40], [15, 85], [40, 100], [FOMO_7D_PCT, 70], [100, 30]]) * 0.4;
+  if (c30 > 200 || c7 > FOMO_7D_PCT) flags.push({ label: `Déjà fortement monté (+${FOMO_7D_PCT} % en 7 jours ou plus) — risque FOMO`, tone: 'warn' });
   else if (c30 > 15 && c7 > 0) flags.push({ label: 'Momentum sain', tone: 'good' });
   sMom = clamp(sMom, 0, 100);
 

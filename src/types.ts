@@ -33,7 +33,7 @@ export interface Settings {
 
 export type Bucket = 'btc' | 'eth' | 'large' | 'mid' | 'small' | 'stable';
 
-export type Archetype = 'Prudent' | 'Équilibré' | 'Dynamique' | 'Audacieux';
+export type Archetype = 'Prudent' | 'Équilibré' | 'Dynamique' | 'Audacieux' | 'Ma stratégie';
 
 export interface ProfileRules {
   maxPerGemPct: number;
@@ -368,4 +368,6 @@ export interface DefiBet {
   /** La mise de départ a déjà été retirée. */
   recovered?: boolean;
   note?: string;
+  /** Noté alors qu'une règle de l'enveloppe n'était pas respectée (plafond, pause, mise maximale). */
+  outsideRules?: string[];
 }

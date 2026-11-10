@@ -6,10 +6,10 @@ import { newId, useStore } from '../store/useStore';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { scanSolana, type SecurityReport } from '../api/security';
 import { getTokenPairs } from '../api/dex';
-import { envelopeStatus, pauseEnd, preBuyChecks, type PreBuyResult } from '../lib/envelope';
+import { betViolations, envelopeStatus, pauseEnd, preBuyChecks, type PreBuyResult } from '../lib/envelope';
 import { fmtDate, fmtMoney, fmtNum, isoDay } from '../lib/format';
 import { Link } from '../router';
-import type { DefiBet } from '../types';
+import type { DefiBet, DefiEnvelope } from '../types';
 import { Badge, Banner, Button, Card, Field, Input, Modal, NumberInput, Stat, Table, Td, Toggle } from './ui';
 
 const SOL_MINT = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -53,7 +53,7 @@ export function Envelope() {
       </Card>
 
       <PreBuy env={env} status={status} />
-      <Journal />
+      <Journal env={env} status={status} />
     </div>
   );
 }
@@ -118,21 +118,27 @@ function PreBuy({ env, status }: { env: ReturnType<typeof useStore.getState>['en
           {out.result.verdict !== 'non' && <Button size="sm" icon={<Plus className="size-3.5" />} onClick={() => setNote(true)}>Noter cet achat dans mon journal DeFi</Button>}
         </div>
       )}
-      <BetModal open={note} onClose={() => setNote(false)} initial={{ symbol: out?.token?.symbol ?? '', name: out?.token?.name ?? '', mint: mint.trim(), costUsd: amount === '' ? 0 : amount }} />
+      <BetModal open={note} onClose={() => setNote(false)} env={env} status={status} initial={{ symbol: out?.token?.symbol ?? '', name: out?.token?.name ?? '', mint: mint.trim(), costUsd: amount === '' ? 0 : amount }} />
     </Card>
   );
 }
 
-function BetModal({ open, onClose, initial }: { open: boolean; onClose: () => void; initial: { symbol: string; name: string; mint: string; costUsd: number } }) {
+function BetModal({ open, onClose, initial, env, status }: { open: boolean; onClose: () => void; initial: { symbol: string; name: string; mint: string; costUsd: number }; env: DefiEnvelope; status: EnvStatus }) {
   const upsert = useStore((s) => s.upsertDefiBet);
   const [d, setD] = useState({ date: isoDay(), symbol: '', name: '', mint: '', costUsd: 0 as number | '' });
+  const [ack, setAck] = useState(false);
   useEffect(() => {
-    if (open) setD({ date: isoDay(), symbol: initial.symbol, name: initial.name, mint: initial.mint, costUsd: initial.costUsd });
+    if (open) { setD({ date: isoDay(), symbol: initial.symbol, name: initial.name, mint: initial.mint, costUsd: initial.costUsd }); setAck(false); }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-  const valid = d.symbol.trim() && d.costUsd !== '' && d.costUsd > 0;
+  // Noter un achat à la main ne contourne pas l'enveloppe : s'il sort de tes règles, tu dois le reconnaître, et le journal le marque.
+  const violations = d.costUsd !== '' && d.costUsd > 0 ? betViolations(env, status, Number(d.costUsd)) : [];
+  const valid = d.symbol.trim() && d.costUsd !== '' && d.costUsd > 0 && (violations.length === 0 || ack);
   function save() {
     if (!valid) return;
-    upsert({ id: newId(), date: d.date, symbol: d.symbol.trim().toUpperCase(), name: d.name.trim() || d.symbol.trim(), mint: d.mint.trim() || undefined, costUsd: Number(d.costUsd), status: 'open' });
+    upsert({
+      id: newId(), date: d.date, symbol: d.symbol.trim().toUpperCase(), name: d.name.trim() || d.symbol.trim(), mint: d.mint.trim() || undefined,
+      costUsd: Number(d.costUsd), status: 'open', outsideRules: violations.length ? violations : undefined,
+    });
     onClose();
   }
   return (
@@ -144,15 +150,25 @@ function BetModal({ open, onClose, initial }: { open: boolean; onClose: () => vo
         <Field label="Mise (USD)"><NumberInput value={d.costUsd} onChange={(v) => setD({ ...d, costUsd: v })} /></Field>
         <Field label="Adresse du token (facultatif)" className="col-span-2"><Input value={d.mint} onChange={(e) => setD({ ...d, mint: e.target.value })} spellCheck={false} /></Field>
       </div>
+      {violations.length > 0 && (
+        <div className="mt-3">
+          <Banner tone="danger" title="Cet achat sort de ton enveloppe">
+            {violations.map((v) => <span key={v} className="block">• {v}</span>)}
+            <label className="mt-2 flex items-start gap-2 text-ink">
+              <input type="checkbox" className="mt-0.5" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+              <span>Je sais que c’est hors de mes règles : le noter quand même (il sera marqué « hors règles »).</span>
+            </label>
+          </Banner>
+        </div>
+      )}
     </Modal>
   );
 }
 
-function Journal() {
+function Journal({ env, status }: { env: DefiEnvelope; status: EnvStatus }) {
   const bets = useStore((s) => s.defiBets);
   const upsert = useStore((s) => s.upsertDefiBet);
   const remove = useStore((s) => s.removeDefiBet);
-  const pf = usePortfolio();
   const [open, setOpen] = useState(false);
   const list = useMemo(() => [...bets].sort((a, b) => b.date.localeCompare(a.date)), [bets]);
   const close = (b: DefiBet) => upsert({ ...b, status: 'closed', realizedUsd: (b.realizedUsd ?? 0) + (b.valueUsd ?? b.costUsd), valueUsd: 0 });
@@ -160,21 +176,21 @@ function Journal() {
     <Card title="Mon journal DeFi" subtitle="Mets à jour la valeur actuelle de chaque pari : l’enveloppe en déduit ta place restante, tes retraits de mise et ta perte" actions={<Button size="sm" icon={<Plus className="size-3.5" />} onClick={() => setOpen(true)}>Ajouter</Button>} padded={!!list.length ? false : true}>
       {!list.length && <p className="text-sm text-muted">Aucun pari noté. Le contrôle ci-dessus propose de noter l’achat une fois les règles validées.</p>}
       {list.length > 0 && (
-        <Table head={['Date', 'Token', 'Mise', 'Valeur actuelle', 'Ressorti', 'Statut', '']}>
+        <Table head={['Date', 'Token', 'Mise ($)', 'Valeur actuelle ($)', 'Ressorti ($)', 'Statut', '']}>
           {list.map((b) => (
             <tr key={b.id}>
               <Td left className="text-ink-2">{fmtDate(b.date)}</Td>
               <Td className="font-medium text-ink">{b.symbol}</Td>
-              <Td>{fmtMoney(b.costUsd * pf.rate, pf.currency, 0)}</Td>
+              <Td>{fmtMoney(b.costUsd, 'USD', 0)}</Td>
               <Td>{b.status === 'open' ? <div className="ml-auto w-24"><NumberInput value={b.valueUsd ?? b.costUsd} onChange={(v) => upsert({ ...b, valueUsd: v === '' ? undefined : v })} /></div> : '—'}</Td>
-              <Td className="text-ink-2">{fmtMoney((b.realizedUsd ?? 0) * pf.rate, pf.currency, 0)}</Td>
-              <Td>{b.status === 'closed' ? <Badge>Clos</Badge> : b.recovered ? <Badge tone="up">Mise retirée</Badge> : <Badge tone="accent">Ouvert</Badge>}</Td>
+              <Td className="text-ink-2">{fmtMoney(b.realizedUsd ?? 0, 'USD', 0)}</Td>
+              <Td>{b.status === 'closed' ? <Badge>Clos</Badge> : b.recovered ? <Badge tone="up">Mise retirée</Badge> : <Badge tone="accent">Ouvert</Badge>}{b.outsideRules?.length ? <span title={b.outsideRules.join(' ; ')}> <Badge tone="warn">Hors règles</Badge></span> : null}</Td>
               <Td><span className="inline-flex gap-1">{b.status === 'open' && <Button size="sm" variant="ghost" onClick={() => close(b)}>Clore</Button>}<Button size="sm" variant="ghost" aria-label="Supprimer" icon={<Trash2 className="size-3.5" />} onClick={() => remove(b.id)} /></span></Td>
             </tr>
           ))}
         </Table>
       )}
-      <BetModal open={open} onClose={() => setOpen(false)} initial={{ symbol: '', name: '', mint: '', costUsd: 20 }} />
+      <BetModal open={open} onClose={() => setOpen(false)} env={env} status={status} initial={{ symbol: '', name: '', mint: '', costUsd: 20 }} />
     </Card>
   );
 }

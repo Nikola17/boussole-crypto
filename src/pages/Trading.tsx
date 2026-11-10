@@ -125,7 +125,7 @@ function Scanner() {
             <div className="flex items-center gap-3">
               <CoinIcon src={m.image} symbol={m.symbol} size={28} />
               <Link to={`/coin/${m.id}`} className="min-w-0 flex-1 truncate font-medium text-ink hover:underline">{m.name} <span className="text-muted">{m.symbol.toUpperCase()}</span></Link>
-              <Badge tone={s.bias === 'bull' ? 'up' : 'down'}>{s.label}</Badge>
+              <Badge tone={s.bias === 'bull' ? 'up' : s.bias === 'bear' ? 'down' : 'neutral'}>{s.label}</Badge>
             </div>
             <p className="mt-2 text-sm text-ink-2">{s.detail}</p>
             {a.plan && s.bias === 'bull' && (

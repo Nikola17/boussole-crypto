@@ -211,10 +211,15 @@ export function supportResistance(candles: Candle[], w = 5, tolerancePct = 2.5, 
     .sort((a, b) => a.price - b.price);
 }
 
-/** Moyenne mobile d'une série de volumes et ratio du dernier volume. */
+/**
+ * Volume de la dernière bougie CLOSE rapporté à la moyenne des `period` précédentes.
+ * La bougie du jour est encore incomplète : la comparer à des journées entières donnerait presque toujours un ratio faible,
+ * et « cassure avec volume » ne se déclencherait qu'en fin de journée.
+ */
 export function volumeRatio(candles: Candle[], period = 20): number {
-  if (candles.length < period + 1) return NaN;
-  const vols = candles.map((c) => c.volume);
+  const closed = candles.slice(0, -1);
+  if (closed.length < period + 1) return NaN;
+  const vols = closed.map((c) => c.volume);
   const avg = sma(vols.slice(0, -1), period);
   const a = avg[avg.length - 1];
   return a > 0 ? vols[vols.length - 1] / a : NaN;

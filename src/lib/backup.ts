@@ -10,13 +10,13 @@ export const DATA_VERSION = 1;
 /** Toutes les données de l'utilisateur : le stockage et la sauvegarde partent de cette seule liste. */
 export const BACKUP_KEYS = [
   'settings', 'profile', 'watchlist', 'watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions',
-  'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'checklist', 'accounts', 'basket', 'basketExecutions', 'exitDone', 'envelope', 'defiBets', 'cdcSeen',
+  'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'checklist', 'accounts', 'basket', 'basketExecutions', 'exitDone', 'coreTrims', 'envelope', 'defiBets', 'cdcSeen',
 ] as const;
 export type BackupKey = (typeof BACKUP_KEYS)[number];
 
 const STRING_LISTS: BackupKey[] = ['watchlist', 'cdcSeen'];
 const OBJECT_LISTS: BackupKey[] = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'accounts', 'basketExecutions', 'defiBets'];
-const PLAIN_OBJECTS: BackupKey[] = ['settings', 'profile', 'checklist', 'exitDone', 'envelope'];
+const PLAIN_OBJECTS: BackupKey[] = ['settings', 'profile', 'checklist', 'exitDone', 'coreTrims', 'envelope'];
 
 /**
  * Réglages repris d'une sauvegarde. Jamais : clés API, adresse du serveur d'IA, fournisseur d'IA (un fichier piégé pourrait
@@ -121,6 +121,11 @@ export function validateBackup(raw: unknown): BackupCheck {
     const clean: Record<string, number[]> = {};
     for (const [coin, list] of Object.entries(data.exitDone)) if (Array.isArray(list)) clean[coin] = list.filter(isNum);
     data.exitDone = clean;
+  }
+  if (isObj(data.coreTrims)) {
+    const clean: Record<string, string> = {};
+    for (const [coin, d] of Object.entries(data.coreTrims)) if (typeof d === 'string' && Number.isFinite(Date.parse(d))) clean[coin] = d;
+    data.coreTrims = clean;
   }
   if ('settings' in data) data.settings = importableSettings(data.settings);
   if (dropped) warnings.push(`${dropped} élément${dropped > 1 ? 's' : ''} illisible${dropped > 1 ? 's' : ''} ignoré${dropped > 1 ? 's' : ''}.`);

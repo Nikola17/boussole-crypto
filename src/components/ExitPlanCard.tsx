@@ -7,6 +7,7 @@ import { useExitPlan, type ExitCoin } from '../hooks/useExitPlan';
 import { computeFrenchTax, simulateSale } from '../lib/tax';
 import { fmtMoney, fmtNum, fmtPrice, fmtQty } from '../lib/format';
 import { Link } from '../router';
+import { MIN_DAYS_BETWEEN_TRIMS } from '../lib/thresholds';
 import type { CoinRef } from '../types';
 import { TransactionModal } from './forms';
 import { Badge, Banner, Button, Card, CoinIcon } from './ui';
@@ -16,6 +17,8 @@ export function ExitPlanCard() {
   const txs = useStore((s) => s.transactions);
   const rateSetting = useStore((s) => s.settings.taxRatePct);
   const toggle = useStore((s) => s.toggleExitDone);
+  const markTrim = useStore((s) => s.markCoreTrim);
+  const clearTrim = useStore((s) => s.clearCoreTrim);
   const [sell, setSell] = useState<CoinRef | null>(null);
   const { currency, rate, fx } = plan;
 
@@ -30,12 +33,13 @@ export function ExitPlanCard() {
   };
 
   const core = plan.coins.filter((c) => c.core);
-  const alts = plan.coins.filter((c) => !c.core && c.avgCostUsd > 0);
-  const noCost = plan.coins.filter((c) => !c.core && c.avgCostUsd <= 0);
+  const tinyLines = plan.coins.filter((c) => !c.core && c.tiny);
+  const alts = plan.coins.filter((c) => !c.core && !c.tiny && c.avgCostUsd > 0);
+  const noCost = plan.coins.filter((c) => !c.core && !c.tiny && c.avgCostUsd <= 0);
   // Les lignes dont un palier est atteint s'affichent en grand ; les autres se résument en une ligne chacune.
   const pendingAlts = alts.filter((c) => c.rungs.some((r) => r.reached && !r.done));
   const watchAlts = alts.filter((c) => !c.rungs.some((r) => r.reached && !r.done));
-  if (!core.length && !alts.length) return null;
+  if (!core.length && !alts.length && !tinyLines.length) return null;
 
   const ref = (c: ExitCoin): CoinRef => ({ coinId: c.coinId, symbol: c.symbol.toLowerCase(), name: c.name, image: c.image });
 
@@ -48,9 +52,32 @@ export function ExitPlanCard() {
         {core.length > 0 && (
           <div>
             <p className="mb-1 text-xs font-medium text-ink-2">Bitcoin et Ethereum : seulement en euphorie, par petites tranches, jamais tout</p>
-            {plan.euphoria.active
-              ? <Banner tone="warn" title={plan.euphoria.label}>{core.map((c) => `${c.symbol} : ≈ ${fmtMoney(((c.valueUsd * plan.euphoria.sellPct) / 100) * rate, currency, 0)}`).join(' · ')}</Banner>
-              : <p className="text-sm text-ink-2">{plan.euphoria.label}</p>}
+            {plan.euphoria.active ? (
+              <div className="space-y-2">
+                <Banner tone="warn" title={plan.euphoria.label}>
+                  Une tranche à la fois, avec au moins {MIN_DAYS_BETWEEN_TRIMS} jours entre deux : l’euphorie peut durer des mois.
+                </Banner>
+                <ul className="divide-y divide-line text-sm">
+                  {core.map((c) => (
+                    <li key={c.coinId} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                      <CoinIcon src={c.image} symbol={c.symbol} size={20} />
+                      <span className="min-w-0 flex-1 text-ink">{c.symbol}</span>
+                      {c.trim?.allowed ? (
+                        <>
+                          <span className="tnum text-xs text-ink-2">tranche ≈ {fmtMoney(((c.valueUsd * plan.euphoria.sellPct) / 100) * rate, currency, 0)}</span>
+                          <Button size="sm" onClick={() => markTrim(c.coinId)}>J’ai vendu cette tranche</Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-ink-2">tranche déjà vendue : prochaine possible le {c.trim?.nextDate?.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</span>
+                          <button type="button" className="text-xs text-muted hover:text-ink" onClick={() => clearTrim(c.coinId)}>annuler</button>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : <p className="text-sm text-ink-2">{plan.euphoria.label} Si ton Bitcoin dépasse sa part visée, ne vends pas : oriente ton DCA vers les autres poches.</p>}
           </div>
         )}
         {pendingAlts.map((c) => (
@@ -109,6 +136,7 @@ export function ExitPlanCard() {
             <p className="mt-1 text-xs text-muted">Paliers par défaut : ×2, ×3 et ×5 à 25 % de la position chacun. Écris une thèse sur la fiche d’une crypto pour personnaliser ses paliers.</p>
           </div>
         )}
+        {tinyLines.length > 0 && <p className="text-xs text-muted">Trop petites pour des paliers de sortie ({tinyLines.map((c) => c.symbol).join(', ')}) : regroupe-les vers Bitcoin (carte « Consolider ») ou renforce-les si tu y crois vraiment.</p>}
         {noCost.length > 0 && <p className="text-xs text-muted">Sans prix d’achat enregistré, pas de paliers possibles : {noCost.map((c) => c.symbol).join(', ')}. Ajoute tes achats ou importe ton historique.</p>}
       </div>
       <TransactionModal open={!!sell} onClose={() => setSell(null)} presetCoin={sell} presetType="sell" />

@@ -114,12 +114,44 @@ describe('ordre du jour : règles contre l\'éparpillement', () => {
     expect(r.excluded.some((e) => e.symbol === 'PROV' && e.reason.includes('FOMO'))).toBe(true);
   });
 
-  it('absente de Crypto.com : écartée ; si toute la liste l\'est, le montant va en réserve', () => {
+  it('absente de Crypto.com : écartée ; si toute la liste l’est, le montant revient au cœur', () => {
     const r = planBasketOrder(basket(), ctx({ cdc: { bitcoin: 'exchange', ethereum: 'exchange', sui: 'unknown', prove: 'unknown', tao: 'unknown' } }));
     expect(r.orders).toHaveLength(1);
     expect(r.excluded).toHaveLength(3);
-    expect(r.reserveDeltaUsd).toBe(12.5);
-    expect(r.notes.join(' ')).toContain('va en réserve');
+    expect(r.orders[0].usd).toBe(25); // 12,5 du cœur + 12,5 rendus par la découverte
+    expect(r.reserveDeltaUsd).toBe(0);
+    expect(r.notes.join(' ')).toContain('revient au cœur');
+  });
+
+  it('peur extrême, réserve vide, aucune découverte possible : on investit tout le budget, pas la moitié', () => {
+    const r = planBasketOrder(basket({ reserveUsd: 0 }), ctx({ temperature: 10, cdc: { bitcoin: 'exchange', ethereum: 'exchange', sui: 'unknown', prove: 'unknown', tao: 'unknown' } }));
+    expect(r.orders).toHaveLength(1);
+    expect(r.investUsd).toBe(25);
+    expect(r.reserveDeltaUsd).toBe(0);
+  });
+
+  it('peur extrême avec réserve : le cœur est doublé, la réserve est puisée', () => {
+    const r = planBasketOrder(basket({ reserveUsd: 20 }), ctx({ temperature: 10, cdc: { bitcoin: 'exchange', ethereum: 'exchange', sui: 'unknown', prove: 'unknown', tao: 'unknown' } }));
+    expect(r.investUsd).toBe(37.5);
+    expect(r.reserveDeltaUsd).toBe(-12.5);
+  });
+
+  it('marché chaud : ce que la température retire part en réserve, jamais vers le cœur', () => {
+    const warm = planBasketOrder(basket(), ctx({ temperature: 65 }));
+    expect(warm.orders.map((o) => o.kind)).toEqual(['core', 'discovery']);
+    expect(warm.investUsd).toBe(12.5); // cœur ×0,5 et découverte ×0,5
+    expect(warm.reserveDeltaUsd).toBe(12.5);
+    const hot = planBasketOrder(basket(), ctx({ temperature: 85 }));
+    expect(hot.orders).toHaveLength(0);
+    expect(hot.reserveDeltaUsd).toBe(25);
+  });
+
+  it('température indisponible : l’ordre est calculé à ×1, avec un avertissement', () => {
+    const r = planBasketOrder(basket(), ctx({ temperature: null }));
+    expect(r.orders.length).toBeGreaterThan(0);
+    expect(r.multiplier).toBe(1);
+    expect(r.investUsd).toBe(25);
+    expect(r.warnings.join(' ')).toContain('Température du marché indisponible');
   });
 
   it('plafond par ligne : le montant est limité, puis la ligne est écartée', () => {
