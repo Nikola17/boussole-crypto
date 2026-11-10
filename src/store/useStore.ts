@@ -12,6 +12,7 @@ import { uid } from '../lib/format';
 import { DEFAULT_COMPAT_MODEL, NOUS_BASE_URL } from '../ai/openai';
 import { BACKUP_KEYS, DATA_VERSION } from '../lib/backup';
 import { guardedStorage, migrateState, STORE_KEY, systemStorage, useStorageStatus } from './persistence';
+import { saveSecrets, secretsSealed, stripSecrets } from '../lib/secure';
 
 export interface AppState {
   settings: Settings;
@@ -190,7 +191,12 @@ export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
       ...initialData(),
-      setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
+      // Les secrets (clés API, jeton, phrase de passe) ne vivent pas dans le stockage principal de l'application :
+      // sur Windows ils sont chiffrés par le système et rangés à part (see lib/secure.ts).
+      setSettings: (patch) => {
+        set((s) => ({ settings: { ...s.settings, ...patch } }));
+        saveSecrets(useStore.getState().settings);
+      },
       setProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch }, ...bump(s, 'profile') })),
       toggleWatch: (coinId) => set((s) => ({ watchlist: s.watchlist.includes(coinId) ? s.watchlist.filter((x) => x !== coinId) : [...s.watchlist, coinId], ...bump(s, 'watchlist') })),
       addWatchedToken: (t) => set((s) => ({ watchedTokens: [touch(t), ...s.watchedTokens.filter((x) => x.id !== t.id)] })),
@@ -315,7 +321,7 @@ export const useStore = create<AppState>()(
       version: DATA_VERSION,
       migrate: migrateState as (persisted: unknown, version: number) => AppState,
       storage: safeStorage,
-      partialize: (s) => Object.fromEntries(BACKUP_KEYS.map((k) => [k, s[k]])) as Partial<AppState>,
+      partialize: (s) => Object.fromEntries(BACKUP_KEYS.map((k) => [k, k === 'settings' && secretsSealed() ? stripSecrets(s.settings) : s[k]])) as Partial<AppState>,
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState>;
         const saved = (p.settings ?? {}) as Partial<Settings>;

@@ -41,7 +41,7 @@ export function BasketEditor({ open, onClose, initial }: { open: boolean; onClos
   useEffect(() => {
     // Pré-remplissage une seule fois, à l'ouverture : la liste « découverte » reprend tes lignes actuelles hors cœur.
     if (open) setD(initial ?? defaultBasket(pf.holdings));
-  }, [open, initial]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, initial]);
 
   const set = (p: Partial<BasketPlan>) => setD((cur) => ({ ...cur, ...p }));
   const valid = d.name.trim() && d.amountUsd > 0 && d.daysOfWeek.length > 0 && d.core.some((c) => c.weight > 0);
@@ -130,7 +130,7 @@ function ExecuteModal({ open, onClose, b, custom }: { open: boolean; onClose: ()
       const p = b.priceOf(o.coinId);
       return { usd: o.usd, qty: p ? Math.round((o.usd / p) * 1e6) / 1e6 : '' };
     }));
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const invested = rows.reduce((s, r) => s + (r.usd === '' ? 0 : r.usd), 0);
   const valid = rows.length === 0 || rows.every((r) => r.usd !== '' && r.usd > 0 && r.qty !== '' && r.qty > 0);

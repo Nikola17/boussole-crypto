@@ -129,7 +129,7 @@ function BetModal({ open, onClose, initial, env, status }: { open: boolean; onCl
   const [ack, setAck] = useState(false);
   useEffect(() => {
     if (open) { setD({ date: isoDay(), symbol: initial.symbol, name: initial.name, mint: initial.mint, costUsd: initial.costUsd }); setAck(false); }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
   // Noter un achat à la main ne contourne pas l'enveloppe : s'il sort de tes règles, tu dois le reconnaître, et le journal le marque.
   const violations = d.costUsd !== '' && d.costUsd > 0 ? betViolations(env, status, Number(d.costUsd)) : [];
   const valid = d.symbol.trim() && d.costUsd !== '' && d.costUsd > 0 && (violations.length === 0 || ack);

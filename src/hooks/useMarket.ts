@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import * as cg from '../api/coingecko';
 import { binanceSymbolFor, getAllPrices, getBtcFunding, getDailyHistory, getKlines, type Interval } from '../api/binance';
 import { getFearGreed } from '../api/feargreed';
-import { getFees, getProtocols, getStablecoinChange30d } from '../api/defillama';
+import { getFees, getProtocols } from '../api/defillama';
 import { getNewPools, getTrendingPools, type DexPool } from '../api/dex';
 import { poolStrict } from '../api/http';
 import { altSeasonIndex, computeCycle } from '../lib/cycle';
@@ -91,10 +91,6 @@ export function useBtcHistory() {
 
 export function useFunding() {
   return useQuery({ queryKey: ['funding'], queryFn: getBtcFunding, staleTime: 30 * MIN, refetchInterval: 60 * MIN, retry: 0 });
-}
-
-export function useStablecoins() {
-  return useQuery({ queryKey: ['stables'], queryFn: getStablecoinChange30d, staleTime: 60 * MIN });
 }
 
 export function useCycle() {

@@ -1,10 +1,12 @@
 // Boussole Crypto — processus principal Electron (application Windows .exe)
-const { app, BrowserWindow, shell, session, Menu, Tray, nativeImage, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, shell, session, Menu, Tray, nativeImage, ipcMain, Notification, safeStorage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const DEV_URL = process.env.ELECTRON_START_URL || '';
+// Variable de développement : ignorée dans l'application installée (elle n'autoriserait qu'à pointer le navigateur ailleurs).
+const DEV_URL = (!app.isPackaged && process.env.ELECTRON_START_URL) || '';
 const APP_ID = 'fr.nseguy.boussole';
+const APP_ROOT = path.join(__dirname, '..');
 const START_HIDDEN = process.argv.includes('--hidden');
 
 if (!app.requestSingleInstanceLock()) {
@@ -49,11 +51,28 @@ function writeBackup(kind, content) {
   return { ok: true, path: file };
 }
 
+// La navigation ne peut mener que vers les fichiers de l'application elle-même (jamais un file:// arbitraire).
 function isAllowedNavigation(url) {
-  if (url.startsWith('file://')) return true;
+  if (url.startsWith('file://')) {
+    try {
+      const p = path.normalize(decodeURIComponent(new URL(url).pathname).replace(/^\//, ''));
+      return p.startsWith(APP_ROOT);
+    } catch { return false; }
+  }
   if (DEV_URL && url.startsWith(DEV_URL)) return true;
   return false;
 }
+
+// Sources publiques de l'application : elles seules reçoivent le filet de secours CORS (les autres hôtes échouent franchement).
+const CORS_HOSTS = new Set([
+  'api.coingecko.com', 'api.binance.com', 'fapi.binance.com', 'data-api.binance.vision', 'api.alternative.me',
+  'api.llama.fi', 'stablecoins.llama.fi', 'yields.llama.fi', 'api.geckoterminal.com', 'api.dexscreener.com',
+  'lite-api.jup.ag', 'api.gopluslabs.io', 'api.rugcheck.xyz', 'mempool.space', 'api.crypto.com', 'api.github.com',
+  'ethereum-rpc.publicnode.com', 'base-rpc.publicnode.com', 'arbitrum-one-rpc.publicnode.com', 'bsc-rpc.publicnode.com',
+  'polygon-bor-rpc.publicnode.com', 'avalanche-c-chain-rpc.publicnode.com', 'optimism-rpc.publicnode.com',
+  'solana-rpc.publicnode.com', 'api.mainnet-beta.solana.com',
+  'www.coindesk.com', 'cointelegraph.com', 'decrypt.co', 'www.theblock.co',
+]);
 
 function showWindow() {
   if (!mainWindow) { createWindow(); return; }
@@ -151,15 +170,19 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   loadDesktop();
 
-  // Filet de sécurité CORS : la page est servie en file://, certaines API publiques
-  // n'envoient pas d'en-tête CORS. On n'ajoute l'en-tête que s'il manque.
+  // Filet de sécurité CORS : la page est servie en file://, certaines de nos sources publiques
+  // n'envoient pas d'en-tête CORS. Seuls les hôtes de l'application le reçoivent, et seulement s'il manque.
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const headers = details.responseHeaders || {};
     if (details.resourceType === 'xhr') {
-      const hasAcao = Object.keys(headers).some((k) => k.toLowerCase() === 'access-control-allow-origin');
-      if (!hasAcao) {
-        headers['Access-Control-Allow-Origin'] = ['*'];
-        headers['Access-Control-Allow-Headers'] = ['*'];
+      let host = '';
+      try { host = new URL(details.url).hostname; } catch { /* laissé vide : aucun hôte */ }
+      if (CORS_HOSTS.has(host)) {
+        const hasAcao = Object.keys(headers).some((k) => k.toLowerCase() === 'access-control-allow-origin');
+        if (!hasAcao) {
+          headers['Access-Control-Allow-Origin'] = ['*'];
+          headers['Access-Control-Allow-Headers'] = ['*'];
+        }
       }
     }
     callback({ responseHeaders: headers });
@@ -193,6 +216,18 @@ app.whenReady().then(() => {
       fs.mkdirSync(backupDir(), { recursive: true });
       return (await shell.openPath(backupDir())) === '';
     } catch { return false; }
+  });
+
+  // Secrets chiffrés par Windows (safeStorage/DPAPI) : clés API, jeton GitHub, phrase de passe de synchronisation.
+  // Rien ne part ailleurs que vers la fenêtre de l'application, et un secret indéchiffrable (autre compte
+  // Windows, machine changée) échoue silencieusement : l'utilisateur retape sa clé, rien d'autre n'est touché.
+  ipcMain.handle('secrets:encrypt', async (event, value) => {
+    if (!fromApp(event) || typeof value !== 'string' || !value) return null;
+    try { return safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(value).toString('base64') : null; } catch { return null; }
+  });
+  ipcMain.handle('secrets:decrypt', async (event, blob) => {
+    if (!fromApp(event) || typeof blob !== 'string' || !blob) return null;
+    try { return safeStorage.decryptString(Buffer.from(blob, 'base64')); } catch { return null; }
   });
 
   ensureTray();

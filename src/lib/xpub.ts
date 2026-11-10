@@ -66,8 +66,3 @@ export function deriveAddress(hd: HDKey, script: BtcScript, change: 0 | 1, index
   if (!address) throw new Error('Adresse introuvable.');
   return address;
 }
-
-export function deriveAddresses(key: string, script: BtcScript, change: 0 | 1, from: number, count: number): string[] {
-  const hd = parseExtendedKey(key);
-  return Array.from({ length: count }, (_, i) => deriveAddress(hd, script, change, from + i));
-}

@@ -288,7 +288,7 @@ function Wallets() {
 
   return (
     <div className="space-y-4">
-      <Banner tone="info" title="Lecture seule, 100 % sûr">Boussole ne lit que des adresses publiques et des clés publiques étendues (xpub). Il ne te demandera JAMAIS ta phrase secrète (seed) ni ta clé privée : quiconque te la demande essaie de te voler.</Banner>
+      <Banner tone="info" title="Lecture seule, 100 % sûr">Boussole ne lit que des adresses publiques et des clés publiques étendues (xpub). Il ne te demandera JAMAIS ta phrase secrète (seed) ni ta clé privée : quiconque te la demande essaie de te voler. À savoir : le suivi d'une xpub Bitcoin interroge mempool.space adresse par adresse — cette adresse IP demande donc pour toi, ce qui relie momentanément ton IP à tes adresses (c'est aussi ce que fait Ledger Live, mais via ses propres serveurs).</Banner>
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setOpen(true)}>Ajouter une adresse</Button>
         <Button icon={<RefreshCw className="size-4" />} onClick={() => void qc.invalidateQueries({ queryKey: ['wallet'] })}>Actualiser les soldes</Button>

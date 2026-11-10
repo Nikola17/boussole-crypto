@@ -12,7 +12,6 @@ export function useYields() {
   const stamp = results.map((r) => r.dataUpdatedAt).join(',');
   const quotes = useMemo(
     () => Object.fromEntries(YIELD_OPTIONS.map((o, i) => [o.id, results[i].data ?? null])) as Record<string, YieldQuote | null>,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [stamp],
   );
   return { quotes, loading: results.some((r) => r.isLoading), failed: results.every((r) => r.isError) };

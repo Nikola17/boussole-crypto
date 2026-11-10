@@ -14,9 +14,9 @@ La méthode d'analyse s'inspire du projet open source [AI Berkshire](https://git
 
 | Plateforme | Fichier | Installation |
 |---|---|---|
-| Windows | `release/Boussole-Crypto-Setup-1.8.0.exe` | Double-clic → installe l'app et crée un raccourci. Windows SmartScreen peut afficher « éditeur inconnu » (app non signée) : *Informations complémentaires → Exécuter quand même*. |
-| Windows (sans installation) | `release/Boussole-Crypto-Portable-1.8.0.exe` | Se lance directement, par exemple depuis une clé USB. |
-| Android | `release/Boussole-Crypto-1.8.0.apk` | Copie le fichier sur le téléphone (câble, Drive, e-mail) → ouvre-le → autorise « installer des applications inconnues » pour l'app utilisée. |
+| Windows | `release/Boussole-Crypto-Setup-1.8.1.exe` | Double-clic → installe l'app et crée un raccourci. Windows SmartScreen peut afficher « éditeur inconnu » (app non signée) : *Informations complémentaires → Exécuter quand même*. |
+| Windows (sans installation) | `release/Boussole-Crypto-Portable-1.8.1.exe` | Se lance directement, par exemple depuis une clé USB. |
+| Android | `release/Boussole-Crypto-1.8.1.apk` | Copie le fichier sur le téléphone (câble, Drive, e-mail) → ouvre-le → autorise « installer des applications inconnues » pour l'app utilisée. |
 
 Au premier lancement : accepte l'avertissement, puis remplis ton **profil investisseur** (2 minutes). Ensuite, dans **Réglages** :
 1. **Clé API pour l'IA** : choisis ton fournisseur. *Nous Portal* (par défaut, économique) : clé créée sur [portal.nousresearch.com](https://portal.nousresearch.com), modèle **DeepSeek V4.1 Flash** proposé par défaut. *Claude (Anthropic)* : clé créée sur [console.anthropic.com](https://console.anthropic.com/settings/keys). Colle la clé, puis clique sur *Tester la connexion*.
@@ -67,7 +67,7 @@ Deux fournisseurs au choix dans *Réglages* :
 - **Option « Anonymiser »** (*Réglages*) : le dossier IA part sans ton prénom et sans montants, remplacés par des pourcentages. Le reste de l'analyse est inchangé.
 - Les wallets sont lus en **lecture seule** à partir d'adresses publiques ou de clés publiques étendues (xpub). L'app ne demande jamais de phrase secrète ni de clé privée, et refuse une clé privée étendue (xprv) si tu la colles par erreur.
 - Ton fichier CSV Crypto.com est lu sur l'appareil ; seuls les noms des cryptos peuvent être recherchés en ligne.
-- Ta clé API (Nous Portal ou Anthropic) est stockée localement, n'est envoyée qu'à l'adresse de l'API choisie et n'est jamais incluse dans les sauvegardes exportées. La sauvegarde automatique d'Android est désactivée et le débogage du WebView aussi.
+- Ta clé API (Nous Portal ou Anthropic) est stockée localement, n'est envoyée qu'à l'adresse de l'API choisie et n'est jamais incluse dans les sauvegardes exportées. Sur Windows, elle est de surcroît chiffrée par le système (pour ton compte utilisateur) : jamais écrite en clair dans le stockage de l'application. La sauvegarde automatique d'Android est désactivée et le débogage du WebView aussi.
 - Sources : CoinGecko, Binance (données publiques), liste publique de Crypto.com Exchange, alternative.me (Fear & Greed), DefiLlama (TVL, frais, rendements), GeckoTerminal, DexScreener, GoPlus, RugCheck, mempool.space, Jupiter, nœuds publics PublicNode, flux RSS de CoinDesk / Cointelegraph / Decrypt / The Block.
 
 ---

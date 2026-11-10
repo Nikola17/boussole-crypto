@@ -44,10 +44,6 @@ export function PageHeader({ title, subtitle, actions }: { title: ReactNode; sub
   );
 }
 
-export function Grid({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={clsx('grid gap-4', className)}>{children}</div>;
-}
-
 // ------------------------------------------------------------------ Boutons
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';

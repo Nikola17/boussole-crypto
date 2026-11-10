@@ -1,7 +1,7 @@
 {
   "name": "boussole-crypto",
   "productName": "Boussole Crypto",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Boussole — copilote d'investissement crypto : signaux achat/vente, pépites, DCA, trading, wallet, airdrops et analyse IA quotidienne.",
   "author": "Nico",
   "license": "MIT",
@@ -67,8 +67,18 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json"
+      "build/icon.png",
+      "package.json",
+      "!node_modules/**/*"
     ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
     "win": {
       "target": [
         {

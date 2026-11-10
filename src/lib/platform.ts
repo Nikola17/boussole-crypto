@@ -21,6 +21,10 @@ interface DesktopApi {
   /** Écrit un fichier de sauvegarde dans Documents\Boussole\sauvegardes et supprime les plus anciens. */
   backup?: (kind: 'auto' | 'avant-import', content: string) => Promise<{ ok: boolean; path?: string; error?: string } | null>;
   openBackups?: () => Promise<boolean>;
+  /** Chiffre une chaîne avec la clé de l'utilisateur Windows (safeStorage/DPAPI) ; null si indisponible. */
+  sealSecret?: (value: string) => Promise<string | null>;
+  /** Déchiffre une chaîne scellée par sealSecret ; null si indéchiffrable. */
+  openSecret?: (blob: string) => Promise<string | null>;
 }
 
 /** Pont vers le processus principal d'Electron (zone de notification, démarrage avec Windows) ; null ailleurs. */

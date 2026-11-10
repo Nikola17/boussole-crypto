@@ -110,6 +110,14 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Rythme** : au lancement, après tes modifications (regroupées), toutes les 15 minutes ; état visible dans Réglages (« synchronisé il y a 2 min »). Un appareil vierge n'envoie rien.
 - **Import manuel** : « Fusionner » devient le choix par défaut (les deux états combinés, sans rien effacer) ; « Remplacer tout » reste possible, avec copie de sécurité automatique.
 
+### v1.8.1 — Clés protégées, application fiabilisée
+- **Clés chiffrées par le système (Windows)** : les clés API (IA, CoinGecko), le jeton de synchronisation et la phrase de passe ne sont plus jamais écrits en clair dans le stockage de l'application — Windows les chiffre pour l'utilisateur en cours (safeStorage/DPAPI) et elles sont rangées à part. Un secret indéchiffrable (autre session Windows, machine changée) est simplement retapé. Android : à ce jour, la clé reste dans le stockage de l'application (choix d'un plugin Keystore Capacitor à faire).
+- **Installeur allégé** : plus un seul fichier `node_modules` dans l'application empaquetée (l'interface est déjà entièrement compilée par Vite) ; l'icône de la zone de notification est désormais embarquée.
+- **Electron durci** : fuses activés (pas de `--node-options`, inspections désactivées, chargement uniquement depuis l'archive asar), `ELECTRON_START_URL` ignoré dans l'application installée, navigation restreinte aux fichiers de l'application, filet CORS limité à la liste des sources de données de Boussole.
+- **Android** : suppression des permissions de localisation qu'ajoute le plugin d'arrière-plan (Boussole ne localise jamais).
+- **Transparence** : l'écran Wallet précise que le suivi d'une xpub Bitcoin interroge mempool.space adresse par adresse, ce qui relie tes adresses à ton adresse IP.
+- **Qualité** : code mort supprimé (`useStablecoins`, `Grid`, `deriveAddresses`), les quatre `eslint-disable` obsolètes sont retirés, et les utilitaires critiques sans tests en ont (formatage, `extractJson`).
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

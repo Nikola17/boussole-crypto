@@ -21,6 +21,7 @@ import { fmtPrice, isoDay } from './lib/format';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAutoBackup } from './hooks/useBackup';
 import { useSyncLifecycle } from './hooks/useSync';
+import { loadSecrets } from './lib/secure';
 import Dashboard from './pages/Dashboard';
 
 const Market = lazy(() => import('./pages/Market'));
@@ -75,6 +76,13 @@ function AppEffects() {
   useAutoBackup();
   useSyncLifecycle();
   const exit = useExitPlan();
+
+  // Windows : les clés et phrases secrètes sont chiffrées par le système et rangées à part ; on les restitue au démarrage.
+  useEffect(() => {
+    void loadSecrets().then((sec) => {
+      if (Object.keys(sec).length) useStore.getState().setSettings(sec);
+    });
+  }, []);
 
   // Les alertes ne servent à rien sans l'autorisation du système : on la demande une fois, au démarrage.
   useEffect(() => {
