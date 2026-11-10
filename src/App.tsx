@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
 import { Compass, ShieldCheck } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
 import { SystemBars, SystemBarsStyle } from '@capacitor/core';
@@ -8,12 +8,15 @@ import { Layout } from './components/Layout';
 import { Button, Spinner } from './components/ui';
 import { setCoinGeckoKey } from './api/coingecko';
 import { setCoinGeckoKeyPresent } from './api/http';
-import { useMarkets } from './hooks/useMarket';
+import { useMarkets, usePrices } from './hooks/useMarket';
+import { useToday } from './hooks/useClock';
+import { aiReady } from './ai/run';
+import { alertCoinsToFetch, checkPriceAlerts } from './lib/alerts';
 import { useBriefing } from './hooks/useBriefing';
-import { ensureNotificationPermission, isNative, notify, scheduleDcaReminders, syncDesktop } from './lib/platform';
+import { cancelDcaReminders, ensureNotificationPermission, isNative, notify, scheduleDcaReminders, syncDesktop } from './lib/platform';
 import { useSmartAlerts } from './hooks/useSmartAlerts';
 import { useExitPlan } from './hooks/useExitPlan';
-import { syncRunner, watchAlerts } from './lib/runnerSync';
+import { EMPTY_WATCH, syncRunner, watchAlerts } from './lib/runnerSync';
 import { fmtPrice, isoDay } from './lib/format';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAutoBackup } from './hooks/useBackup';
@@ -56,14 +59,15 @@ function AppEffects() {
   const cgKey = useStore((s) => s.settings.coingeckoKey);
   const notifications = useStore((s) => s.settings.notifications);
   const currency = useStore((s) => s.settings.currency);
-  const briefingAuto = useStore((s) => s.settings.briefingAuto);
+  const cgKeySetting = useStore((s) => s.settings.coingeckoKey);
   const alerts = useStore((s) => s.alerts);
   const upsertAlert = useStore((s) => s.upsertAlert);
   const plans = useStore((s) => s.dcaPlans);
   const basket = useStore((s) => s.basket);
   const markets = useMarkets();
-  const briefing = useBriefing();
-  const autoDone = useRef(false);
+  // Alertes sur une petite capitalisation : leur prix n'est pas dans le top 250 déjà chargé, on le demande à part.
+  const marketIds = useMemo(() => new Set((markets.data ?? []).map((m) => m.id)), [markets.data]);
+  const extraAlertPrices = usePrices(useMemo(() => alertCoinsToFetch(alerts, marketIds), [alerts, marketIds]));
   const closeToTray = useStore((s) => s.settings.closeToTray);
   const autoStart = useStore((s) => s.settings.autoStart);
   useSmartAlerts();
@@ -96,51 +100,40 @@ function AppEffects() {
     setCoinGeckoKeyPresent(!!cgKey);
   }, [cgKey]);
 
-  // Vérification des alertes à chaque rafraîchissement du marché
+  // Vérification des alertes à chaque rafraîchissement du marché (top 250) ou des prix demandés à part.
   useEffect(() => {
-    if (!markets.data) return;
-    const prices = new Map(markets.data.map((m) => [m.id, m.current_price]));
-    for (const a of alerts) {
-      if (!a.active || a.triggeredAt) continue;
-      const p = prices.get(a.coinId);
-      if (p == null) continue;
-      const hit = a.condition === 'above' ? p >= a.priceUsd : p <= a.priceUsd;
-      if (hit) {
-        upsertAlert({ ...a, triggeredAt: new Date().toISOString(), active: false });
-        if (notifications) void notify(`Alerte ${a.symbol.toUpperCase()}`, `${a.name} est passé ${a.condition === 'above' ? 'au-dessus' : 'en dessous'} de ${fmtPrice(a.priceUsd, 'USD')} (cours : ${fmtPrice(p, 'USD')}).`);
-      }
+    if (!markets.data && !extraAlertPrices.data) return;
+    const prices = new Map<string, number>();
+    for (const [id, v] of Object.entries(extraAlertPrices.data ?? {})) if (typeof v.usd === 'number') prices.set(id, v.usd);
+    for (const m of markets.data ?? []) prices.set(m.id, m.current_price);
+    for (const { alert: a, price: p } of checkPriceAlerts(alerts, prices)) {
+      upsertAlert({ ...a, triggeredAt: new Date().toISOString(), active: false });
+      if (notifications) void notify(`Alerte ${a.symbol.toUpperCase()}`, `${a.name} est passé ${a.condition === 'above' ? 'au-dessus' : 'en dessous'} de ${fmtPrice(a.priceUsd, 'USD')} (cours : ${fmtPrice(p, 'USD')}).`);
     }
-  }, [markets.data, alerts, upsertAlert, notifications]);
+  }, [markets.data, extraAlertPrices.data, alerts, upsertAlert, notifications]);
 
   // Android : l'état à surveiller (alertes de prix, paliers de vente) est confié au script d'arrière-plan.
+  // Notifications désactivées : le script ne surveille plus rien et les rappels déjà programmés sont annulés (avant, ils continuaient).
   useEffect(() => {
-    if (!isNative || !notifications) return;
+    if (!isNative) return;
+    if (!notifications) {
+      void syncRunner(EMPTY_WATCH, () => undefined);
+      void cancelDcaReminders();
+      return;
+    }
     const exits = exit.coins.flatMap((c) => c.rungs.filter((r) => !r.done).map((r) => ({ coinId: c.coinId, symbol: c.symbol, multiple: r.multiple, pct: r.pct, targetUsd: r.targetPrice }))).slice(0, 60);
-    void syncRunner({ alerts: watchAlerts(alerts), exits }, (ids) => {
+    void syncRunner({ alerts: watchAlerts(alerts), exits, cgKey: cgKeySetting || undefined }, (ids) => {
       for (const id of ids) {
         const a = alerts.find((x) => x.id === id);
         if (a && !a.triggeredAt) upsertAlert({ ...a, triggeredAt: new Date().toISOString(), active: false });
       }
     });
-  }, [alerts, exit.coins, notifications, upsertAlert]);
+  }, [alerts, exit.coins, notifications, upsertAlert, cgKeySetting]);
 
   // Rappels DCA programmés (Android)
   useEffect(() => {
     if (notifications) void scheduleDcaReminders(plans, currency === 'EUR' ? '€' : '$', basket);
   }, [plans, basket, notifications, currency]);
-
-  // Brief automatique, une fois par jour
-  useEffect(() => {
-    if (!briefingAuto || autoDone.current || !briefing.cfg || !briefing.ready || briefing.todays || briefing.running) return;
-    let last = '';
-    try { last = localStorage.getItem('boussole-auto-brief') ?? ''; } catch { /* ignore */ }
-    if (last === isoDay()) return;
-    autoDone.current = true;
-    try { localStorage.setItem('boussole-auto-brief', isoDay()); } catch { /* ignore */ }
-    void briefing.generate().then((r) => {
-      if (r && notifications) void notify('Ton brief du jour est prêt', 'Ouvre Boussole pour découvrir quoi faire aujourd’hui.');
-    });
-  }, [briefingAuto, briefing, notifications]);
 
   // Bouton retour Android : navigation arrière, puis fermeture
   useEffect(() => {
@@ -152,6 +145,30 @@ function AppEffects() {
     return () => { void h.then((x) => x.remove()); };
   }, []);
 
+  return null;
+}
+
+/**
+ * Brief automatique, une fois par jour. Ce composant n'est monté QUE si le brief automatique est activé et qu'une clé d'IA est configurée :
+ * il construit tout le contexte de l'IA (marché, portefeuille, signaux) et retardait sinon le taux EUR/USD d'au moins 18 secondes au démarrage.
+ */
+function AutoBrief() {
+  const briefing = useBriefing();
+  const notifications = useStore((s) => s.settings.notifications);
+  const today = useToday();
+  const lastRun = useRef('');
+  useEffect(() => {
+    const day = isoDay(today);
+    if (lastRun.current === day || !briefing.cfg || !briefing.ready || briefing.todays || briefing.running) return;
+    let last = '';
+    try { last = localStorage.getItem('boussole-auto-brief') ?? ''; } catch { /* ignore */ }
+    lastRun.current = day;
+    if (last === day) return;
+    try { localStorage.setItem('boussole-auto-brief', day); } catch { /* ignore */ }
+    void briefing.generate().then((r) => {
+      if (r && notifications) void notify('Ton brief du jour est prêt', 'Ouvre Boussole pour découvrir quoi faire aujourd’hui.');
+    });
+  }, [briefing, notifications, today]);
   return null;
 }
 
@@ -187,11 +204,13 @@ function Welcome() {
 
 export default function App() {
   const accepted = useStore((s) => s.settings.disclaimerAccepted);
+  const autoBrief = useStore((s) => s.settings.briefingAuto && aiReady(s.settings));
   const { path } = useHashPath();
   if (!accepted) return <Welcome />;
   return (
     <Layout>
       <AppEffects />
+      {autoBrief && <AutoBrief />}
       <ErrorBoundary scope="page" resetKey={path}>
         <Suspense fallback={<Spinner label="Chargement…" />}>
           <Routes />

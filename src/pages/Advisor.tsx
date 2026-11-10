@@ -10,7 +10,7 @@ import { aiLabel } from '../ai/run';
 import { fmtDate, uid } from '../lib/format';
 import { navigate, setQuery, useHashPath } from '../router';
 import { AiProgress, CostHint, NeedKey, ReportView } from '../components/AiBlocks';
-import { Badge, Banner, Button, Card, Empty, PageHeader, Segmented, Textarea } from '../components/ui';
+import { Badge, Banner, Button, Card, Empty, ErrorNote, PageHeader, Segmented, Textarea } from '../components/ui';
 import { Markdown } from '../components/Markdown';
 import { CoinPicker } from '../components/CoinPicker';
 import type { AiReportKind } from '../types';
@@ -58,9 +58,10 @@ function BriefTab() {
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="primary" icon={<Sparkles className="size-4" />} disabled={b.running || !b.ready} onClick={() => void b.generate()}>{b.todays ? 'Régénérer le brief' : 'Générer le brief du jour'}</Button>
           <CostHint calls={1} searches={6} />
-          {!b.ready && <span className="text-xs text-muted">Chargement des données de marché…</span>}
+          {!b.ready && !b.loadError && <span className="text-xs text-muted">Chargement des données de marché…</span>}
         </div>
       )}
+      {b.cfg && !b.ready && b.loadError && <ErrorNote error={b.loadError} onRetry={b.retry} />}
       {b.running && <AiProgress progress={b.progress} onCancel={b.cancel} />}
       {b.error && <Banner tone="warn" title="Brief impossible">{b.error}</Banner>}
       {b.latest ? <ReportView report={b.latest} onDelete={() => removeReport(b.latest!.id)} /> : !b.running && <Empty icon={<Sparkles className="size-8" />} title="Pas encore de brief">Le brief quotidien combine les données de marché, l’actualité (recherche web), ton portefeuille et ton DCA pour te dire quoi faire aujourd’hui. Active la génération automatique dans Réglages.</Empty>}

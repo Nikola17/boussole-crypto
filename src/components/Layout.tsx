@@ -8,7 +8,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useHashPath } from '../router';
 import { useStore } from '../store/useStore';
 import { aiReady } from '../ai/run';
-import { StorageBanner } from './StatusBanners';
+import { StaleDataBanner, StorageBanner } from './StatusBanners';
 
 export const NAV = [
   { to: '/', label: 'Cockpit', icon: LayoutDashboard, mobile: true },
@@ -100,7 +100,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </header>
 
         <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-28 pt-4 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">
-          <div className="empty:hidden [&:not(:empty)]:mb-4"><StorageBanner /></div>
+          <div className="space-y-3 empty:hidden [&:not(:empty)]:mb-4"><StorageBanner /><StaleDataBanner /></div>
           {children}
         </main>
 

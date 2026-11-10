@@ -1,6 +1,6 @@
 // Bandeaux d'état des données : stockage plein ou en lecture seule, rappel de sauvegarde.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { exportBackup, useStore } from '../store/useStore';
 import { useStorageStatus } from '../store/persistence';
 import { hasUserData } from '../lib/backup';
@@ -8,6 +8,9 @@ import { backupReminderDue, describeBackupAge } from '../lib/autoBackup';
 import { backupNow, canAutoBackup, noteManualBackup, useLastBackup } from '../hooks/useBackup';
 import { backupFolderLabel, saveTextFile } from '../lib/platform';
 import { isoDay } from '../lib/format';
+import { useMarkets } from '../hooks/useMarket';
+import { useNow } from '../hooks/useClock';
+import { freshness } from '../lib/freshness';
 import { Banner, Button } from './ui';
 
 async function exportNow(): Promise<string> {
@@ -87,6 +90,35 @@ export function BackupReminder() {
     <Banner tone="info" title="Pense à sauvegarder tes données" action={<Button size="sm" loading={busy} onClick={() => void save()}>Sauvegarder maintenant</Button>}>
       {describeBackupAge(last)} Une réinstallation ou un téléphone perdu efface tout{backupFolderLabel ? ` ; la copie va dans ${backupFolderLabel}` : ''}.
       {msg && <span className="mt-1 block text-ink-2">{msg}</span>}
+    </Banner>
+  );
+}
+
+/** Vrai quand `flag` est vrai depuis au moins `delayMs` : évite qu'un bandeau clignote pendant les quelques secondes d'un rechargement normal. */
+function useSustained(flag: boolean, delayMs: number): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (!flag) { setOn(false); return; }
+    const t = setTimeout(() => setOn(true), delayMs);
+    return () => clearTimeout(t);
+  }, [flag, delayMs]);
+  return on && flag;
+}
+
+/**
+ * Les prix affichés datent de plus de 20 minutes : réseau coupé, ou CoinGecko qui limite les requêtes.
+ * L'application montre alors les dernières données connues (gardées d'un lancement à l'autre) en le disant clairement.
+ * Le bandeau n'apparaît qu'après quelques secondes : au lancement, des données de la veille sont normales le temps du rechargement.
+ */
+export function StaleDataBanner() {
+  const markets = useMarkets();
+  const now = useNow(60_000);
+  const f = freshness(markets.dataUpdatedAt, now.getTime());
+  const show = useSustained(!!markets.data && (f.stale || markets.isError), 6000);
+  if (!show) return null;
+  return (
+    <Banner tone="warn" title={`Données ${f.label}`} action={markets.isFetching ? undefined : <Button size="sm" onClick={() => void markets.refetch()}>Réessayer</Button>}>
+      La connexion ou CoinGecko ne répond pas : les prix et les valeurs affichés ne sont pas à jour{markets.isFetching ? ' (nouvelle tentative en cours…)' : ''}. Tes données personnelles, elles, sont intactes.
     </Banner>
   );
 }

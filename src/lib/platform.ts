@@ -78,6 +78,18 @@ export async function notify(title: string, body: string) {
   }
 }
 
+/** Annule tous les rappels programmés par Boussole (DCA, panier, bilan) : à utiliser quand l'utilisateur désactive les notifications. */
+export async function cancelDcaReminders() {
+  if (!isNative) return;
+  try {
+    const pending = await LocalNotifications.getPending();
+    const ours = pending.notifications.filter((n) => n.id >= 1000 && n.id < 2000);
+    if (ours.length) await LocalNotifications.cancel({ notifications: ours.map((n) => ({ id: n.id })) });
+  } catch {
+    /* rien à annuler, ou plugin indisponible */
+  }
+}
+
 /** Programme les rappels DCA et du panier sur Android (déclenchés même application fermée). */
 export async function scheduleDcaReminders(plans: DcaPlan[], currencySymbol: string, basket: BasketPlan | null = null) {
   if (!isNative) return;

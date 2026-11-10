@@ -13,20 +13,22 @@ import {
 import { rulesOf } from '../lib/profile';
 import { scatterReport } from '../lib/scatter';
 import type { CoinRef } from '../types';
+import { useToday } from './useClock';
 
 /** Échéance du panier (calendrier seulement, sans réseau) : sert au Cockpit et aux rappels. */
 export function useBasketDue() {
   const basket = useStore((s) => s.basket);
   const executions = useStore((s) => s.basketExecutions);
+  // Le jour courant change à minuit même si l'application reste ouverte (zone de notification) : l'échéance suit.
+  const today = useToday();
   return useMemo(() => {
     if (!basket) return { basket: null, last: null as Date | null, periodKey: null as string | null, done: false, due: false, next: null as Date | null };
-    const today = new Date();
     const last = lastBasketOccurrence(basket, today);
     const periodKey = last ? basketPeriodKey(last) : null;
     const done = !!periodKey && executions.some((e) => e.basketId === basket.id && e.periodKey === periodKey);
     const next = nextBasketOccurrences(basket, new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1), 1)[0] ?? null;
     return { basket, last, periodKey, done, due: basket.active && !!last && !done, next };
-  }, [basket, executions]);
+  }, [basket, executions, today]);
 }
 
 export function useBasket() {
@@ -44,7 +46,6 @@ export function useBasket() {
     queryKey: ['basket-markets', missing.join(',')],
     enabled: missing.length > 0 && !!markets.data,
     staleTime: 3 * 60_000,
-    retry: 1,
     queryFn: () => getMarkets({ ids: missing, perPage: 250 }),
   });
   const coins = useMemo(() => [...ids.map((id) => marketMap.get(id)).filter((m): m is NonNullable<typeof m> => !!m), ...(bm.data ?? [])], [ids, marketMap, bm.data]);

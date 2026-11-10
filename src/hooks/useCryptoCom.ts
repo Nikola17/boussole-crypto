@@ -14,7 +14,6 @@ export function useCryptoComListing() {
     queryFn: fetchCryptoComSymbols,
     staleTime: 24 * 3600_000,
     gcTime: 48 * 3600_000,
-    retry: 1,
     initialData: cached?.symbols,
     initialDataUpdatedAt: cached?.at,
   });

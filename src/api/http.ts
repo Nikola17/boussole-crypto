@@ -71,6 +71,25 @@ function friendly(status: number, host: string): string {
   return `Erreur ${status} sur ${host}.`;
 }
 
+/**
+ * Quand et combien de temps attendre avant de réessayer. Une SEULE couche de nouvelles tentatives existe (ici) :
+ * React Query ne réessaie plus, sinon les deux se multipliaient (jusqu'à 6 tentatives, une minute de blocage derrière une erreur 429).
+ *  - 429 (limite atteinte) : un seul nouvel essai, après le délai demandé par le serveur mais jamais plus de 8 s ;
+ *  - 5xx ou réseau coupé : jusqu'à `maxRetries` essais, avec un délai qui double ;
+ *  - autres 4xx (introuvable, accès refusé…) : inutile de réessayer.
+ */
+export function retryPlan(status: number | null, retryAfter: string | null, attempt: number, maxRetries: number): { retry: boolean; waitMs: number } {
+  if (attempt >= maxRetries) return { retry: false, waitMs: 0 };
+  if (status === 429) {
+    if (attempt >= 1) return { retry: false, waitMs: 0 };
+    const ra = Number(retryAfter);
+    return { retry: true, waitMs: Number.isFinite(ra) && ra > 0 ? Math.min(ra * 1000, 8000) : 5000 };
+  }
+  if (status === null) return { retry: true, waitMs: 800 * 2 ** attempt };
+  if (status >= 500) return { retry: true, waitMs: 1200 * 2 ** attempt };
+  return { retry: false, waitMs: 0 };
+}
+
 export async function request(url: string, opts: RequestOptions = {}): Promise<Response> {
   const host = new URL(url).host;
   const retries = opts.retries ?? 2;
@@ -88,11 +107,12 @@ export async function request(url: string, opts: RequestOptions = {}): Promise<R
         body: opts.body,
         signal: ctrl.signal,
       });
-      if ((res.status === 429 || res.status >= 500) && attempt < retries) {
-        const ra = Number(res.headers.get('retry-after'));
-        const wait = Number.isFinite(ra) && ra > 0 ? Math.min(ra * 1000, 30000) : res.status === 429 ? 6000 * (attempt + 1) : 1200 * 2 ** attempt;
-        await sleep(wait);
-        continue;
+      if (res.status === 429 || res.status >= 500) {
+        const plan = retryPlan(res.status, res.headers.get('retry-after'), attempt, retries);
+        if (plan.retry) {
+          await sleep(plan.waitMs);
+          continue;
+        }
       }
       if (!res.ok) throw new HttpError(res.status, host, friendly(res.status, host));
       return res;
@@ -100,8 +120,9 @@ export async function request(url: string, opts: RequestOptions = {}): Promise<R
       lastErr = e;
       if (e instanceof HttpError) throw e;
       if (opts.signal?.aborted) throw e;
-      if (attempt < retries) {
-        await sleep(800 * 2 ** attempt);
+      const plan = retryPlan(null, null, attempt, retries);
+      if (plan.retry) {
+        await sleep(plan.waitMs);
         continue;
       }
     } finally {
@@ -147,4 +168,29 @@ export async function pool<T, R>(items: T[], limit: number, fn: (item: T, index:
   }
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return out;
+}
+
+/**
+ * Comme `pool`, mais sans masquer les échecs : on sait combien de tâches ont échoué et pourquoi.
+ * Les appelants lèvent une erreur quand TOUT a échoué (au lieu d'afficher « aucune donnée » comme si c'était normal)
+ * et signalent « données partielles » quand une partie seulement a échoué.
+ */
+export async function poolStrict<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<{ results: (R | null)[]; failed: number; firstError: unknown }> {
+  const results: (R | null)[] = new Array(items.length).fill(null);
+  let failed = 0;
+  let firstError: unknown = null;
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        results[i] = await fn(items[i], i);
+      } catch (e) {
+        failed++;
+        if (firstError == null) firstError = e;
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return { results, failed, firstError };
 }

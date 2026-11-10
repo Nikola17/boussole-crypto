@@ -7,7 +7,7 @@ import { YIELD_OPTIONS, type YieldQuote } from '../lib/staking';
 
 export function useYields() {
   const results = useQueries({
-    queries: YIELD_OPTIONS.map((o) => ({ queryKey: ['yield', o.id], queryFn: () => getPoolQuote(o.id), staleTime: 30 * 60_000, retry: 1 })),
+    queries: YIELD_OPTIONS.map((o) => ({ queryKey: ['yield', o.id], queryFn: () => getPoolQuote(o.id), staleTime: 30 * 60_000 })),
   });
   const stamp = results.map((r) => r.dataUpdatedAt).join(',');
   const quotes = useMemo(

@@ -47,7 +47,6 @@ export function useWalletBalances() {
       queryFn: () => fetchWallet(w),
       // Une clé publique étendue demande des dizaines de lectures : on la rafraîchit moins souvent.
       staleTime: isExtendedKey(w.address) ? 30 * 60_000 : 5 * 60_000,
-      retry: 1,
     })),
   });
   return { wallets, results };

@@ -4,7 +4,7 @@ import { Scale } from 'lucide-react';
 import { useBenchmark } from '../hooks/useBenchmark';
 import type { Comparison } from '../lib/benchmark';
 import { fmtMoney, fmtPct } from '../lib/format';
-import { Card, Delta } from './ui';
+import { Card, Delta, ErrorNote } from './ui';
 
 function Row({ title, c, rate, currency }: { title: string; c: Comparison; rate: number; currency: 'EUR' | 'USD' }) {
   const better = c.diffUsd >= 0;
@@ -24,9 +24,9 @@ function Row({ title, c, rate, currency }: { title: string; c: Comparison; rate:
 }
 
 export function BenchmarkCard() {
-  const { all, disc, rate, currency } = useBenchmark();
+  const { all, disc, rate, currency, error, retry } = useBenchmark();
 
-  if (!all && !disc) return null;
+  if (!all && !disc) return error ? <ErrorNote error={error} onRetry={retry} /> : null;
   return (
     <Card
       title={<span className="inline-flex items-center gap-2"><Scale className="size-4 text-accent" />Et si tout avait été en Bitcoin ?</span>}

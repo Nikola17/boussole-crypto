@@ -8,7 +8,9 @@ import { MODEL_INFO } from '../ai/claude';
 import { buildAiConfig, testConnection } from '../ai/run';
 import { NOUS_BASE_URL } from '../ai/openai';
 import { useCompatModels } from '../hooks/useAiModels';
-import { backupFolderLabel, ensureNotificationPermission, isElectron, openBackupFolder, openExternal, platformLabel, saveTextFile } from '../lib/platform';
+import { backupFolderLabel, ensureNotificationPermission, isElectron, isNative, openBackupFolder, openExternal, platformLabel, saveTextFile } from '../lib/platform';
+import { describeRunnerStatus, readRunnerStatus } from '../lib/runnerSync';
+import { useQuery } from '@tanstack/react-query';
 import { isoDay } from '../lib/format';
 import { Banner, Button, Card, Field, Input, Modal, NumberInput, PageHeader, Segmented, Select, Toggle } from '../components/ui';
 import type { AiModel, AiProvider, ThemeMode } from '../types';
@@ -30,6 +32,14 @@ const RECOMMENDED: { id: string; label: string; note: string }[] = [
   { id: 'openai/gpt-6-astra', label: 'GPT-6 Astra', note: 'Vending-Bench 2 : 15 515 $ — le meilleur disponible chez Nous, mais 5 fois plus cher que GPT-6 Sol.' },
 ];
 const CUSTOM = '__custom__';
+
+/** Android : la surveillance des alertes application fermée tourne-t-elle vraiment ? (dernier contrôle réussi, ou ce qui l'empêche). */
+function RunnerStatusLine() {
+  const q = useQuery({ queryKey: ['runner-status'], queryFn: readRunnerStatus, refetchInterval: 60_000, staleTime: 0, enabled: isNative });
+  if (!isNative || q.isLoading) return null;
+  const d = describeRunnerStatus(q.data ?? null);
+  return <p className={`-mt-2 text-xs ${d.ok ? 'text-ink-2' : 'text-warn'}`}>{d.text}</p>;
+}
 
 export default function Settings() {
   const settings = useStore((s) => s.settings);
@@ -218,6 +228,7 @@ export default function Settings() {
               <NumberInput value={settings.taxRatePct} onChange={(v) => set({ taxRatePct: v === '' ? 31.4 : v })} />
             </Field>
             <Toggle checked={settings.notifications} onChange={async (v) => { if (v) await ensureNotificationPermission(); set({ notifications: v }); }} label="Notifications" hint="Alertes de prix, paliers de vente, échéances du panier, changement de zone du marché, bilan du dimanche." />
+            {settings.notifications && <RunnerStatusLine />}
             {isElectron && (
               <>
                 <Toggle checked={settings.closeToTray} onChange={(v) => set({ closeToTray: v })} label="Rester actif en arrière-plan" hint="Fermer la fenêtre garde Boussole dans la zone de notification : les alertes continuent d’arriver. « Quitter » dans le menu de son icône l’arrête vraiment." />

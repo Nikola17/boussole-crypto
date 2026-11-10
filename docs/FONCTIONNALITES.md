@@ -37,7 +37,7 @@ Nico, investisseur particulier en France. Il fait du DCA, s'intéresse aux pépi
 - Analyses IA bloquées tant que les données de marché et le portefeuille ne sont pas chargés (évite une position à 0 €).
 - Correctif Android : barre de navigation du bas poussée hors de l'écran par un débordement horizontal.
 
-## Versions 1.2 à 1.6.0 — de l'outil générique à ton vrai portefeuille
+## Versions 1.2 à 1.6.1 — de l'outil générique à ton vrai portefeuille
 
 Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur Crypto.com alimenté par un DCA de 25 USDC deux fois par semaine, et l'envie de faire de la DeFi sur Phantom. Les règles par défaut sont décrites dans [STRATEGIE.md](STRATEGIE.md) ; le prompt Grok amélioré dans [PROMPT-GROK-DCA.md](PROMPT-GROK-DCA.md).
 
@@ -85,6 +85,14 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Réponses de l'IA** : plus aucune image ; le vrai domaine de chaque lien est affiché, avec confirmation avant d'ouvrir un site inconnu.
 - **Import Crypto.com** : tes saisies manuelles déjà présentes dans le fichier sont proposées au remplacement (plus de doublons avec « J'ai passé ces ordres »), et les ventes sans stock déclenchent une saisie du solde d'ouverture.
 - **Chiffres** : calcul du portefeuille extrait et testé ; plus de double comptage pendant la lecture d'un Ledger, wallet à relier détecté ; prix moyen calculé sur la part qui a un historique ; poids par crypto ; « prix indisponible » au lieu de 0 € ; soldes de tokens illisibles signalés (ce n'est pas un solde nul) ; comparaison avec Bitcoin qui compte dépôts et retraits ; taux EUR/USD du jour de l'opération pour une saisie passée ; DCA toutes les deux semaines insensible au changement d'heure ; annuler une échéance du panier ou du DCA retire aussi ses transactions.
+
+### v1.6.1 — Une application qui tient la distance
+- **Hors ligne ou CoinGecko saturé** : les dernières données de marché (prix, cycle, Fear & Greed, taux de change) sont gardées d'un lancement à l'autre (IndexedDB) et affichées avec un bandeau « Données d'aujourd'hui à 18:31 » plutôt qu'un écran vide à 0 €. Une seule couche de nouvelles tentatives (délais bornés, une erreur 429 ne bloque plus les autres requêtes pendant une minute).
+- **Erreurs visibles** : un scan dont toutes les analyses échouent affiche l'erreur et « Réessayer » (au lieu de « Ajoute des cryptos à ta watchlist »), « données partielles » quand une partie échoue, plus de « Chargement… » sans fin au Copilote IA et sur la fiche crypto, la comparaison avec Bitcoin dit pourquoi elle manque. « Actualiser » recharge les données sans relancer l'application.
+- **Application ouverte plusieurs jours** : l'échéance du panier, du DCA et le bilan suivent le calendrier (changement de jour à minuit), les alertes intelligentes sont réévaluées toutes les 30 minutes (bilan du dimanche 18 h), le cycle et le Fear & Greed se rafraîchissent toutes les heures. L'échéance du jour n'est plus comptée « manquée » dès le matin.
+- **Démarrage plus léger** : le brief automatique n'est préparé que s'il est activé et qu'une clé d'IA est configurée.
+- **Alertes de prix** : sur ordinateur, les alertes sur une petite crypto (hors top 250) sont vérifiées. Sur Android, le script d'arrière-plan lit les erreurs de CoinGecko, utilise ta clé « Demo », ne « consomme » une alerte qu'une fois sa notification programmée, réessaie son envoi au lancement, et Réglages affiche « dernier contrôle réussi il y a … ». Désactiver les notifications arrête vraiment la surveillance et annule les rappels programmés.
+- Android : l'état du script d'arrière-plan n'est plus renvoyé à chaque redessin de l'écran (batterie).
 
 ## Idées pour la suite (priorisées)
 

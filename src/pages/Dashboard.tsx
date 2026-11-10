@@ -1,6 +1,7 @@
 import { ArrowRight, Flame, Gauge, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { clsx } from 'clsx';
+import { useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../store/useStore';
 import { useAltSeason, useCategories, useCycle, useFearGreed, useGlobal, useMarkets, useScan, useTrending } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
@@ -28,6 +29,7 @@ function greeting(name: string) {
 export default function Dashboard() {
   const name = useStore((s) => s.profile.name);
   const currency = useStore((s) => s.settings.currency);
+  const qc = useQueryClient();
   const cycle = useCycle();
   const fng = useFearGreed(60);
   const global = useGlobal();
@@ -59,7 +61,7 @@ export default function Dashboard() {
       <PageHeader
         title={greeting(name)}
         subtitle={new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-        actions={<Button size="sm" variant="ghost" icon={<RefreshCw className="size-3.5" />} onClick={() => window.location.reload()}>Actualiser</Button>}
+        actions={<Button size="sm" variant="ghost" icon={<RefreshCw className="size-3.5" />} onClick={() => void qc.invalidateQueries()}>Actualiser</Button>}
       />
 
       <BackupReminder />
@@ -171,7 +173,7 @@ export default function Dashboard() {
                 <CostHint calls={1} searches={6} />
               </div>
               <Button variant="primary" icon={<Sparkles className="size-4" />} disabled={!briefing.ready} onClick={() => void briefing.generate()}>
-                {briefing.ready ? 'Générer le brief' : 'Chargement des données…'}
+                {briefing.ready ? 'Générer le brief' : briefing.loadError ? 'Données indisponibles' : 'Chargement des données…'}
               </Button>
             </div>
           )}
@@ -180,6 +182,7 @@ export default function Dashboard() {
         {/* Signaux de mes cryptos */}
         <Card className="lg:col-span-2" title={<span className="inline-flex items-center gap-2"><TrendingUp className="size-4 text-accent" />Signaux de mes cryptos</span>} subtitle="Watchlist, positions et plans DCA" actions={<Link to="/marche" className="text-xs font-medium text-accent hover:underline">Tous les signaux</Link>}>
           {scan.isLoading && <Spinner label="Analyse technique en cours…" />}
+          {scan.error && !scan.data && <ErrorNote error={scan.error} onRetry={() => void scan.refetch()} />}
           <ul className="divide-y divide-line">
             {signals.slice(0, 8).map(({ coin, a }) => (
               <li key={coin.id}>
@@ -197,7 +200,8 @@ export default function Dashboard() {
               </li>
             ))}
           </ul>
-          {!scan.isLoading && !signals.length && <p className="text-sm text-muted">Ajoute des cryptos à ta watchlist (étoile) pour suivre leurs signaux.</p>}
+          {!scan.isLoading && !scan.error && !signals.length && <p className="text-sm text-muted">Ajoute des cryptos à ta watchlist (étoile) pour suivre leurs signaux.</p>}
+          {!!scan.data?.failed && <p className="mt-2 text-xs text-warn">Données partielles : {scan.data.failed} analyse{scan.data.failed > 1 ? 's' : ''} n’ont pas pu être faites (réseau ou limite de requêtes).</p>}
         </Card>
       </div>
 

@@ -8,7 +8,7 @@ import { btcBenchmark, compare, discoveryFlows, fiatFlows, priceByDay, type Comp
 
 const CORE = new Set(['bitcoin', 'ethereum']);
 
-export function useBenchmark(): { all: Comparison | null; disc: Comparison | null; rate: number; currency: 'EUR' | 'USD' } {
+export function useBenchmark(): { all: Comparison | null; disc: Comparison | null; rate: number; currency: 'EUR' | 'USD'; error: Error | null; retry: () => void } {
   const txs = useStore((s) => s.transactions);
   const pf = usePortfolio();
   const btc = useBtcHistory();
@@ -28,5 +28,6 @@ export function useBenchmark(): { all: Comparison | null; disc: Comparison | nul
       disc: dflows.length ? compare(discActual, btcBenchmark(dflows, prices, now)) : null,
     };
   }, [prices, now, pf.holdings, pf.rate, txs]);
-  return { ...res, rate: pf.rate, currency: pf.currency };
+  // L'historique de Bitcoin manque : la carte le dit (avant, elle disparaissait sans explication).
+  return { ...res, rate: pf.rate, currency: pf.currency, error: (btc.error as Error | null) ?? null, retry: () => void btc.refetch() };
 }

@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { useCycle } from './useMarket';
+import { useNow } from './useClock';
 import { useBasketDue } from './useBasket';
 import { useExitPlan } from './useExitPlan';
 import { notify } from '../lib/platform';
@@ -17,6 +18,8 @@ export function useSmartAlerts() {
   const exit = useExitPlan();
   const bd = useBasketDue();
   const cycle = useCycle();
+  // Réévaluation toutes les 30 minutes : le bilan du dimanche (18 h) et le changement de jour doivent aussi se déclencher application ouverte.
+  const tick = useNow(30 * 60_000);
 
   useEffect(() => {
     if (!notifications) return;
@@ -39,7 +42,7 @@ export function useSmartAlerts() {
       if (prev && prev !== zone.label) fire(`zone:${zone.label}:${isoDay()}`, DAY, `Le marché change de zone : ${zone.label}`, zone.action);
     }
 
-    const now = new Date();
+    const now = tick;
     if (bd.basket && now.getDay() === 0 && now.getHours() >= 18) fire(`weekly:${weekKey(now)}`, 7 * DAY, 'Bilan de la semaine prêt', 'Ouvre le Cockpit : échéances, réserve, règles et écart avec Bitcoin.');
-  }, [notifications, exit, bd, cycle.data]);
+  }, [notifications, exit, bd, cycle.data, tick]);
 }

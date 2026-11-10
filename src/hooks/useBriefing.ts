@@ -62,5 +62,7 @@ export function useBriefing() {
     error: run.error,
     cancel: () => run.controller?.abort(),
     ready: ctx.ready && !!ctx.cycle && !scan.isLoading,
+    loadError: ctx.loadError ?? ((scan.error as Error | null) ?? null),
+    retry: ctx.retry,
   };
 }

@@ -7,7 +7,7 @@ import { binanceSymbolFor, getAllPrices, getBtcFunding, getDailyHistory, getKlin
 import { getFearGreed } from '../api/feargreed';
 import { getFees, getProtocols, getStablecoinChange30d } from '../api/defillama';
 import { getNewPools, getTrendingPools, type DexPool } from '../api/dex';
-import { pool } from '../api/http';
+import { poolStrict } from '../api/http';
 import { altSeasonIndex, computeCycle } from '../lib/cycle';
 import { analyze, type Analysis } from '../lib/signals';
 import type { Candle } from '../lib/indicators';
@@ -37,7 +37,6 @@ export function useFx(): number {
       return v;
     },
     staleTime: 60 * MIN,
-    retry: 1,
   });
   return q.data ?? readFx();
 }
@@ -48,7 +47,6 @@ export function useEurUsdHistory(enabled: boolean) {
     queryKey: ['eurusd-history'],
     enabled,
     staleTime: 12 * 60 * MIN,
-    retry: 1,
     queryFn: async () => new Map((await getDailyHistory('EURUSDT', Date.UTC(2018, 10, 1))).map((c) => [new Date(c.time * 1000).toISOString().slice(0, 10), c.close] as const)),
   });
 }
@@ -70,7 +68,7 @@ export function useGlobal() {
 }
 
 export function useFearGreed(limit = 60) {
-  return useQuery({ queryKey: ['fng', limit], queryFn: () => getFearGreed(limit), staleTime: 30 * MIN });
+  return useQuery({ queryKey: ['fng', limit], queryFn: () => getFearGreed(limit), staleTime: 30 * MIN, refetchInterval: 60 * MIN });
 }
 
 export function useTrending() {
@@ -87,15 +85,16 @@ export function useBtcHistory() {
     queryFn: () => getDailyHistory('BTCUSDT', Date.UTC(2017, 7, 17)),
     staleTime: 60 * MIN,
     gcTime: 120 * MIN,
+    refetchInterval: 60 * MIN,
   });
 }
 
 export function useFunding() {
-  return useQuery({ queryKey: ['funding'], queryFn: getBtcFunding, staleTime: 30 * MIN, retry: 0 });
+  return useQuery({ queryKey: ['funding'], queryFn: getBtcFunding, staleTime: 30 * MIN, refetchInterval: 60 * MIN, retry: 0 });
 }
 
 export function useStablecoins() {
-  return useQuery({ queryKey: ['stables'], queryFn: getStablecoinChange30d, staleTime: 60 * MIN, retry: 1 });
+  return useQuery({ queryKey: ['stables'], queryFn: getStablecoinChange30d, staleTime: 60 * MIN });
 }
 
 export function useCycle() {
@@ -171,6 +170,9 @@ export function useCoinCandles(coin: { id: string; symbol: string; priceUsd: num
   });
 }
 
+/** Résultat d'un scan : une analyse par crypto (null si indisponible) et le nombre d'analyses qui ont échoué. */
+export type ScanMap = Map<string, Analysis | null> & { failed?: number };
+
 export interface ScanRow {
   id: string;
   analysis: Analysis | null;
@@ -187,14 +189,17 @@ export function useScan(coins: cg.CgMarket[], temperature: number | undefined, e
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const prices = await getAllPrices().catch(() => new Map<string, number>());
-      const results = await pool(coins, 6, async (c) => {
+      const { results, failed, firstError } = await poolStrict(coins, 6, async (c) => {
         const sym = binanceSymbolFor({ id: c.id, symbol: c.symbol, priceUsd: c.current_price }, prices);
         if (!sym) return { id: c.id, analysis: null } as ScanRow;
         const candles = await getKlines(sym, '1d', 400);
         return { id: c.id, analysis: analyze(candles, { temperature, athChangePct: c.ath_change_percentage }) } as ScanRow;
       });
-      const map = new Map<string, Analysis | null>();
+      // Tout a échoué (réseau coupé, Binance injoignable) : c'est une erreur à montrer, pas « aucune crypto à analyser ».
+      if (failed > 0 && failed === coins.length) throw firstError instanceof Error ? firstError : new Error('Analyse technique indisponible pour le moment.');
+      const map: ScanMap = new Map<string, Analysis | null>();
       results.forEach((r, i) => map.set(coins[i].id, r?.analysis ?? null));
+      map.failed = failed; // analyses manquantes : l'écran peut dire « données partielles »
       return map;
     },
   });
@@ -233,8 +238,9 @@ export function useSmallCaps(enabled: boolean) {
     enabled,
     staleTime: 20 * MIN,
     queryFn: async () => {
-      const pages = await pool([2, 3, 4, 5], 1, (p) => cg.getMarkets({ page: p, perPage: 250 }));
-      return pages.flatMap((p) => p ?? []);
+      const { results, failed, firstError } = await poolStrict([2, 3, 4, 5], 1, (p) => cg.getMarkets({ page: p, perPage: 250 }));
+      if (failed === 4) throw firstError instanceof Error ? firstError : new Error('Liste des petites capitalisations indisponible.');
+      return results.flatMap((p) => p ?? []);
     },
   });
 }
@@ -251,7 +257,8 @@ export function useDexPools(networks: string[], includeNew: boolean, enabled: bo
         jobs.push(() => getTrendingPools(n, 1));
         if (includeNew) jobs.push(() => getNewPools(n, 1));
       }
-      const res = await pool(jobs, 2, (job) => job());
+      const { results: res, failed, firstError } = await poolStrict(jobs, 2, (job) => job());
+      if (jobs.length > 0 && failed === jobs.length) throw firstError instanceof Error ? firstError : new Error('Pools DEX indisponibles pour le moment.');
       const all = res.flatMap((r) => r ?? []);
       const seen = new Set<string>();
       return all.filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));

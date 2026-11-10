@@ -9,6 +9,7 @@ import { usePortfolio } from './usePortfolio';
 import { lastOccurrence, multiplierFor, nextOccurrences, periodKey } from '../lib/dca';
 import { BUCKET_LABEL, isStable, isWrappedOrStaked, rebalance, rebalanceAction } from '../lib/portfolio';
 import { brokenThesisCoins, lagsBitcoin } from '../lib/rules';
+import { useToday } from './useClock';
 import { aggregateByCoin } from '../lib/holdings';
 import { fmtMoney } from '../lib/format';
 import { rulesOf } from '../lib/profile';
@@ -54,8 +55,8 @@ export function useDcaStatus(): DcaStatus[] {
   const cycle = useCycle();
   const focus = useFocusCoins();
   const scan = useScan(focus, cycle.data?.temperature);
+  const today = useToday();
   return useMemo(() => {
-    const today = new Date();
     const f = fng.data ?? [];
     return plans.map((p) => {
       const last = lastOccurrence(p, today);
@@ -74,7 +75,7 @@ export function useDcaStatus(): DcaStatus[] {
         next: nextOccurrences(p, new Date(today.getTime() + 86400000), 1)[0] ?? null,
       };
     });
-  }, [plans, executions, fng.data, cycle.data, scan.data]);
+  }, [plans, executions, fng.data, cycle.data, scan.data, today]);
 }
 
 export function useGuidance(): Guidance[] {

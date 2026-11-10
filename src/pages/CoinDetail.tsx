@@ -274,7 +274,9 @@ export default function CoinDetail({ id }: { id: string }) {
               <Button icon={<CircleAlert className="size-4" />} disabled={runner.running || !dataReady} onClick={() => run('pulse')}>Pourquoi ça bouge ?</Button>
               {thesis && <Button icon={<BookOpenCheck className="size-4" />} disabled={runner.running || !dataReady} onClick={() => run('thesis')}>Vérifier ma thèse</Button>}
             </div>
-            {!dataReady && <p className="text-xs text-muted">Chargement des données de marché et de ton portefeuille… les analyses seront disponibles dans un instant.</p>}
+            {!dataReady && (markets.error || cycle.error)
+              ? <ErrorNote error={(markets.error ?? cycle.error) as Error} onRetry={() => void markets.refetch()} />
+              : !dataReady && <p className="text-xs text-muted">Chargement des données de marché et de ton portefeuille… les analyses seront disponibles dans un instant.</p>}
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               <span className="text-xs text-muted">Rapide : <CostHint calls={1} searches={4} /></span>
               <span className="text-xs text-muted">Comité : <CostHint calls={5} searches={16} /></span>

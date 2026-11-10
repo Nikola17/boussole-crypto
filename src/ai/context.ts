@@ -173,7 +173,10 @@ export function useAiContext() {
   }), [profile]);
 
   // Prêt seulement quand le portefeuille est complètement chargé : sinon l'IA décrirait un portefeuille sans le Ledger.
-  return { market, portfolio, dca, profile: profileCtx, cycle: cycle.data, ready: !!markets.data && !pf.loading, portfolioComplete: !pf.walletsIncomplete };
+  // `loadError` : pourquoi les données ne se chargent pas (réseau, CoinGecko saturé) : l'écran le dit au lieu d'afficher « Chargement… » sans fin.
+  const loadError = (markets.error ?? cycle.error ?? null) as Error | null;
+  const retry = () => { void markets.refetch(); };
+  return { market, portfolio, dca, profile: profileCtx, cycle: cycle.data, ready: !!markets.data && !pf.loading, portfolioComplete: !pf.walletsIncomplete, loadError, retry };
 }
 
 export function toJsonBlock(label: string, data: unknown): string {
