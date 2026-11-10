@@ -8,6 +8,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useHashPath } from '../router';
 import { useStore } from '../store/useStore';
 import { aiReady } from '../ai/run';
+import { StorageBanner } from './StatusBanners';
 
 export const NAV = [
   { to: '/', label: 'Cockpit', icon: LayoutDashboard, mobile: true },
@@ -98,7 +99,10 @@ export function Layout({ children }: { children: ReactNode }) {
           </button>
         </header>
 
-        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-28 pt-4 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-28 pt-4 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">
+          <div className="empty:hidden [&:not(:empty)]:mb-4"><StorageBanner /></div>
+          {children}
+        </main>
 
         {/* Barre du bas mobile */}
         <nav className={clsx('safe-bottom fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface/95 backdrop-blur lg:hidden', typing && 'hidden')} aria-label="Navigation">

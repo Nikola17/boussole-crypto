@@ -9,6 +9,7 @@ import type { BasketPlan, DcaPlan } from '../types';
 import { nextOccurrences } from './dca';
 import { nextBasketOccurrences } from './basket';
 import { requestRunnerPermission } from './runnerSync';
+import { backupFileName, backupsToPrune, KEEP, saveLastBackup } from './autoBackup';
 
 export const isNative = Capacitor.isNativePlatform();
 export const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
@@ -17,6 +18,9 @@ export const platformLabel = isNative ? 'Android' : isElectron ? 'Windows' : 'Na
 interface DesktopApi {
   get: () => Promise<{ background: boolean; autoStart: boolean }>;
   set: (patch: { background?: boolean; autoStart?: boolean }) => Promise<{ background: boolean; autoStart: boolean }>;
+  /** Écrit un fichier de sauvegarde dans Documents\Boussole\sauvegardes et supprime les plus anciens. */
+  backup?: (kind: 'auto' | 'avant-import', content: string) => Promise<{ ok: boolean; path?: string; error?: string } | null>;
+  openBackups?: () => Promise<boolean>;
 }
 
 /** Pont vers le processus principal d'Electron (zone de notification, démarrage avec Windows) ; null ailleurs. */
@@ -144,4 +148,55 @@ export async function saveTextFile(filename: string, content: string): Promise<s
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   return 'Fichier de sauvegarde téléchargé.';
+}
+
+export interface BackupWrite { ok: boolean; where: string; error?: string }
+
+/** Où se trouvent les sauvegardes automatiques, en clair pour l'utilisateur. */
+export const backupFolderLabel = isNative ? 'Documents/Boussole' : isElectron ? String.raw`Documents\Boussole\sauvegardes` : '';
+
+/**
+ * Enregistre une sauvegarde dans un dossier visible de l'utilisateur, hors des données de l'application
+ * (elle survit donc à une réinstallation). Sur navigateur, rien n'est écrit : l'export manuel reste possible.
+ */
+export async function writeBackupFile(kind: 'auto' | 'avant-import', content: string): Promise<BackupWrite> {
+  try {
+    if (isNative) {
+      const dir = 'Boussole';
+      const name = backupFileName(kind);
+      const write = () => Filesystem.writeFile({ path: `${dir}/${name}`, data: content, directory: Directory.Documents, encoding: Encoding.UTF8, recursive: true });
+      try {
+        await write();
+      } catch {
+        // Android 10 et antérieur : l'autorisation de stockage doit être accordée une fois.
+        const perm = await Filesystem.requestPermissions();
+        if (perm.publicStorage !== 'granted') throw new Error('autorisation de stockage refusée');
+        await write();
+      }
+      try {
+        const list = await Filesystem.readdir({ path: dir, directory: Directory.Documents });
+        for (const old of backupsToPrune(list.files.map((f) => f.name), kind, KEEP[kind])) {
+          await Filesystem.deleteFile({ path: `${dir}/${old}`, directory: Directory.Documents }).catch(() => undefined);
+        }
+      } catch { /* le nettoyage est facultatif */ }
+      saveLastBackup({ at: new Date().toISOString(), where: `Documents/${dir}`, kind });
+      return { ok: true, where: `Documents/${dir}/${name}` };
+    }
+    const d = desktop();
+    if (d?.backup) {
+      const r = await d.backup(kind, content);
+      if (r?.ok) {
+        saveLastBackup({ at: new Date().toISOString(), where: r.path ?? '', kind });
+        return { ok: true, where: r.path ?? '' };
+      }
+      return { ok: false, where: '', error: r?.error ?? 'écriture refusée' };
+    }
+    return { ok: false, where: '', error: 'indisponible dans un navigateur' };
+  } catch (e) {
+    return { ok: false, where: '', error: (e as Error).message };
+  }
+}
+
+export async function openBackupFolder(): Promise<boolean> {
+  try { return (await desktop()?.openBackups?.()) ?? false; } catch { return false; }
 }

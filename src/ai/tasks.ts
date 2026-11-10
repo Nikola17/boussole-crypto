@@ -12,6 +12,7 @@ import { toJsonBlock } from './context';
 import { getNews } from '../api/news';
 import type { AiReport, AiReportKind, AiSource, AiUsage, ChatMessage } from '../types';
 import { isoDay, uid } from '../lib/format';
+import { sanitizeReportData } from '../lib/reportData';
 
 export type { AiConfig } from './run';
 
@@ -57,7 +58,7 @@ function makeReport(kind: AiReportKind, title: string, r: { text: string; usage:
     day: isoDay(),
     model: r.model,
     markdown,
-    data: data as Record<string, unknown> | null,
+    data: sanitizeReportData(kind, data),
     usage: r.usage,
     sources: r.sources,
     ...extra,

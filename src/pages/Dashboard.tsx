@@ -8,6 +8,8 @@ import { useFocusCoins, useGuidance } from '../hooks/useGuidance';
 import { useBriefing } from '../hooks/useBriefing';
 import { fmtCompact, fmtMoney, fmtPrice } from '../lib/format';
 import { Link, navigate } from '../router';
+import { readBriefActions } from '../lib/reportData';
+import { BackupReminder } from '../components/StatusBanners';
 import {
   Badge, Banner, Button, Card, CoinIcon, Delta, ErrorNote, InfoTip, PageHeader, SignalBadge, Sparkline, Spinner, Stat,
   TemperatureMeter,
@@ -48,7 +50,9 @@ export default function Dashboard() {
     return rows.sort((x, y) => (y.a!.investor.score + y.a!.trader.score) - (x.a!.investor.score + x.a!.trader.score));
   }, [focus, scan.data]);
 
-  const briefActions = (briefing.todays?.data?.actions as { type: string; asset: string; detail: string; priority: number }[] | undefined) ?? null;
+  // Le JSON de l'IA est remis en forme : une réponse mal formée ne peut plus faire planter le Cockpit.
+  const briefActionList = readBriefActions(briefing.todays?.data?.actions);
+  const briefActions = briefActionList.length ? briefActionList : null;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -57,6 +61,8 @@ export default function Dashboard() {
         subtitle={new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
         actions={<Button size="sm" variant="ghost" icon={<RefreshCw className="size-3.5" />} onClick={() => window.location.reload()}>Actualiser</Button>}
       />
+
+      <BackupReminder />
 
       {markets.error && <ErrorNote error={markets.error} onRetry={() => markets.refetch()} />}
 

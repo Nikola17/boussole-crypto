@@ -37,7 +37,7 @@ Nico, investisseur particulier en France. Il fait du DCA, s'intéresse aux pépi
 - Analyses IA bloquées tant que les données de marché et le portefeuille ne sont pas chargés (évite une position à 0 €).
 - Correctif Android : barre de navigation du bas poussée hors de l'écran par un débordement horizontal.
 
-## Versions 1.2 à 1.5 — de l'outil générique à ton vrai portefeuille
+## Versions 1.2 à 1.5.1 — de l'outil générique à ton vrai portefeuille
 
 Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur Crypto.com alimenté par un DCA de 25 USDC deux fois par semaine, et l'envie de faire de la DeFi sur Phantom. Les règles par défaut sont décrites dans [STRATEGIE.md](STRATEGIE.md) ; le prompt Grok amélioré dans [PROMPT-GROK-DCA.md](PROMPT-GROK-DCA.md).
 
@@ -65,6 +65,14 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 ### v1.5 — Rendement et DeFi
 - **Rendement et staking** : neuf options reconnues (Lido, ether.fi, Rocket Pool, Jito, Marinade, Jupiter, Kinetiq, Aave, Maple), rendement lu sur DefiLlama, gain à ta taille, risques et mode d'emploi. « Pas la peine » sous 10 € par an.
 - **Enveloppe DeFi** : plafond en % du portefeuille, achat maximal, mise retirée à ×2, pause d'un mois après −50 %, contrôle avant achat d'un token Solana (sécurité, liquidité, âge, concentration), journal des paris.
+
+### v1.5.1 — Ne plus rien perdre
+- **Sauvegarde automatique quotidienne** (PC : `Documents\Boussole\sauvegardes`, 14 fichiers gardés ; Android : `Documents/Boussole`), sans clé API. Réglages indique la dernière sauvegarde ; le Cockpit rappelle au-delà de 7 jours.
+- **Import sûr** : le fichier est vérifié (éléments illisibles ignorés), un résumé « sur cet appareil / dans le fichier » demande confirmation, une copie « avant import » est faite, et ni les clés API ni le serveur d'IA ne sont jamais repris d'un fichier.
+- **Stockage protégé** : migrations de format prévues, copie de précaution avant toute migration, bandeau si le stockage est plein ou si les données viennent d'une version plus récente (lecture seule, rien n'est écrasé).
+- **Écran de secours** : une erreur d'affichage ne laisse plus un écran blanc ; export, suppression des rapports IA ou réinitialisation proposés. Le JSON renvoyé par l'IA est remis en forme avant stockage et affichage.
+- Export : la clé CoinGecko n'est plus incluse. Plafonds réduits (25 rapports IA, 60 messages de chat).
+- Importeur Crypto.com : une date seule ne crée plus d'heure fictive à minuit.
 
 ## Idées pour la suite (priorisées)
 

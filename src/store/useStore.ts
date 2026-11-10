@@ -10,6 +10,8 @@ import { defaultProfile, rulesOf } from '../lib/profile';
 import { DEFAULT_ENVELOPE } from '../lib/envelope';
 import { uid } from '../lib/format';
 import { DEFAULT_COMPAT_MODEL, NOUS_BASE_URL } from '../ai/openai';
+import { BACKUP_KEYS, DATA_VERSION } from '../lib/backup';
+import { guardedStorage, migrateState, STORE_KEY, systemStorage, useStorageStatus } from './persistence';
 
 export interface AppState {
   settings: Settings;
@@ -108,8 +110,11 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
   return copy;
 }
 
-const MAX_REPORTS = 60;
-const MAX_CHAT = 80;
+// Plafonds : les rapports IA (surtout ceux du comité) et le chat sont les plus gros consommateurs du stockage local (≈ 5 Mo).
+const MAX_REPORTS = 25;
+const MAX_CHAT = 60;
+/** Seuls les rapports les plus récents gardent le détail de chaque analyste du comité. */
+const KEEP_PARTS = 6;
 
 const initialData = () => ({
   settings: { ...defaultSettings },
@@ -136,22 +141,9 @@ const initialData = () => ({
   cdcSeen: [] as string[],
 });
 
-/** Stockage tolérant : si le stockage local est indisponible, l'app fonctionne en mémoire. */
-const safeStorage = createJSONStorage(() => {
-  try {
-    const k = '__boussole_test__';
-    localStorage.setItem(k, '1');
-    localStorage.removeItem(k);
-    return localStorage;
-  } catch {
-    const mem = new Map<string, string>();
-    return {
-      getItem: (n: string) => mem.get(n) ?? null,
-      setItem: (n: string, v: string) => void mem.set(n, v),
-      removeItem: (n: string) => void mem.delete(n),
-    };
-  }
-});
+const system = systemStorage();
+if (system.memory) useStorageStatus.getState().setStatus({ kind: 'memory' });
+const safeStorage = createJSONStorage(() => guardedStorage(system.backend, (st) => useStorageStatus.getState().setStatus(st)));
 
 export const useStore = create<AppState>()(
   persist(
@@ -181,7 +173,9 @@ export const useStore = create<AppState>()(
       removeAirdrop: (id) => set((s) => ({ airdrops: s.airdrops.filter((x) => x.id !== id) })),
       upsertThesis: (t) => set((s) => ({ theses: upsert(s.theses, t) })),
       removeThesis: (id) => set((s) => ({ theses: s.theses.filter((x) => x.id !== id) })),
-      addReport: (r) => set((s) => ({ reports: [r, ...s.reports.filter((x) => x.id !== r.id)].slice(0, MAX_REPORTS) })),
+      addReport: (r) => set((s) => ({
+        reports: [r, ...s.reports.filter((x) => x.id !== r.id)].slice(0, MAX_REPORTS).map((x, i) => (i >= KEEP_PARTS && x.parts ? { ...x, parts: undefined } : x)),
+      })),
       removeReport: (id) => set((s) => ({ reports: s.reports.filter((x) => x.id !== id) })),
       addChat: (m) => set((s) => ({ chat: [...s.chat, m].slice(-MAX_CHAT) })),
       clearChat: () => set({ chat: [] }),
@@ -221,39 +215,24 @@ export const useStore = create<AppState>()(
         return { added: fresh.length, skipped: txs.length - fresh.length };
       },
       importAll: (data) => set((s) => {
-        const profile = { ...s.profile, ...(data.profile ?? {}) };
-        return { ...s, ...data, settings: { ...s.settings, ...(data.settings ?? {}) }, profile: { ...profile, rules: rulesOf(profile) } };
+        // Seules les rubriques connues sont reprises, et les réglages passent par une liste blanche (voir lib/backup.ts).
+        const next: Record<string, unknown> = {};
+        for (const k of BACKUP_KEYS) if (k in data) next[k] = (data as Record<string, unknown>)[k];
+        const profile = { ...s.profile, ...((next.profile as Partial<Profile> | undefined) ?? {}) };
+        return {
+          ...next,
+          settings: { ...s.settings, ...((next.settings as Partial<Settings> | undefined) ?? {}) },
+          profile: { ...profile, rules: rulesOf(profile) },
+        } as Partial<AppState>;
       }),
       resetAll: () => set({ ...initialData() }),
     }),
     {
-      name: 'boussole-data',
-      version: 1,
+      name: STORE_KEY,
+      version: DATA_VERSION,
+      migrate: migrateState as (persisted: unknown, version: number) => AppState,
       storage: safeStorage,
-      partialize: (s) => ({
-        settings: s.settings,
-        profile: s.profile,
-        watchlist: s.watchlist,
-        watchedTokens: s.watchedTokens,
-        transactions: s.transactions,
-        wallets: s.wallets,
-        dcaPlans: s.dcaPlans,
-        dcaExecutions: s.dcaExecutions,
-        trades: s.trades,
-        alerts: s.alerts,
-        airdrops: s.airdrops,
-        theses: s.theses,
-        reports: s.reports,
-        chat: s.chat,
-        checklist: s.checklist,
-        accounts: s.accounts,
-        basket: s.basket,
-        basketExecutions: s.basketExecutions,
-        exitDone: s.exitDone,
-        envelope: s.envelope,
-        defiBets: s.defiBets,
-        cdcSeen: s.cdcSeen,
-      }),
+      partialize: (s) => Object.fromEntries(BACKUP_KEYS.map((k) => [k, s[k]])) as Partial<AppState>,
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState>;
         const saved = (p.settings ?? {}) as Partial<Settings>;
@@ -272,31 +251,16 @@ export const useStore = create<AppState>()(
   ),
 );
 
-export const BACKUP_KEYS = [
-  'settings', 'profile', 'watchlist', 'watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions',
-  'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'checklist', 'accounts', 'basket', 'basketExecutions', 'exitDone', 'envelope', 'defiBets', 'cdcSeen',
-] as const;
-
-export function exportBackup(includeKey = false): string {
+/**
+ * Contenu d'un fichier de sauvegarde. Jamais les clés API (Claude, Nous Portal, CoinGecko) : le fichier contient en revanche
+ * tout l'historique, les adresses suivies et les clés publiques étendues (xpub) : à ranger comme un document financier.
+ */
+export function exportBackup(includeKeys = false): string {
   const s = useStore.getState();
-  const data: Record<string, unknown> = { app: 'boussole-crypto', version: 1, exportedAt: new Date().toISOString() };
+  const data: Record<string, unknown> = { app: 'boussole-crypto', version: DATA_VERSION, exportedAt: new Date().toISOString() };
   for (const k of BACKUP_KEYS) data[k] = s[k];
-  if (!includeKey) data.settings = { ...s.settings, anthropicKey: '', compatKey: '' };
+  if (!includeKeys) data.settings = { ...s.settings, anthropicKey: '', compatKey: '', coingeckoKey: '' };
   return JSON.stringify(data, null, 2);
-}
-
-export function parseBackup(json: string): Partial<AppState> {
-  const data = JSON.parse(json) as Record<string, unknown>;
-  if (data.app !== 'boussole-crypto') throw new Error('Ce fichier n’est pas une sauvegarde Boussole.');
-  const out: Record<string, unknown> = {};
-  for (const k of BACKUP_KEYS) if (k in data) out[k] = data[k];
-  const settings = out.settings as Settings | undefined;
-  if (settings) {
-    // Les clés ne sont jamais exportées : ne pas écraser celles de cet appareil par des clés vides
-    const cur = useStore.getState().settings;
-    out.settings = { ...settings, anthropicKey: settings.anthropicKey || cur.anthropicKey, compatKey: settings.compatKey || cur.compatKey };
-  }
-  return out as Partial<AppState>;
 }
 
 export const newId = uid;

@@ -25,6 +25,30 @@ function saveDesktop() {
   try { fs.writeFileSync(stateFile(), JSON.stringify(desktop)); } catch { /* non bloquant */ }
 }
 
+// Sauvegardes automatiques : Documents/Boussole/sauvegardes, hors des données de l'application (elles survivent à une réinstallation).
+const KEEP_BACKUPS = { auto: 14, 'avant-import': 5 };
+// BOUSSOLE_BACKUP_DIR : dossier de remplacement, utilisé uniquement par les tests automatiques.
+const backupDir = () => process.env.BOUSSOLE_BACKUP_DIR || path.join(app.getPath('documents'), 'Boussole', 'sauvegardes');
+
+function writeBackup(kind, content) {
+  if (!Object.prototype.hasOwnProperty.call(KEEP_BACKUPS, kind) || typeof content !== 'string' || content.length === 0 || content.length > 60 * 1024 * 1024) {
+    return { ok: false, error: 'demande invalide' };
+  }
+  const dir = backupDir();
+  fs.mkdirSync(dir, { recursive: true });
+  const d = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  const name = `boussole-${kind}-${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}.json`;
+  const file = path.join(dir, name);
+  fs.writeFileSync(file, content, 'utf8');
+  // On ne garde que les plus récentes de chaque type.
+  const mine = fs.readdirSync(dir).filter((n) => n.startsWith(`boussole-${kind}-`) && n.endsWith('.json')).sort().reverse();
+  for (const old of mine.slice(KEEP_BACKUPS[kind])) {
+    try { fs.unlinkSync(path.join(dir, old)); } catch { /* non bloquant */ }
+  }
+  return { ok: true, path: file };
+}
+
 function isAllowedNavigation(url) {
   if (url.startsWith('file://')) return true;
   if (DEV_URL && url.startsWith(DEV_URL)) return true;
@@ -157,6 +181,18 @@ app.whenReady().then(() => {
     ensureTray();
     applyAutoStart();
     return { background: desktop.background, autoStart: desktop.autoStart };
+  });
+
+  ipcMain.handle('desktop:backup', (event, kind, content) => {
+    if (!fromApp(event)) return null;
+    try { return writeBackup(kind, content); } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  });
+  ipcMain.handle('desktop:openBackups', async (event) => {
+    if (!fromApp(event)) return false;
+    try {
+      fs.mkdirSync(backupDir(), { recursive: true });
+      return (await shell.openPath(backupDir())) === '';
+    } catch { return false; }
   });
 
   ensureTray();

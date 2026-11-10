@@ -14,6 +14,7 @@ import {
 import { AiProgress, CostHint, NeedKey, ReportView, useAiConfig, useAiRunner } from '../components/AiBlocks';
 import { useAiContext } from '../ai/context';
 import { runAirdropScout } from '../ai/tasks';
+import { readScoutItems } from '../lib/reportData';
 import type { AirdropItem, AirdropStatus } from '../types';
 
 type Tab = 'tracker' | 'radar' | 'scout' | 'securite';
@@ -21,11 +22,6 @@ type Tab = 'tracker' | 'radar' | 'scout' | 'securite';
 const STATUS: Record<AirdropStatus, string> = {
   idee: 'À étudier', farming: 'En cours', eligible: 'Éligible', claimable: 'À réclamer', claimed: 'Réclamé', abandoned: 'Abandonné',
 };
-
-interface ScoutItem {
-  name: string; ecosystem?: string; type?: string; status?: string; cost?: string; effort?: string; potential?: number; risk?: number;
-  confirmed?: boolean; deadline?: string | null; url?: string; steps?: string[];
-}
 
 export default function Airdrops() {
   const { query } = useHashPath();
@@ -221,7 +217,7 @@ function Scout() {
   const upsert = useStore((s) => s.upsertAirdrop);
   const items = useStore((s) => s.airdrops);
   const last = reports.find((r) => r.kind === 'airdrops');
-  const found = (Array.isArray(last?.data) ? (last?.data as unknown as ScoutItem[]) : []) ?? [];
+  const found = readScoutItems(last?.data);
 
   return (
     <div className="space-y-4">

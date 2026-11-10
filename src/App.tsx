@@ -15,6 +15,8 @@ import { useSmartAlerts } from './hooks/useSmartAlerts';
 import { useExitPlan } from './hooks/useExitPlan';
 import { syncRunner, watchAlerts } from './lib/runnerSync';
 import { fmtPrice, isoDay } from './lib/format';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { useAutoBackup } from './hooks/useBackup';
 import Dashboard from './pages/Dashboard';
 
 const Market = lazy(() => import('./pages/Market'));
@@ -65,6 +67,7 @@ function AppEffects() {
   const closeToTray = useStore((s) => s.settings.closeToTray);
   const autoStart = useStore((s) => s.settings.autoStart);
   useSmartAlerts();
+  useAutoBackup();
   const exit = useExitPlan();
 
   // Les alertes ne servent à rien sans l'autorisation du système : on la demande une fois, au démarrage.
@@ -184,13 +187,16 @@ function Welcome() {
 
 export default function App() {
   const accepted = useStore((s) => s.settings.disclaimerAccepted);
+  const { path } = useHashPath();
   if (!accepted) return <Welcome />;
   return (
     <Layout>
       <AppEffects />
-      <Suspense fallback={<Spinner label="Chargement…" />}>
-        <Routes />
-      </Suspense>
+      <ErrorBoundary scope="page" resetKey={path}>
+        <Suspense fallback={<Spinner label="Chargement…" />}>
+          <Routes />
+        </Suspense>
+      </ErrorBoundary>
     </Layout>
   );
 }

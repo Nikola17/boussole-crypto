@@ -10,6 +10,7 @@ import { usePortfolio } from '../hooks/usePortfolio';
 import { analyze, type Factor, type SignalResult } from '../lib/signals';
 import { bucketOf } from '../lib/portfolio';
 import { fmtCompact, fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtQty } from '../lib/format';
+import { readThesisStatuses } from '../lib/reportData';
 import { openExternal } from '../lib/platform';
 import { navigate } from '../router';
 import type { Interval } from '../api/binance';
@@ -158,7 +159,7 @@ export default function CoinDetail({ id }: { id: string }) {
       }
       if (kind === 'thesis' && thesis) {
         const report = await runThesisCheck(cfg, label, id, { thesis: { phrases: thesis.sentences, hypotheses: thesis.hypotheses.map((h) => h.label), lignesRouges: thesis.redLines, prixDeReference: thesis.buyPrice }, coin: base.coin, technical: base.technical }, onP, signal);
-        const statuses = (report.data?.statuses as string[] | undefined) ?? [];
+        const statuses = readThesisStatuses(report.data?.statuses);
         upsertThesis({
           ...thesis,
           hypotheses: thesis.hypotheses.map((h, i) => ({ ...h, status: (['ok', 'weak', 'broken', 'dead'].includes(statuses[i]) ? statuses[i] : h.status) as typeof h.status })),

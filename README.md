@@ -14,15 +14,15 @@ La méthode d'analyse s'inspire du projet open source [AI Berkshire](https://git
 
 | Plateforme | Fichier | Installation |
 |---|---|---|
-| Windows | `release/Boussole-Crypto-Setup-1.5.0.exe` | Double-clic → installe l'app et crée un raccourci. Windows SmartScreen peut afficher « éditeur inconnu » (app non signée) : *Informations complémentaires → Exécuter quand même*. |
-| Windows (sans installation) | `release/Boussole-Crypto-Portable-1.5.0.exe` | Se lance directement, par exemple depuis une clé USB. |
-| Android | `release/Boussole-Crypto-1.5.0.apk` | Copie le fichier sur le téléphone (câble, Drive, e-mail) → ouvre-le → autorise « installer des applications inconnues » pour l'app utilisée. |
+| Windows | `release/Boussole-Crypto-Setup-1.5.1.exe` | Double-clic → installe l'app et crée un raccourci. Windows SmartScreen peut afficher « éditeur inconnu » (app non signée) : *Informations complémentaires → Exécuter quand même*. |
+| Windows (sans installation) | `release/Boussole-Crypto-Portable-1.5.1.exe` | Se lance directement, par exemple depuis une clé USB. |
+| Android | `release/Boussole-Crypto-1.5.1.apk` | Copie le fichier sur le téléphone (câble, Drive, e-mail) → ouvre-le → autorise « installer des applications inconnues » pour l'app utilisée. |
 
 Au premier lancement : accepte l'avertissement, puis remplis ton **profil investisseur** (2 minutes). Ensuite, dans **Réglages** :
 1. **Clé API pour l'IA** : choisis ton fournisseur. *Nous Portal* (par défaut, économique) : clé créée sur [portal.nousresearch.com](https://portal.nousresearch.com), modèle **DeepSeek V4.1 Flash** proposé par défaut. *Claude (Anthropic)* : clé créée sur [console.anthropic.com](https://console.anthropic.com/settings/keys). Colle la clé, puis clique sur *Tester la connexion*.
 2. **Clé CoinGecko « Demo »** (gratuite, recommandée) : [coingecko.com/fr/api/pricing](https://www.coingecko.com/fr/api/pricing). Sans elle, l'API publique limite fortement le nombre de requêtes et certaines pages se chargent lentement.
 
-Pour retrouver tes données sur le PC et le téléphone : *Réglages → Exporter* sur un appareil, *Importer* sur l'autre.
+Pour retrouver tes données sur le PC et le téléphone : *Réglages → Exporter* sur un appareil, *Importer* sur l'autre (l'import remplace les données après confirmation et copie de sécurité). Une sauvegarde automatique est aussi faite chaque jour (PC : `Documents\Boussole\sauvegardes` ; Android : `Documents/Boussole`).
 
 Pour que les alertes (paliers de vente, échéances du panier, marché) arrivent même fenêtre fermée : sous Windows, laisse l'option *Rester actif en arrière-plan* activée (Boussole se réduit près de l'horloge ; « Quitter » dans le menu de son icône l'arrête) ; sous Android, autorise les notifications et désactive l'optimisation de batterie pour Boussole.
 

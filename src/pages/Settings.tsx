@@ -1,11 +1,14 @@
-import { Download, ExternalLink, Eye, EyeOff, KeyRound, RotateCcw, Upload } from 'lucide-react';
+import { Download, ExternalLink, Eye, EyeOff, FolderOpen, KeyRound, RotateCcw, Save, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { useStore, exportBackup, parseBackup } from '../store/useStore';
+import { useStore, exportBackup } from '../store/useStore';
+import { countsOf, validateBackup, type BackupCheck } from '../lib/backup';
+import { describeBackupAge } from '../lib/autoBackup';
+import { backupNow, canAutoBackup, noteManualBackup, useLastBackup } from '../hooks/useBackup';
 import { MODEL_INFO } from '../ai/claude';
 import { buildAiConfig, testConnection } from '../ai/run';
 import { NOUS_BASE_URL } from '../ai/openai';
 import { useCompatModels } from '../hooks/useAiModels';
-import { ensureNotificationPermission, isElectron, openExternal, platformLabel, saveTextFile } from '../lib/platform';
+import { backupFolderLabel, ensureNotificationPermission, isElectron, openBackupFolder, openExternal, platformLabel, saveTextFile } from '../lib/platform';
 import { isoDay } from '../lib/format';
 import { Banner, Button, Card, Field, Input, Modal, NumberInput, PageHeader, Segmented, Select, Toggle } from '../components/ui';
 import type { AiModel, AiProvider, ThemeMode } from '../types';
@@ -44,6 +47,10 @@ export default function Settings() {
   const [backupMsg, setBackupMsg] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const lastBackup = useLastBackup((s) => s.last);
+  const [pending, setPending] = useState<{ check: BackupCheck; name: string } | null>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function test() {
     setTesting(true);
@@ -63,19 +70,51 @@ export default function Settings() {
   async function doExport() {
     try {
       setBackupMsg(await saveTextFile(`boussole-sauvegarde-${isoDay()}.json`, exportBackup(false)));
+      noteManualBackup();
     } catch (e) {
       setBackupMsg(`Export impossible : ${(e as Error).message}`);
     }
   }
 
+  async function doBackupNow() {
+    setBusy(true);
+    const r = await backupNow('auto');
+    setBackupMsg(r.ok ? `Sauvegarde enregistrée : ${r.where}` : `Sauvegarde impossible : ${r.error ?? 'erreur inconnue'}. Utilise « Exporter ».`);
+    setBusy(false);
+  }
+
+  /** Étape 1 : lire et vérifier le fichier. Rien n'est modifié tant que tu n'as pas confirmé. */
   async function doImport(file: File) {
+    setBackupMsg(null);
     try {
-      const data = parseBackup(await file.text());
-      importAll(data);
-      setBackupMsg('Sauvegarde restaurée.');
-    } catch (e) {
-      setBackupMsg(`Import impossible : ${(e as Error).message}`);
+      const check = validateBackup(JSON.parse(await file.text()));
+      if (!check.ok) {
+        setBackupMsg(`Import impossible : ${check.errors.join(' ')}`);
+        return;
+      }
+      setSnapshotError(null);
+      setPending({ check, name: file.name });
+    } catch {
+      setBackupMsg('Import impossible : ce fichier n’est pas une sauvegarde Boussole lisible.');
     }
+  }
+
+  /** Étape 2 : copie de sécurité de l'état actuel, puis remplacement. */
+  async function confirmImport(skipSnapshot: boolean) {
+    if (!pending) return;
+    setBusy(true);
+    if (!skipSnapshot) {
+      const snap = canAutoBackup ? await backupNow('avant-import') : { ok: false, where: '', error: 'indisponible sur ce type d’appareil' };
+      if (!snap.ok) {
+        setSnapshotError(snap.error ?? 'erreur inconnue');
+        setBusy(false);
+        return;
+      }
+    }
+    importAll(pending.check.data as Parameters<typeof importAll>[0]);
+    setBackupMsg(`Sauvegarde restaurée (${pending.name}).${skipSnapshot ? '' : ' Une copie de tes données d’avant l’import a été gardée.'}`);
+    setPending(null);
+    setBusy(false);
   }
 
   return (
@@ -188,15 +227,21 @@ export default function Settings() {
           </div>
         </Card>
 
-        <Card title="Sauvegarde" subtitle="Exporte régulièrement tes données (journal, plans, thèses…). La clé API n’est jamais exportée.">
+        <Card title="Sauvegarde" subtitle="Tes données vivent uniquement sur cet appareil : une réinstallation ou un téléphone perdu les efface. Les clés API ne sont jamais sauvegardées.">
+          <p className="mb-3 text-sm text-ink-2">
+            {describeBackupAge(lastBackup)}
+            {canAutoBackup && <> Une copie est faite automatiquement chaque jour dans <b className="text-ink">{backupFolderLabel}</b> (les 14 dernières sont gardées).</>}
+          </p>
           <div className="flex flex-wrap gap-2">
+            {canAutoBackup && <Button variant="primary" icon={<Save className="size-4" />} loading={busy} onClick={() => void doBackupNow()}>Sauvegarder maintenant</Button>}
+            {isElectron && <Button icon={<FolderOpen className="size-4" />} onClick={() => void openBackupFolder()}>Ouvrir le dossier</Button>}
             <Button icon={<Download className="size-4" />} onClick={() => void doExport()}>Exporter</Button>
             <Button icon={<Upload className="size-4" />} onClick={() => fileRef.current?.click()}>Importer</Button>
             <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void doImport(f); e.target.value = ''; }} />
             <Button variant="danger" icon={<RotateCcw className="size-4" />} onClick={() => setConfirmReset(true)}>Tout effacer</Button>
           </div>
           {backupMsg && <p className="mt-3 text-sm text-ink-2">{backupMsg}</p>}
-          <p className="mt-3 text-xs text-muted">Astuce : exporte depuis l’ordinateur et importe sur le téléphone (ou l’inverse) pour retrouver les mêmes données sur les deux appareils.</p>
+          <p className="mt-3 text-xs text-muted">Le fichier contient tout ton historique, tes adresses suivies et tes clés publiques étendues (xpub) : range-le comme un document financier. « Importer » remplace les données de cet appareil par celles du fichier, après une copie de sécurité.</p>
         </Card>
 
         <Card title="À propos">
@@ -210,6 +255,45 @@ export default function Settings() {
           </div>
         </Card>
       </div>
+
+      <Modal
+        open={!!pending}
+        onClose={() => { if (!busy) setPending(null); }}
+        title="Remplacer tes données par cette sauvegarde ?"
+        footer={pending ? (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => setPending(null)}>Annuler</Button>
+            {snapshotError
+              ? <Button variant="danger" loading={busy} onClick={() => void confirmImport(true)}>Continuer sans copie</Button>
+              : <Button variant="primary" loading={busy} onClick={() => void confirmImport(false)}>Remplacer mes données</Button>}
+          </>
+        ) : undefined}
+      >
+        {pending && (
+          <div className="space-y-3 text-sm text-ink-2">
+            <p>
+              Fichier <b className="text-ink">{pending.name}</b>
+              {pending.check.summary.exportedAt && <> · exporté le {new Date(pending.check.summary.exportedAt).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' })}</>}.
+            </p>
+            <table className="w-full text-left text-xs">
+              <thead className="text-muted"><tr><th className="py-1 font-medium">Rubrique</th><th className="py-1 text-right font-medium">Sur cet appareil</th><th className="py-1 text-right font-medium">Dans le fichier</th></tr></thead>
+              <tbody>
+                {countsOf(useStore.getState()).map((c) => {
+                  const inFile = pending.check.summary.counts.find((x) => x.label === c.label);
+                  return (
+                    <tr key={c.label} className="border-t border-line"><td className="py-1">{c.label}</td><td className="py-1 text-right tnum">{c.n}</td><td className={`py-1 text-right tnum ${inFile && inFile.n < c.n ? 'font-medium text-warn' : ''}`}>{inFile ? inFile.n : '—'}</td></tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p>Les rubriques présentes dans le fichier <b className="text-ink">remplacent</b> celles de cet appareil (tes clés API et le serveur d’IA ne changent jamais). Un nombre plus petit dans le fichier signifie que tu perdrais des éléments récents.</p>
+            {pending.check.warnings.map((w) => <p key={w} className="text-warn">{w}</p>)}
+            {snapshotError
+              ? <Banner tone="warn" title="Copie de sécurité impossible">{snapshotError}. Exporte d’abord tes données actuelles, ou continue sans copie.<div className="mt-2"><Button size="sm" onClick={() => void doExport()}>Exporter mes données actuelles</Button></div></Banner>
+              : <p>Une copie de tes données actuelles est enregistrée juste avant{canAutoBackup ? ` dans ${backupFolderLabel}` : ''}.</p>}
+          </div>
+        )}
+      </Modal>
 
       <Modal open={confirmReset} onClose={() => setConfirmReset(false)} title="Tout effacer ?" footer={<><Button variant="ghost" onClick={() => setConfirmReset(false)}>Annuler</Button><Button variant="danger" onClick={() => { resetAll(); setConfirmReset(false); }}>Effacer définitivement</Button></>}>
         <p className="text-sm text-ink-2">Toutes tes données locales (transactions, wallets, plans DCA, journal, thèses, rapports IA, réglages) seront supprimées de cet appareil. Exporte une sauvegarde avant si besoin.</p>
