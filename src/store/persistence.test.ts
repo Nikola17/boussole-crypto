@@ -136,3 +136,52 @@ describe('données de l’application (store)', () => {
     expect(reports[6].parts).toBeUndefined();
   });
 });
+
+describe('échéances : une écriture, et annuler une échéance retire ses transactions', () => {
+  const t = (id: string): import('../types').Transaction => ({ id, coinId: 'bitcoin', symbol: 'btc', name: 'Bitcoin', date: '2026-11-10', type: 'buy', quantity: 0.001, price: 80000, currency: 'USD', fee: 0, fxEurPerUsd: 0.87 });
+  const basket = { id: 'b', name: 'P', active: true, amountUsd: 25, daysOfWeek: [2, 5], startDate: '2026-01-01', discoveryMaxPct: 50, core: [], discovery: [], reserveUsd: 10, minOrderUsd: 5, reminder: true, createdAt: '' };
+
+  it('panier : les transactions entrent avec l’échéance, la réserve est mise à jour, et tout sort ensemble', () => {
+    useStore.getState().resetAll();
+    useStore.getState().upsertTransaction(t('ancienne'));
+    useStore.getState().setBasket(basket);
+    useStore.getState().addBasketExecution({ id: 'e1', basketId: 'b', periodKey: '2026-11-10', date: '2026-11-10', orders: [], investedUsd: 20, reserveDeltaUsd: 5 }, [t('a'), t('b')]);
+    let s = useStore.getState();
+    expect(s.transactions.map((x) => x.id).sort()).toEqual(['a', 'ancienne', 'b']);
+    expect(s.basketExecutions[0].txIds).toEqual(['a', 'b']);
+    expect(s.basket?.reserveUsd).toBe(15);
+    s.removeBasketExecution('e1');
+    s = useStore.getState();
+    expect(s.transactions.map((x) => x.id)).toEqual(['ancienne']);
+    expect(s.basket?.reserveUsd).toBe(10);
+  });
+
+  it('DCA : même principe', () => {
+    useStore.getState().resetAll();
+    useStore.getState().addDcaExecution({ id: 'd1', planId: 'p', periodKey: 'k', date: '2026-11-10', amount: 25, price: 80000, quantity: 0.0003, multiplier: 1 }, [t('x')]);
+    expect(useStore.getState().transactions).toHaveLength(1);
+    expect(useStore.getState().dcaExecutions[0].txIds).toEqual(['x']);
+    useStore.getState().removeDcaExecution('d1');
+    expect(useStore.getState().transactions).toHaveLength(0);
+  });
+
+  it('une échéance « passée » (sans transaction) s’annule sans toucher au journal', () => {
+    useStore.getState().resetAll();
+    useStore.getState().upsertTransaction(t('garde'));
+    useStore.getState().addDcaExecution({ id: 'd2', planId: 'p', periodKey: 'k', date: '2026-11-10', amount: 0, price: 0, quantity: 0, multiplier: 1, skipped: true });
+    useStore.getState().removeDcaExecution('d2');
+    expect(useStore.getState().transactions.map((x) => x.id)).toEqual(['garde']);
+  });
+
+  it('import : remplace les saisies désignées, ajoute les soldes d’ouverture, en une écriture', () => {
+    useStore.getState().resetAll();
+    useStore.getState().upsertTransaction(t('manuelle'));
+    useStore.getState().upsertTransaction(t('autre'));
+    const res = useStore.getState().importTransactions([t('i1'), t('i2')], { replaceIds: ['manuelle'], extra: [t('open-1'), t('open-1')] });
+    expect(res).toEqual({ added: 2, skipped: 0, replaced: 1, extra: 1 });
+    expect(useStore.getState().transactions.map((x) => x.id).sort()).toEqual(['autre', 'i1', 'i2', 'open-1']);
+    // réimporter le même fichier ne duplique rien
+    const again = useStore.getState().importTransactions([t('i1'), t('i2')], { replaceIds: [], extra: [t('open-1')] });
+    expect(again).toMatchObject({ added: 0, skipped: 2, extra: 0 });
+  });
+});

@@ -91,6 +91,11 @@ function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+/** Nombre de jours calendaires entre deux dates, insensible au changement d'heure (une « journée » locale peut durer 23 ou 25 h). */
+function daysBetween(from: Date, to: Date): number {
+  return Math.round((Date.UTC(to.getFullYear(), to.getMonth(), to.getDate()) - Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())) / 86_400_000);
+}
+
 /** Prochaines échéances à partir de `from` (incluse). */
 export function nextOccurrences(plan: DcaPlanLike, from: Date, count = 5): Date[] {
   const out: Date[] = [];
@@ -118,7 +123,7 @@ export function isScheduledDay(plan: DcaPlanLike, day: Date): boolean {
     case 'biweekly': {
       const target = plan.dayOfWeek ?? (((start.getDay() + 6) % 7) + 1);
       if (dow !== target) return false;
-      const weeks = Math.floor((d.getTime() - start.getTime()) / (7 * 86400000));
+      const weeks = Math.floor(daysBetween(start, d) / 7);
       return weeks % 2 === 0;
     }
     case 'monthly':
@@ -138,7 +143,7 @@ export function periodKey(plan: DcaPlanLike, day: Date): string {
       return `w-${monday.getFullYear()}-${monday.getMonth() + 1}-${monday.getDate()}`;
     }
     case 'biweekly': {
-      const weeks = Math.floor((d.getTime() - start.getTime()) / (7 * 86400000));
+      const weeks = Math.floor(daysBetween(start, d) / 7);
       return `b-${Math.floor(weeks / 2)}`;
     }
     case 'monthly':

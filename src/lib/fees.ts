@@ -2,6 +2,7 @@
 // On compare le prix de chaque achat au cours Binance de la même minute.
 
 import type { Transaction } from '../types';
+import { FALLBACK_EUR_PER_USD } from './fx';
 
 export interface SpreadSample {
   txId: string;
@@ -37,7 +38,7 @@ export function buySamplesFrom(txs: Transaction[], limit = 60): Transaction[] {
 /** Prix unitaire en dollars d'une transaction (convertit les euros au taux enregistré pour cette opération). */
 export function priceUsdOf(t: Transaction): number {
   if (t.currency === 'USD') return t.price;
-  return t.fxEurPerUsd > 0 ? t.price / t.fxEurPerUsd : t.price / 0.9;
+  return t.fxEurPerUsd > 0 ? t.price / t.fxEurPerUsd : t.price / FALLBACK_EUR_PER_USD;
 }
 
 export function spreadStats(samples: SpreadSample[]): SpreadStats {

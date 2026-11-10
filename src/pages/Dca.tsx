@@ -14,7 +14,7 @@ import {
 import { DcaPlanModal } from '../components/forms';
 import { BasketSection } from '../components/Basket';
 import { LineChart } from '../components/LineChart';
-import type { DcaPlan } from '../types';
+import type { DcaPlan, Transaction } from '../types';
 
 export default function Dca() {
   const plans = useStore((s) => s.dcaPlans);
@@ -130,7 +130,6 @@ export default function Dca() {
 
 function BuyModal({ status, onClose }: { status: DcaStatus | null; onClose: () => void }) {
   const addExec = useStore((s) => s.addDcaExecution);
-  const addTx = useStore((s) => s.upsertTransaction);
   const currency = useStore((s) => s.settings.currency);
   const fx = useFx();
   const markets = useMarkets();
@@ -157,10 +156,11 @@ function BuyModal({ status, onClose }: { status: DcaStatus | null; onClose: () =
   function save(skip = false) {
     if (!status) return;
     const id = uid();
-    addExec({ id, planId: status.plan.id, periodKey: status.periodKey ?? isoDay(), date: isoDay(), amount: skip ? 0 : Number(amount), price: skip ? 0 : Number(price), quantity: skip ? 0 : qty, multiplier: status.multiplier, skipped: skip });
+    const txs: Transaction[] = [];
     if (!skip && qty > 0) {
-      addTx({ id: uid(), coinId: status.plan.coinId, symbol: status.plan.symbol, name: status.plan.name, image: status.plan.image, date: isoDay(), type: 'buy', quantity: qty, price: Number(price), currency, fee: Number(fee || 0), fxEurPerUsd: fx, fromFiat: true, source: 'dca', note: `DCA ${STRATEGY_LABEL[status.plan.strategy]}` });
+      txs.push({ id: uid(), coinId: status.plan.coinId, symbol: status.plan.symbol, name: status.plan.name, image: status.plan.image, date: isoDay(), type: 'buy', quantity: qty, price: Number(price), currency, fee: Number(fee || 0), fxEurPerUsd: fx, fromFiat: true, source: 'dca', time: new Date().toISOString(), note: `DCA ${STRATEGY_LABEL[status.plan.strategy]}` });
     }
+    addExec({ id, planId: status.plan.id, periodKey: status.periodKey ?? isoDay(), date: isoDay(), amount: skip ? 0 : Number(amount), price: skip ? 0 : Number(price), quantity: skip ? 0 : qty, multiplier: status.multiplier, skipped: skip }, txs);
     onClose();
   }
 

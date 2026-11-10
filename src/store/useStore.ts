@@ -48,11 +48,14 @@ export interface AppState {
   removeWatchedToken: (id: string) => void;
   upsertTransaction: (tx: Transaction) => void;
   removeTransaction: (id: string) => void;
+  /** Ajoute plusieurs transactions en une seule écriture (regroupement, échanges…). */
+  addTransactions: (txs: Transaction[]) => void;
   upsertWallet: (w: WalletAddress) => void;
   removeWallet: (id: string) => void;
   upsertDcaPlan: (p: DcaPlan) => void;
   removeDcaPlan: (id: string) => void;
-  addDcaExecution: (e: DcaExecution) => void;
+  /** Enregistre une échéance et ses transactions en UNE écriture ; supprimer l'échéance retire aussi ces transactions. */
+  addDcaExecution: (e: DcaExecution, txs?: Transaction[]) => void;
   removeDcaExecution: (id: string) => void;
   upsertTrade: (t: TradeEntry) => void;
   removeTrade: (id: string) => void;
@@ -71,7 +74,7 @@ export interface AppState {
   removeAccount: (id: string) => void;
   setBasket: (b: BasketPlan | null) => void;
   /** Enregistre une échéance du panier et met à jour la réserve d'USDC. */
-  addBasketExecution: (e: BasketExecution) => void;
+  addBasketExecution: (e: BasketExecution, txs?: Transaction[]) => void;
   removeBasketExecution: (id: string) => void;
   toggleCdcSeen: (coinId: string) => void;
   toggleExitDone: (coinId: string, multiple: number) => void;
@@ -82,7 +85,7 @@ export interface AppState {
   upsertDefiBet: (b: DefiBet) => void;
   removeDefiBet: (id: string) => void;
   /** Ajoute des transactions importées ; celles dont l'identifiant existe déjà sont ignorées (aucun doublon). */
-  importTransactions: (txs: Transaction[]) => { added: number; skipped: number };
+  importTransactions: (txs: Transaction[], opts?: { replaceIds?: string[]; extra?: Transaction[] }) => { added: number; skipped: number; replaced: number; extra: number };
   importAll: (data: Partial<AppState>) => void;
   resetAll: () => void;
 }
@@ -162,6 +165,7 @@ export const useStore = create<AppState>()(
       removeWatchedToken: (id) => set((s) => ({ watchedTokens: s.watchedTokens.filter((x) => x.id !== id) })),
       upsertTransaction: (tx) => set((s) => ({ transactions: upsert(s.transactions, tx) })),
       removeTransaction: (id) => set((s) => ({ transactions: s.transactions.filter((x) => x.id !== id) })),
+      addTransactions: (txs) => set((s) => ({ transactions: [...txs, ...s.transactions] })),
       upsertWallet: (w) => set((s) => ({ wallets: upsert(s.wallets, w) })),
       removeWallet: (id) => set((s) => ({
         wallets: s.wallets.filter((x) => x.id !== id),
@@ -169,8 +173,14 @@ export const useStore = create<AppState>()(
       })),
       upsertDcaPlan: (p) => set((s) => ({ dcaPlans: upsert(s.dcaPlans, p) })),
       removeDcaPlan: (id) => set((s) => ({ dcaPlans: s.dcaPlans.filter((x) => x.id !== id), dcaExecutions: s.dcaExecutions.filter((e) => e.planId !== id) })),
-      addDcaExecution: (e) => set((s) => ({ dcaExecutions: [e, ...s.dcaExecutions] })),
-      removeDcaExecution: (id) => set((s) => ({ dcaExecutions: s.dcaExecutions.filter((x) => x.id !== id) })),
+      addDcaExecution: (e, txs) => set((s) => ({
+        dcaExecutions: [txs?.length ? { ...e, txIds: txs.map((t) => t.id) } : e, ...s.dcaExecutions],
+        transactions: txs?.length ? [...txs, ...s.transactions] : s.transactions,
+      })),
+      removeDcaExecution: (id) => set((s) => {
+        const gone = new Set(s.dcaExecutions.find((x) => x.id === id)?.txIds ?? []);
+        return { dcaExecutions: s.dcaExecutions.filter((x) => x.id !== id), transactions: gone.size ? s.transactions.filter((t) => !gone.has(t.id)) : s.transactions };
+      }),
       upsertTrade: (t) => set((s) => ({ trades: upsert(s.trades, t) })),
       removeTrade: (id) => set((s) => ({ trades: s.trades.filter((x) => x.id !== id) })),
       upsertAlert: (a) => set((s) => ({ alerts: upsert(s.alerts, a) })),
@@ -195,14 +205,17 @@ export const useStore = create<AppState>()(
           : t)),
       })),
       setBasket: (b) => set({ basket: b }),
-      addBasketExecution: (e) => set((s) => ({
-        basketExecutions: [e, ...s.basketExecutions.filter((x) => x.id !== e.id)],
+      addBasketExecution: (e, txs) => set((s) => ({
+        basketExecutions: [txs?.length ? { ...e, txIds: txs.map((t) => t.id) } : e, ...s.basketExecutions.filter((x) => x.id !== e.id)],
+        transactions: txs?.length ? [...txs, ...s.transactions] : s.transactions,
         basket: s.basket && s.basket.id === e.basketId ? { ...s.basket, reserveUsd: Math.max(0, Math.round((s.basket.reserveUsd + e.reserveDeltaUsd) * 100) / 100) } : s.basket,
       })),
       removeBasketExecution: (id) => set((s) => {
         const e = s.basketExecutions.find((x) => x.id === id);
+        const gone = new Set(e?.txIds ?? []);
         return {
           basketExecutions: s.basketExecutions.filter((x) => x.id !== id),
+          transactions: gone.size ? s.transactions.filter((t) => !gone.has(t.id)) : s.transactions,
           basket: e && s.basket && s.basket.id === e.basketId ? { ...s.basket, reserveUsd: Math.max(0, Math.round((s.basket.reserveUsd - e.reserveDeltaUsd) * 100) / 100) } : s.basket,
         };
       }),
@@ -216,11 +229,15 @@ export const useStore = create<AppState>()(
       markCoreTrim: (coinId) => set((s) => ({ coreTrims: { ...s.coreTrims, [coinId]: new Date().toISOString() } })),
       clearCoreTrim: (coinId) => set((s) => { const next = { ...s.coreTrims }; delete next[coinId]; return { coreTrims: next }; }),
       toggleCdcSeen: (coinId) => set((s) => ({ cdcSeen: s.cdcSeen.includes(coinId) ? s.cdcSeen.filter((x) => x !== coinId) : [...s.cdcSeen, coinId] })),
-      importTransactions: (txs) => {
-        const known = new Set(get().transactions.map((t) => t.id));
+      // Une seule écriture : les saisies remplacées sortent et les lignes importées (plus d'éventuels soldes d'ouverture) entrent ensemble.
+      importTransactions: (txs, opts) => {
+        const replace = new Set(opts?.replaceIds ?? []);
+        const known = new Set(get().transactions.filter((t) => !replace.has(t.id)).map((t) => t.id));
         const fresh = txs.filter((t, i) => !known.has(t.id) && txs.findIndex((u) => u.id === t.id) === i);
-        if (fresh.length) set((s) => ({ transactions: [...fresh, ...s.transactions] }));
-        return { added: fresh.length, skipped: txs.length - fresh.length };
+        const extra = (opts?.extra ?? []).filter((t, i, all) => !known.has(t.id) && all.findIndex((u) => u.id === t.id) === i);
+        const removed = get().transactions.filter((t) => replace.has(t.id)).length;
+        if (fresh.length || extra.length || removed) set((s) => ({ transactions: [...fresh, ...extra, ...s.transactions.filter((t) => !replace.has(t.id))] }));
+        return { added: fresh.length, skipped: txs.length - fresh.length, replaced: removed, extra: extra.length };
       },
       importAll: (data) => set((s) => {
         // Seules les rubriques connues sont reprises, et les réglages passent par une liste blanche (voir lib/backup.ts).

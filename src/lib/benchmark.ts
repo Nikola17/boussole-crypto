@@ -13,12 +13,18 @@ export interface Flow {
 const notional = (tx: Transaction) => txAmounts(tx, tx.quantity * tx.price).usd;
 const fees = (tx: Transaction) => txAmounts(tx, tx.fee || 0).usd;
 
-/** Argent réellement mis ou retiré : achats payés en monnaie classique, ventes converties en monnaie classique. */
+/**
+ * Argent réellement mis ou retiré : achats payés en monnaie classique, ventes converties en monnaie classique,
+ * plus les dépôts de crypto venus de l'extérieur (au prix enregistré : ils sont de l'argent mis) et les retraits vers l'extérieur.
+ * Les transferts entre tes comptes sont neutres ; une récompense (coût nul) n'est pas de l'argent mis.
+ */
 export function fiatFlows(txs: Transaction[]): Flow[] {
   const out: Flow[] = [];
   for (const tx of txs) {
     if (tx.type === 'buy' && tx.fromFiat !== false) out.push({ date: tx.date, usd: notional(tx) + fees(tx) });
     else if (tx.type === 'sell' && tx.toFiat !== false) out.push({ date: tx.date, usd: -(notional(tx) - fees(tx)) });
+    else if (tx.type === 'deposit' && tx.price > 0) out.push({ date: tx.date, usd: notional(tx) + fees(tx) });
+    else if (tx.type === 'withdraw' && tx.price > 0) out.push({ date: tx.date, usd: -(notional(tx) - fees(tx)) });
   }
   return out;
 }

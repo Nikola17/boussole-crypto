@@ -3,11 +3,12 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { useCycle, useFx, useMarkets } from '../hooks/useMarket';
+import { useCycle, useEurUsdHistory, useFx, useMarkets } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { FREQUENCY_LABEL, STRATEGY_HELP, STRATEGY_LABEL, type DcaStrategy, type Frequency } from '../lib/dca';
 import { fmtMoney, isoDay, uid } from '../lib/format';
 import { isStable } from '../lib/portfolio';
+import { eurPerUsdOn, FALLBACK_EUR_PER_USD } from '../lib/fx';
 import { outsideDcaCheck } from '../lib/rules';
 import type { CoinRef, DcaPlan, PriceAlert, Thesis, TradeEntry, Transaction, TxType } from '../types';
 import type { Currency } from '../lib/format';
@@ -45,6 +46,9 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
   const [toAccount, setToAccount] = useState('');
   const livePrice = usePriceOf(coin?.coinId);
   const cycle = useCycle();
+  // Une opération passée reçoit le taux EUR/USD de SON jour (et non celui d'aujourd'hui) : sinon son coût en euros est faux.
+  const eurUsdHistory = useEurUsdHistory(open && !initial && date !== isoDay());
+  const fxForDate = date === isoDay() ? fx : eurPerUsdOn(date, eurUsdHistory.data, fx);
   const reserveUsd = useStore((s) => s.basket?.reserveUsd ?? null);
 
   useEffect(() => {
@@ -115,7 +119,7 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
   };
 
   // Règle de ta stratégie : un achat hors DCA n'est autorisé qu'avec la réserve d'USDC et si le marché a vraiment peur.
-  const totalUsd = total === '' ? 0 : currency === 'EUR' ? Number(total) / (fx || 0.9) : Number(total);
+  const totalUsd = total === '' ? 0 : currency === 'EUR' ? Number(total) / (fx || FALLBACK_EUR_PER_USD) : Number(total);
   const outside = !initial && type === 'buy' && coin && !isStable(coin.symbol, coin.coinId) && date === isoDay()
     ? outsideDcaCheck({ temperature: cycle.data?.temperature ?? null, reserveUsd, amountUsd: totalUsd })
     : null;
@@ -133,13 +137,14 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
       price: Number(price),
       currency,
       fee: Number(fee || 0),
-      fxEurPerUsd: initial?.fxEurPerUsd ?? fx,
+      fxEurPerUsd: initial?.fxEurPerUsd ?? fxForDate,
       fromFiat: type === 'buy' || type === 'deposit' ? fiat : undefined,
       toFiat: type === 'sell' ? fiat : undefined,
       portfolioValueEur: type === 'sell' && fiat && pv !== '' ? Number(pv) : undefined,
       source: initial?.source ?? 'manual',
       note: note.trim() || undefined,
-      time: initial?.time,
+      // Horodatage de toute saisie du jour : l'ordre des opérations d'une même journée (achat avant vente) en dépend.
+      time: initial?.time ?? (date === isoDay() ? new Date().toISOString() : undefined),
       accountId: account || undefined,
       toAccountId: type === 'transfer' ? toAccount : undefined,
     };

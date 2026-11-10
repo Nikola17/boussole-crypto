@@ -7,6 +7,7 @@ import { usePortfolio } from '../hooks/usePortfolio';
 import { dustPlan } from '../lib/consolidate';
 import { rulesOf } from '../lib/profile';
 import { fmtMoney, fmtNum, isoDay } from '../lib/format';
+import type { Transaction } from '../types';
 import { Badge, Button, Card, CoinIcon, Field, Modal, NumberInput } from './ui';
 
 export function ConsolidateCard() {
@@ -37,12 +38,13 @@ export function ConsolidateCard() {
     if (qty === '' || qty <= 0 || !chosen.length) return;
     const now = new Date();
     const accountId = basket?.accountId ?? accounts.find((a) => a.kind === 'exchange')?.id;
-    const store = useStore.getState();
     const common = { date: isoDay(now), time: now.toISOString(), currency: 'USD' as const, fee: 0, fxEurPerUsd: pf.fx, source: 'manual' as const, accountId };
+    const txs: Transaction[] = [];
     for (const l of chosen) {
-      store.upsertTransaction({ id: newId(), coinId: l.coinId, symbol: l.symbol, name: l.name, image: l.image, type: 'sell', quantity: l.quantity, price: l.priceUsd ?? 0, toFiat: false, note: 'Regroupement vers Bitcoin', ...common });
+      txs.push({ id: newId(), coinId: l.coinId, symbol: l.symbol, name: l.name, image: l.image, type: 'sell', quantity: l.quantity, price: l.priceUsd ?? 0, toFiat: false, note: 'Regroupement vers Bitcoin', ...common });
     }
-    store.upsertTransaction({ id: newId(), coinId: 'bitcoin', symbol: 'btc', name: 'Bitcoin', type: 'buy', quantity: Number(qty), price: chosenUsd / Number(qty), fromFiat: false, note: 'Regroupement des petites lignes', ...common });
+    txs.push({ id: newId(), coinId: 'bitcoin', symbol: 'btc', name: 'Bitcoin', type: 'buy', quantity: Number(qty), price: chosenUsd / Number(qty), fromFiat: false, note: 'Regroupement des petites lignes', ...common });
+    useStore.getState().addTransactions(txs); // une seule écriture : le regroupement entre en entier ou pas du tout
     setOpen(false);
     setQty('');
   }

@@ -11,6 +11,7 @@ import { openExternal } from '../lib/platform';
 import { setQuery, useHashPath } from '../router';
 import { Badge, Banner, Card, ErrorNote, PageHeader, Segmented, Spinner } from '../components/ui';
 import { Envelope } from '../components/Envelope';
+import { FALLBACK_EUR_PER_USD } from '../lib/fx';
 
 type Tab = 'rendement' | 'enveloppe';
 const RISK_LABEL = { 1: 'Classique', 2: 'Modéré', 3: 'Élevé' } as const;
@@ -44,7 +45,7 @@ function Yields() {
     for (const h of pf.holdings) if (h.coinId) out[h.coinId] = (out[h.coinId] ?? 0) + h.valueUsd;
     return out;
   }, [pf.holdings]);
-  const rows = useMemo(() => yieldRows(YIELD_OPTIONS, quotes, positions, MIN_GAIN_EUR / (fx || 0.9)), [quotes, positions, fx]);
+  const rows = useMemo(() => yieldRows(YIELD_OPTIONS, quotes, positions, MIN_GAIN_EUR / (fx || FALLBACK_EUR_PER_USD)), [quotes, positions, fx]);
   const eur = (usd: number) => fmtMoney(usd * pf.rate, currency, usd * pf.rate < 100 ? 2 : 0);
 
   // Meilleur rendement raisonnable (risque 1 ou 2) par actif : sert à estimer ce que tout le staking possible rapporterait.

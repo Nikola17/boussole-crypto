@@ -1,6 +1,7 @@
 // Calcul des positions (méthode du coût moyen pondéré), de la répartition et des risques.
 
 import type { Bucket, Transaction } from '../types';
+import { FALLBACK_EUR_PER_USD } from './fx';
 
 export interface Position {
   coinId: string;
@@ -17,7 +18,7 @@ export interface Position {
 
 /** Convertit un montant saisi dans la devise de la transaction en EUR et en USD (au taux du jour de saisie). */
 export function txAmounts(tx: Transaction, amount: number): { eur: number; usd: number } {
-  const fx = tx.fxEurPerUsd > 0 ? tx.fxEurPerUsd : 0.9;
+  const fx = tx.fxEurPerUsd > 0 ? tx.fxEurPerUsd : FALLBACK_EUR_PER_USD;
   if (tx.currency === 'EUR') return { eur: amount, usd: amount / fx };
   return { eur: amount * fx, usd: amount };
 }

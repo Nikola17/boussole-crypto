@@ -39,6 +39,17 @@ describe('« et si tout en Bitcoin ? »', () => {
     expect(f.map((x) => Math.round(x.usd))).toEqual([100, -19]);
   });
 
+  it('dépôts venus de l’extérieur et retraits comptent comme de l’argent mis ou retiré ; transferts et récompenses non', () => {
+    const f = fiatFlows([
+      tx({ id: '1', type: 'deposit', coinId: 'bitcoin', quantity: 1, price: 60 }), // solde d'ouverture à ton prix d'achat
+      tx({ id: '2', type: 'deposit', coinId: 'bitcoin', quantity: 1, price: 0 }), // sans prix : pas d'argent mis connu
+      tx({ id: '3', type: 'withdraw', coinId: 'bitcoin', quantity: 1, price: 80 }),
+      tx({ id: '4', type: 'transfer', coinId: 'bitcoin', quantity: 1, price: 70, accountId: 'a', toAccountId: 'b' }),
+      tx({ id: '5', type: 'reward', coinId: 'sui', quantity: 10, price: 2 }),
+    ]);
+    expect(f.map((x) => x.usd)).toEqual([60, -80]);
+  });
+
   it('flux « découverte » : hors cœur et stablecoins, quel que soit le moyen de paiement', () => {
     const f = discoveryFlows([
       tx({ id: '1', type: 'buy', coinId: 'bitcoin', quantity: 1, price: 100 }),

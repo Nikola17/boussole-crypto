@@ -140,18 +140,19 @@ function ExecuteModal({ open, onClose, b, custom }: { open: boolean; onClose: ()
     const bk = b.basket;
     const now = new Date();
     const logs: BasketOrderLog[] = [];
-    const store = useStore.getState();
+    const txs: Transaction[] = [];
     orders.forEach((o, i) => {
       const usd = Number(rows[i].usd);
       const qty = Number(rows[i].qty);
       const note = `Panier DCA · ${bk.name}`;
       const common = { date: isoDay(now), time: now.toISOString(), currency: 'USD' as const, fee: 0, fxEurPerUsd: fx, source: 'dca' as const, note, accountId: bk.accountId };
-      store.upsertTransaction({ id: newId(), coinId: o.coinId, symbol: o.symbol, name: o.name, image: o.image, type: 'buy', quantity: qty, price: usd / qty, fromFiat: false, ...common } satisfies Transaction);
-      store.upsertTransaction({ id: newId(), ...USDC, type: 'sell', quantity: usd, price: 1, toFiat: false, ...common } satisfies Transaction);
+      txs.push({ id: newId(), coinId: o.coinId, symbol: o.symbol, name: o.name, image: o.image, type: 'buy', quantity: qty, price: usd / qty, fromFiat: false, ...common } satisfies Transaction);
+      txs.push({ id: newId(), ...USDC, type: 'sell', quantity: usd, price: 1, toFiat: false, ...common } satisfies Transaction);
       logs.push({ coinId: o.coinId, symbol: o.symbol, name: o.name, image: o.image, usd, quantity: qty, price: usd / qty, kind: o.kind });
     });
     const exec: BasketExecution = { id: newId(), basketId: bk.id, periodKey: b.periodKey, date: isoDay(now), orders: logs, investedUsd: invested, reserveDeltaUsd: Math.round((bk.amountUsd - invested) * 100) / 100 };
-    addExec(exec);
+    // Une seule écriture : l'échéance, ses achats, ses sorties d'USDC et la réserve. Annuler l'échéance retire aussi ces transactions.
+    addExec(exec, txs);
     onClose();
   }
 

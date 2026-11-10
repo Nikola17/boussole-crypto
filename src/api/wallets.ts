@@ -247,12 +247,20 @@ export async function getEvmBalances(address: string, chainKeys: string[], custo
       try {
         const res = await postJson<RpcResult[]>(chain.rpc, batch, { timeoutMs: 20000 });
         const byId = new Map(res.map((r) => [r.id, r]));
-        const nat = hexToAmount(byId.get(0)?.result, 18);
-        if (nat > 0) raw.push({ chain: chain.label, symbol: chain.native.symbol, quantity: nat, coingeckoId: chain.native.coingeckoId });
+        // Une lecture qui échoue (erreur du nœud, réponse absente) n'est PAS un solde de zéro : on la signale, le wallet est alors « incomplet ».
+        const failed: string[] = [];
+        const read = (id: number, decimals: number, label: string): number | null => {
+          const r = byId.get(id);
+          if (!r || r.error || r.result == null) { failed.push(label); return null; }
+          return hexToAmount(r.result, decimals);
+        };
+        const nat = read(0, 18, chain.native.symbol);
+        if (nat != null && nat > 0) raw.push({ chain: chain.label, symbol: chain.native.symbol, quantity: nat, coingeckoId: chain.native.coingeckoId });
         tokens.forEach((t, i) => {
-          const q = hexToAmount(byId.get(i + 1)?.result, t.decimals);
-          if (q > 0) raw.push({ chain: chain.label, symbol: t.symbol, quantity: q, coingeckoId: t.coingeckoId || undefined, tokenAddress: t.address });
+          const q = read(i + 1, t.decimals, t.symbol);
+          if (q != null && q > 0) raw.push({ chain: chain.label, symbol: t.symbol, quantity: q, coingeckoId: t.coingeckoId || undefined, tokenAddress: t.address });
         });
+        if (failed.length) errors.push(`${chain.label} : ${failed.length} solde${failed.length > 1 ? 's' : ''} illisible${failed.length > 1 ? 's' : ''} (${failed.slice(0, 5).join(', ')}${failed.length > 5 ? '…' : ''}) : non comptés, ce n’est pas un solde nul`);
       } catch (e) {
         errors.push(`${chain.label} : ${(e as Error).message}`);
       }

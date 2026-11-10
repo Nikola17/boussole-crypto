@@ -9,6 +9,7 @@ import { usePortfolio } from './usePortfolio';
 import { lastOccurrence, multiplierFor, nextOccurrences, periodKey } from '../lib/dca';
 import { BUCKET_LABEL, isStable, isWrappedOrStaked, rebalance, rebalanceAction } from '../lib/portfolio';
 import { brokenThesisCoins, lagsBitcoin } from '../lib/rules';
+import { aggregateByCoin } from '../lib/holdings';
 import { fmtMoney } from '../lib/format';
 import { rulesOf } from '../lib/profile';
 import { scatterReport } from '../lib/scatter';
@@ -157,7 +158,8 @@ export function useGuidance(): Guidance[] {
           to: '/portefeuille',
         });
       }
-      for (const h of pf.holdings) {
+      // Poids par CRYPTO (Ledger + Crypto.com réunis), pas par ligne : une même crypto répartie sur deux endroits ne doit pas échapper aux limites.
+      for (const h of aggregateByCoin(pf.holdings)) {
         const weight = (h.value / total) * 100;
         if ((h.bucket === 'small') && weight > profile.rules.maxPerGemPct * 1.5) {
           out.push({ key: `gem-${h.key}`, tone: 'warn', title: `${h.symbol} pèse ${Math.round(weight)} % de ton portefeuille`, detail: `Ta règle pour une petite capi est de ${profile.rules.maxPerGemPct} % maximum. Envisage d’alléger.`, to: '/portefeuille' });
@@ -188,6 +190,9 @@ export function useGuidance(): Guidance[] {
           });
         }
       }
+    } else if (pf.holdings.length > 0) {
+      // Des avoirs existent mais aucun prix n'a pu être lu (hors ligne, CoinGecko saturé) : ce n'est pas un portefeuille vide.
+      out.push({ key: 'prices', tone: 'warn', title: 'Prix indisponibles pour le moment', detail: 'Tes avoirs sont bien enregistrés, mais leurs prix n’ont pas pu être récupérés (connexion ou limite de CoinGecko). Rien n’est perdu : réessaie dans une minute.', to: '/portefeuille' });
     } else {
       out.push({ key: 'start', tone: 'neutral', title: 'Ajoute tes avoirs', detail: 'Saisis tes achats ou une adresse de wallet publique pour des conseils personnalisés.', to: '/portefeuille' });
     }

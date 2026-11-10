@@ -9,9 +9,10 @@ import {
   buildCryptoComTransactions, CLASS_LABEL, parseCryptoComCsv, resolveSymbols, type ImportClass, type ParsedCryptoCom,
 } from '../lib/importers/cryptocom';
 import { fmtDate } from '../lib/format';
-import type { CoinRef } from '../types';
+import { dayBeforeFirst, matchManualEntries, missingStock } from '../lib/stock';
+import type { CoinRef, Transaction } from '../types';
 import { CoinPicker } from './CoinPicker';
-import { Badge, Banner, Button, Field, Modal, Select } from './ui';
+import { Badge, Banner, Button, Field, Modal, NumberInput, Select, Toggle } from './ui';
 
 const NEW_ACCOUNT = '__new__';
 const CLASSES = Object.keys(CLASS_LABEL) as ImportClass[];
@@ -32,11 +33,14 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
   const [withdrawTo, setWithdrawTo] = useState('external');
   const [manual, setManual] = useState<Record<string, CoinRef | null>>({});
   const [found, setFound] = useState<Record<string, CoinRef | null>>({});
-  const [result, setResult] = useState<{ added: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{ added: number; skipped: number; replaced: number; extra: number } | null>(null);
+  const [replaceManual, setReplaceManual] = useState(true);
+  /** Solde d'ouverture saisi par crypto : quantité détenue avant le premier mouvement du fichier, et son prix d'achat unitaire (€, facultatif). */
+  const [opening, setOpening] = useState<Record<string, { on: boolean; qty: number | ''; price: number | '' }>>({});
 
   useEffect(() => {
     if (open) return;
-    setParsed(null); setFileName(''); setResult(null); setManual({}); setFound({}); setClasses({});
+    setParsed(null); setFileName(''); setResult(null); setManual({}); setFound({}); setClasses({}); setOpening({}); setReplaceManual(true);
   }, [open]);
 
   async function onFile(f: File | undefined) {
@@ -84,6 +88,16 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
   );
   const known = useMemo(() => new Set(existing.map((t) => t.id)), [existing]);
   const dupes = preview ? preview.txs.filter((t) => known.has(t.id)).length : 0;
+  const fresh = useMemo(() => (preview ? preview.txs.filter((t) => !known.has(t.id)) : []), [preview, known]);
+
+  // Tes saisies à la main (« J'ai passé ces ordres », DCA…) qui sont aussi dans le fichier : sans remplacement, elles seraient comptées deux fois.
+  const matches = useMemo(() => matchManualEntries(existing, fresh.map((t) => (t.accountId === 'new' ? { ...t, accountId: undefined } : t))), [existing, fresh]);
+  const replaceIds = useMemo(() => (replaceManual ? matches.map((m) => m.existingId) : []), [replaceManual, matches]);
+
+  // Ventes ou retraits que le journal ne couvre pas : il manque ce que tu détenais avant le premier mouvement.
+  const afterTxs = useMemo(() => [...existing.filter((t) => !replaceIds.includes(t.id)), ...fresh], [existing, fresh, replaceIds]);
+  const stock = useMemo(() => missingStock(afterTxs), [afterTxs]);
+  const openingRow = (coinId: string, missing: number) => opening[coinId] ?? { on: true, qty: Math.ceil(missing * 1e8) / 1e8, price: '' as number | '' };
 
   function doImport() {
     if (!parsed?.ok) return;
@@ -93,7 +107,19 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
       upsertAccount({ id, name: 'Crypto.com', kind: 'exchange', walletIds: [], createdAt: new Date().toISOString() });
     }
     const out = buildCryptoComTransactions(parsed, { accountId: id, classByKind: classes, symbols, depositFrom, withdrawTo, fxEurPerUsd: fx });
-    setResult(importTransactions(out.txs));
+    // Soldes d'ouverture : un dépôt la veille du premier mouvement de la crypto, à ton prix d'achat (0 si tu ne le connais pas).
+    const extra: Transaction[] = [];
+    for (const m of stock) {
+      const row = openingRow(m.coinId, m.missing);
+      if (!row.on || row.qty === '' || row.qty <= 0) continue;
+      const date = dayBeforeFirst(afterTxs.filter((t) => t.coinId === m.coinId));
+      extra.push({
+        id: `open-${m.coinId}-${date}`, coinId: m.coinId, symbol: m.symbol, name: m.name, image: m.image, date, type: 'deposit', quantity: Number(row.qty),
+        price: row.price === '' ? 0 : Number(row.price), currency: 'EUR', fee: 0, fxEurPerUsd: fx, fromFiat: false, source: 'manual', accountId: id,
+        note: 'Solde d’ouverture : ce que tu détenais avant le début du fichier importé',
+      });
+    }
+    setResult(importTransactions(out.txs, { replaceIds, extra }));
   }
 
   const otherAccounts = accounts.filter((a) => a.id !== account);
@@ -111,6 +137,8 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
       {result ? (
         <Banner tone="success" title={`${result.added} transaction${result.added > 1 ? 's' : ''} ajoutée${result.added > 1 ? 's' : ''}`}>
           {result.skipped > 0 ? `${result.skipped} déjà présente${result.skipped > 1 ? 's' : ''} (ignorée${result.skipped > 1 ? 's' : ''}, aucun doublon). ` : ''}
+          {result.replaced > 0 ? `${result.replaced} de tes saisies manuelles ont été remplacées par les lignes du fichier. ` : ''}
+          {result.extra > 0 ? `${result.extra} solde${result.extra > 1 ? 's' : ''} d’ouverture ajouté${result.extra > 1 ? 's' : ''}. ` : ''}
           Ouvre l’onglet « Comptes » pour rapprocher ton journal de la blockchain, puis « Transactions » pour contrôler les lignes importées.
         </Banner>
       ) : !parsed || !parsed.ok ? (
@@ -184,6 +212,32 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
                     <div className="mt-2"><CoinPicker value={manual[s] ?? found[s] ?? null} onChange={(c) => setManual({ ...manual, [s]: c })} /></div>
                   </li>
                 ))}
+              </ul>
+            </div>
+          )}
+          {matches.length > 0 && (
+            <Banner tone="warn" title={`${matches.length} opération${matches.length > 1 ? 's' : ''} que tu avais notée${matches.length > 1 ? 's' : ''} à la main figure${matches.length > 1 ? 'nt' : ''} aussi dans le fichier`}>
+              Ce sont les achats ou échanges du panier, du DCA ou de ta saisie (même crypto, même compte, date à un jour près, quantité à 1 % près). Sans remplacement, ils seraient comptés deux fois.
+              <div className="mt-2"><Toggle checked={replaceManual} onChange={setReplaceManual} label="Remplacer mes saisies par les lignes du fichier (recommandé)" /></div>
+            </Banner>
+          )}
+          {stock.length > 0 && (
+            <div className="rounded-lg border border-line p-3">
+              <p className="text-sm font-medium text-ink">{stock.reduce((s, m) => s + m.count, 0)} vente(s) ou retrait(s) sans stock : il manque ce que tu détenais avant ce fichier</p>
+              <p className="mt-1 text-xs text-ink-2">Le fichier ne remonte pas assez loin : il vend des cryptos que ton journal ne contient pas encore. Indique ce que tu avais avant (solde d’ouverture), sinon tes quantités, tes coûts d’achat et tes plus-values seront faux. Sans prix d’achat, ces unités comptent pour un coût nul : tes plus-values seront surestimées.</p>
+              <ul className="mt-2 divide-y divide-line text-sm">
+                {stock.map((m) => {
+                  const row = openingRow(m.coinId, m.missing);
+                  const set = (patch: Partial<typeof row>) => setOpening({ ...opening, [m.coinId]: { ...row, ...patch } });
+                  return (
+                    <li key={m.coinId} className="grid items-center gap-2 py-2 sm:grid-cols-[1fr_9rem_9rem_auto]">
+                      <span className="text-ink">{m.symbol.toUpperCase()} <span className="text-xs text-muted">manque au moins {String(m.missing).replace('.', ',')} ({m.count} vente(s))</span></span>
+                      <NumberInput value={row.qty} onChange={(v) => set({ qty: v })} placeholder="Quantité" />
+                      <NumberInput value={row.price} onChange={(v) => set({ price: v })} placeholder="Prix d’achat € (facultatif)" />
+                      <Toggle checked={row.on} onChange={(v) => set({ on: v })} label="Ajouter" />
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

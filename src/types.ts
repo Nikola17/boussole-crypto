@@ -157,6 +157,8 @@ export interface DcaExecution {
   quantity: number;
   multiplier: number;
   skipped?: boolean;
+  /** Transactions créées par cette échéance : les supprimer avec elle évite des achats « orphelins » comptés dans les plus-values. */
+  txIds?: string[];
 }
 
 export interface TradeEntry {
@@ -332,6 +334,8 @@ export interface BasketExecution {
   /** Variation de la réserve : + quand une partie du budget n'est pas investie, − quand la réserve est puisée. */
   reserveDeltaUsd: number;
   skipped?: boolean;
+  /** Transactions créées par cette échéance (achats et sorties d'USDC). */
+  txIds?: string[];
 }
 
 // ---------------------------------------------------------------- Enveloppe DeFi (petits paris sur Solana, compte Phantom séparé)

@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { useStore } from '../store/useStore';
 import { useAltSeason, useCategories, useCycle, useFearGreed, useGlobal, useMarkets, useTrending } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
+import { aggregateByCoin } from '../lib/holdings';
 import { BUCKET_LABEL, BUCKET_ORDER } from '../lib/portfolio';
 import { lastOccurrence, multiplierFor, nextOccurrences, periodKey, temperatureMultiplier } from '../lib/dca';
 import { basketPeriodKey, lastBasketOccurrence, nextBasketOccurrences } from '../lib/basket';
@@ -101,13 +102,14 @@ export function useAiContext() {
       plusValueRealisee: r2(pf.totals.realized, 0),
       repartitionActuellePct: allocPct,
       repartitionCiblePct: targetPct,
-      positions: pf.holdings.slice(0, 25).map((h) => ({
+      // Une ligne par crypto (Ledger + Crypto.com réunis) : l'IA ne voit pas deux fois la même crypto.
+      positions: aggregateByCoin(pf.holdings).slice(0, 25).map((h) => ({
         actif: h.symbol,
         valeur: r2(h.value, 0),
         poidsPct: total > 0 ? r2((h.value / total) * 100, 1) : 0,
-        plusValuePct: r2(h.pnlPct ?? null, 1),
+        plusValuePct: r2(h.pnlPct, 1),
         poche: BUCKET_LABEL[h.bucket],
-        source: h.source === 'wallet' ? `wallet ${h.walletLabel ?? ''}`.trim() : 'journal',
+        detenuSur: h.sources.join(' + '),
       })),
       theses: theses.map((t) => ({ actif: t.symbol.toUpperCase(), these: t.sentences.filter(Boolean).join(' '), lignesRouges: t.redLines })),
     };

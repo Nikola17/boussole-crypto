@@ -85,3 +85,47 @@ export function reconcile(
   }
   return out.sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
 }
+
+export interface LinkHint {
+  walletId: string;
+  walletLabel: string;
+  accountId: string;
+  accountName: string;
+  /** Cryptos que le wallet et le journal du compte ont en commun (symboles). */
+  symbols: string[];
+}
+
+/**
+ * Wallet suivi mais relié à aucun compte, alors qu'un compte Ledger / wallet logiciel sans wallet relié contient les mêmes cryptos
+ * dans le journal : ces quantités sont comptées deux fois (une fois par le journal, une fois par la blockchain).
+ * Retourne une proposition de liaison par wallet ; rien n'est modifié sans ton accord.
+ */
+export function unlinkedOverlap(i: {
+  wallets: { id: string; label: string; includeInTotal: boolean }[];
+  walletData: ({ holdings: { symbol: string; quantity: number; coingeckoId?: string; valueUsd: number | null }[] } | null)[];
+  accounts: Account[];
+  journal: Map<string, Map<string, number>>;
+}): LinkHint[] {
+  const linked = new Set(i.accounts.flatMap((a) => a.walletIds));
+  const free = i.accounts.filter((a) => a.walletIds.length === 0 && (a.kind === 'hardware' || a.kind === 'hot'));
+  const out: LinkHint[] = [];
+  i.wallets.forEach((w, idx) => {
+    const d = i.walletData[idx];
+    if (!d || !w.includeInTotal || linked.has(w.id)) return;
+    let best: { acct: Account; symbols: string[]; score: number } | null = null;
+    for (const acct of free) {
+      const symbols: string[] = [];
+      let score = 0;
+      for (const h of d.holdings) {
+        if (!h.coingeckoId || (h.valueUsd ?? 0) < 5) continue;
+        const jq = journalQty(i.journal, acct.id, h.coingeckoId);
+        if (jq <= 1e-12) continue;
+        // Le journal et le wallet décrivent à peu près la même quantité (au moins 30 % en commun) : très probablement les mêmes cryptos.
+        if (Math.min(jq, h.quantity) / Math.max(jq, h.quantity) >= 0.3) { symbols.push(h.symbol.toUpperCase()); score += h.valueUsd ?? 0; }
+      }
+      if (symbols.length && (!best || score > best.score)) best = { acct, symbols, score };
+    }
+    if (best) out.push({ walletId: w.id, walletLabel: w.label, accountId: best.acct.id, accountName: best.acct.name, symbols: best.symbols });
+  });
+  return out;
+}

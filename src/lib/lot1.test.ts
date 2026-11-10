@@ -4,7 +4,7 @@ import { mnemonicToSeedSync } from '@scure/bip39';
 import { deriveAddress, isExtendedKey, isExtendedPrivateKey, parseExtendedKey, scriptForPrefix } from './xpub';
 import { parseCsv, parseNumber } from './csv';
 import { buildCryptoComTransactions, parseCryptoComCsv, resolveSymbols } from './importers/cryptocom';
-import { coveredAccountIds, journalByAccount, journalQty, reconcile } from './accounts';
+import { coveredAccountIds, journalByAccount, journalQty, reconcile, unlinkedOverlap } from './accounts';
 import { buildPositions } from './portfolio';
 import { rulesOf } from './profile';
 import type { Account, Transaction } from '../types';
@@ -281,5 +281,32 @@ describe('règles de profil', () => {
     expect(r.maxLines).toBe(12);
     expect(r.minLinePct).toBe(1);
     expect(r.maxDiscoveryLines).toBe(5);
+  });
+});
+
+describe('wallet suivi non relié à son compte', () => {
+  const ledger: Account = { id: 'ledger', name: 'Ledger', kind: 'hardware', walletIds: [], createdAt: '' };
+  const cdc: Account = { id: 'cdc', name: 'Crypto.com', kind: 'exchange', walletIds: [], createdAt: '' };
+  const wallets = [{ id: 'w1', label: 'Ledger BTC', includeInTotal: true }];
+  const data = [{ holdings: [{ symbol: 'btc', quantity: 0.05, coingeckoId: 'bitcoin', valueUsd: 4000 }] }];
+  const journal = journalByAccount([tx({ id: '1', type: 'buy', coinId: 'bitcoin', quantity: 0.05, accountId: 'ledger' })]);
+
+  it('propose de relier le wallet au compte qui contient les mêmes cryptos (jamais une plateforme)', () => {
+    const hints = unlinkedOverlap({ wallets, walletData: data, accounts: [ledger, cdc], journal });
+    expect(hints).toEqual([{ walletId: 'w1', walletLabel: 'Ledger BTC', accountId: 'ledger', accountName: 'Ledger', symbols: ['BTC'] }]);
+    const onCdc = journalByAccount([tx({ id: '1', type: 'buy', coinId: 'bitcoin', quantity: 0.05, accountId: 'cdc' })]);
+    expect(unlinkedOverlap({ wallets, walletData: data, accounts: [ledger, cdc], journal: onCdc })).toEqual([]);
+  });
+
+  it('rien à signaler si le wallet est déjà relié, exclu du total, ou sans recouvrement', () => {
+    expect(unlinkedOverlap({ wallets, walletData: data, accounts: [{ ...ledger, walletIds: ['w1'] }], journal })).toEqual([]);
+    expect(unlinkedOverlap({ wallets: [{ ...wallets[0], includeInTotal: false }], walletData: data, accounts: [ledger], journal })).toEqual([]);
+    expect(unlinkedOverlap({ wallets, walletData: [{ holdings: [{ symbol: 'eth', quantity: 1, coingeckoId: 'ethereum', valueUsd: 2400 }] }], accounts: [ledger], journal })).toEqual([]);
+    expect(unlinkedOverlap({ wallets, walletData: [null], accounts: [ledger], journal })).toEqual([]);
+  });
+
+  it('des quantités très différentes (< 30 % en commun) ne sont pas considérées comme les mêmes', () => {
+    const big = [{ holdings: [{ symbol: 'btc', quantity: 5, coingeckoId: 'bitcoin', valueUsd: 400000 }] }];
+    expect(unlinkedOverlap({ wallets, walletData: big, accounts: [ledger], journal })).toEqual([]);
   });
 });

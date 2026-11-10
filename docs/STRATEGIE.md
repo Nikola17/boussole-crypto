@@ -1,6 +1,6 @@
 # Ma stratégie — les règles que Boussole applique par défaut
 
-Ces règles viennent du diagnostic fait le 8 novembre 2026 sur ta situation réelle : un Ledger (≈ 0,05 BTC et 0,40 ETH), un panier de 19 lignes sur crypto.com alimenté par un DCA de 25 USDC deux fois par semaine, et l'envie de faire un peu de DeFi sur Phantom. Boussole les reprend dans ses écrans (Panier DCA, plan de sortie, règles de profil). Tu peux tout modifier dans l'application.
+Ces règles viennent du diagnostic fait le 8 novembre 2026 sur ta situation réelle : un Ledger (≈ 0,05 BTC et 0,40 ETH), un panier de 19 lignes sur crypto.com alimenté par un DCA de 25 USDC deux fois par semaine, et l'envie de faire un peu de DeFi sur Phantom. Boussole les reprend dans ses écrans (Panier DCA, plan de sortie, règles de profil) : choisis le profil « Ma stratégie » dans Guide & profil. Tu peux tout modifier dans l'application.
 
 > Outil d'aide à la décision, pas un conseil en investissement. Aucune règle ne garantit un gain.
 
@@ -36,7 +36,7 @@ Ces règles viennent du diagnostic fait le 8 novembre 2026 sur ta situation rée
 
 ## 3. Quand vendre
 
-- **BTC et ETH** : seulement en euphorie (température ≥ 80), par tranches de 5 à 10 %, jamais tout. Aujourd'hui (Fear & Greed à 28, BTC à −40 % de son record) : rien à vendre.
+- **BTC et ETH** : seulement en euphorie (température ≥ 80), par tranches de 5 à 10 %, jamais tout, avec au moins 30 jours entre deux tranches. Un excès de Bitcoin se corrige en orientant le DCA, jamais en vendant. Aujourd'hui (Fear & Greed à 28, BTC à −40 % de son record) : rien à vendre.
 - **Altcoins** :
   - paliers à ×2, ×3 et ×5, 25 % de la position à chaque palier, les 25 % restants courent ;
   - **thèse cassée = sortie**, quel que soit le prix ;

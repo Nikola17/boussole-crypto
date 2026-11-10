@@ -37,7 +37,7 @@ Nico, investisseur particulier en France. Il fait du DCA, s'intéresse aux pépi
 - Analyses IA bloquées tant que les données de marché et le portefeuille ne sont pas chargés (évite une position à 0 €).
 - Correctif Android : barre de navigation du bas poussée hors de l'écran par un débordement horizontal.
 
-## Versions 1.2 à 1.5.1 — de l'outil générique à ton vrai portefeuille
+## Versions 1.2 à 1.6.0 — de l'outil générique à ton vrai portefeuille
 
 Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur Crypto.com alimenté par un DCA de 25 USDC deux fois par semaine, et l'envie de faire de la DeFi sur Phantom. Les règles par défaut sont décrites dans [STRATEGIE.md](STRATEGIE.md) ; le prompt Grok amélioré dans [PROMPT-GROK-DCA.md](PROMPT-GROK-DCA.md).
 
@@ -73,6 +73,18 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Écran de secours** : une erreur d'affichage ne laisse plus un écran blanc ; export, suppression des rapports IA ou réinitialisation proposés. Le JSON renvoyé par l'IA est remis en forme avant stockage et affichage.
 - Export : la clé CoinGecko n'est plus incluse. Plafonds réduits (25 rapports IA, 60 messages de chat).
 - Importeur Crypto.com : une date seule ne crée plus d'heure fictive à minuit.
+
+### v1.6.0 — Des conseils fidèles, des chiffres justes
+- **Profil « Ma stratégie »** (Guide & profil) : BTC 65 %, ETH 20 %, altcoins 15 %, règles de `STRATEGIE.md`. Revalider le profil ne l'écrase plus.
+- **Le cœur n'est jamais « à alléger » hors euphorie** : un excès de Bitcoin se corrige en orientant le DCA. Les tranches allégées en euphorie sont mémorisées (30 jours entre deux), pas de palier sous 20 $ ni sur une ligne à regrouper. La règle « vendre 20 à 30 % partout » n'existe plus.
+- **« Que faire aujourd'hui ? » est toujours calculé par tes règles** ; l'avis de l'IA s'affiche en dessous. Le brief reçoit l'ordre du jour du panier et attend que le portefeuille soit complètement chargé.
+- **Panier** : la ligne découverte est décidée d'abord, ce qu'elle ne dépense pas revient au cœur (plus de budget à moitié investi en peur extrême) ; sans température, l'ordre est calculé à ×1 avec un avertissement.
+- **Signaux** : pas d'« Accumuler » sans 200 jours d'historique, confiance affichée partout, volume mesuré sur la dernière bougie close, stablecoins exclus, plan d'entrée seulement si le signal trader est haussier. Seuils Fear & Greed, zones de température et anti-FOMO unifiés (`src/lib/thresholds.ts`).
+- **Règles de STRATEGIE.md signalées** : thèse cassée = sortie, altcoin sous Bitcoin depuis environ 6 mois, achat hors DCA sans réserve ni peur.
+- **Garde-fous** : le scan de sécurité dit « Données insuffisantes » (jamais vert) quand il n'a presque rien reçu, un avertissement retire le « Plutôt sain », une liquidité verrouillée sous 30 % est un danger. Enveloppe DeFi : une donnée manquante bloque l'achat, plancher de liquidité de 25 000 $, « Ajouter » marque l'achat « hors règles ».
+- **Réponses de l'IA** : plus aucune image ; le vrai domaine de chaque lien est affiché, avec confirmation avant d'ouvrir un site inconnu.
+- **Import Crypto.com** : tes saisies manuelles déjà présentes dans le fichier sont proposées au remplacement (plus de doublons avec « J'ai passé ces ordres »), et les ventes sans stock déclenchent une saisie du solde d'ouverture.
+- **Chiffres** : calcul du portefeuille extrait et testé ; plus de double comptage pendant la lecture d'un Ledger, wallet à relier détecté ; prix moyen calculé sur la part qui a un historique ; poids par crypto ; « prix indisponible » au lieu de 0 € ; soldes de tokens illisibles signalés (ce n'est pas un solde nul) ; comparaison avec Bitcoin qui compte dépôts et retraits ; taux EUR/USD du jour de l'opération pour une saisie passée ; DCA toutes les deux semaines insensible au changement d'heure ; annuler une échéance du panier ou du DCA retire aussi ses transactions.
 
 ## Idées pour la suite (priorisées)
 

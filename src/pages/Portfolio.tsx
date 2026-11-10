@@ -7,6 +7,8 @@ import { useCycle, useFx } from '../hooks/useMarket';
 import { BUCKET_LABEL, BUCKET_ORDER, concentration, rebalance, rebalanceAction, stressTest } from '../lib/portfolio';
 import { TEMPERATURE } from '../lib/thresholds';
 import { computeFrenchTax, simulateSale, EXEMPTION_THRESHOLD_EUR } from '../lib/tax';
+import { unlinkedOverlap } from '../lib/accounts';
+import { missingStock } from '../lib/stock';
 import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtQty, shortAddress, uid } from '../lib/format';
 import { detectChain, EVM_CHAINS } from '../api/wallets';
 import { Link, setQuery, useHashPath } from '../router';
@@ -51,6 +53,7 @@ export default function Portfolio() {
         <Stat label="Plus-value latente" value={fmtMoney(pf.totals.unrealized, currency, 0)} delta={<Delta value={pf.totals.unrealizedPct} />} />
         <Stat label="Plus-value réalisée" value={fmtMoney(pf.totals.realized, currency, 0)} />
       </div>
+      <PortfolioAlerts />
       <Segmented
         value={tab}
         onChange={(v) => setQuery({ tab: v })}
@@ -150,7 +153,10 @@ function Positions() {
       <Card padded={false} title="Positions" subtitle="Clique sur une ligne pour voir ses signaux">
         <Table head={['Crypto', 'Quantité', 'Prix', 'Valeur', 'Poids', '24 h', 'Prix moyen', 'Plus-value', 'Source']}>
           {pf.holdings.map((h) => {
-            const avg = h.cost != null && h.quantity > 0 ? h.cost / h.quantity : null;
+            // Prix moyen = coût ÷ quantité QUI A UN COÛT dans le journal (pas la quantité totale de la ligne, qui peut inclure des unités sans historique).
+            const avg = h.cost != null && (h.costQty ?? h.quantity) > 0 ? h.cost / (h.costQty ?? h.quantity) : null;
+            const partial = h.costQty != null && h.costQty < h.quantity * 0.999;
+            const coinTotal = pf.holdings.filter((x) => (x.coinId ?? x.key) === (h.coinId ?? h.key)).reduce((sum, x) => sum + x.value, 0);
             return (
               <tr key={h.key} className="hover:bg-surface-2">
                 <Td left>
@@ -162,10 +168,10 @@ function Positions() {
                 </Td>
                 <Td>{fmtQty(h.quantity)}</Td>
                 <Td>{fmtPrice(h.priceUsd != null ? h.priceUsd * pf.rate : null, currency)}</Td>
-                <Td className="font-medium text-ink">{fmtMoney(h.value, currency, 0)}</Td>
-                <Td className="text-ink-2">{total > 0 ? `${fmtNum((h.value / total) * 100, 1)} %` : '—'}</Td>
+                <Td className="font-medium text-ink">{h.priceUsd == null ? <span className="text-xs font-normal text-warn" title="Prix indisponible : cette valeur n’est pas comptée dans le total">prix indisponible</span> : fmtMoney(h.value, currency, 0)}</Td>
+                <Td className="text-ink-2"><span title="Poids de cette crypto, toutes lignes confondues">{total > 0 ? `${fmtNum((coinTotal / total) * 100, 1)} %` : '—'}</span></Td>
                 <Td><Delta value={h.change24h} /></Td>
-                <Td className="text-ink-2">{avg != null ? fmtPrice(avg, currency) : '—'}</Td>
+                <Td className="text-ink-2">{avg != null ? <span title={partial ? `Calculé sur ${fmtQty(h.costQty ?? 0)} des ${fmtQty(h.quantity)} : le reste n’a pas d’historique dans ton journal` : undefined}>{fmtPrice(avg, currency)}{partial ? '*' : ''}</span> : '—'}</Td>
                 <Td>{h.pnl != null ? <span className="inline-flex flex-col items-end"><span className={h.pnl >= 0 ? 'text-up' : 'text-down'}>{fmtMoney(h.pnl, currency, 0)}</span><Delta value={h.pnlPct} className="text-xs" /></span> : <span className="text-muted">—</span>}</Td>
                 <Td><Badge>{h.accountName ?? (h.source === 'wallet' ? h.walletLabel ?? 'Wallet' : 'Journal')}</Badge></Td>
               </tr>
@@ -173,6 +179,45 @@ function Positions() {
           })}
         </Table>
       </Card>
+    </div>
+  );
+}
+
+/** Ce qui rend les chiffres du portefeuille douteux : doublon possible avec un wallet, prix manquants, ventes sans stock. */
+function PortfolioAlerts() {
+  const pf = usePortfolio();
+  const txs = useStore((s) => s.transactions);
+  const upsertAccount = useStore((s) => s.upsertAccount);
+  const hints = useMemo(() => unlinkedOverlap({ wallets: pf.wallets, walletData: pf.walletData as never, accounts: pf.accounts, journal: pf.journal }), [pf.wallets, pf.walletData, pf.accounts, pf.journal]);
+  const stock = useMemo(() => missingStock(txs), [txs]);
+  const stockCount = stock.reduce((s, m) => s + m.count, 0);
+  return (
+    <div className="space-y-3 empty:hidden">
+      {hints.map((h) => (
+        <Banner
+          key={h.walletId}
+          tone="warn"
+          title={`« ${h.walletLabel} » et le compte « ${h.accountName} » décrivent les mêmes cryptos (${h.symbols.join(', ')})`}
+          action={<Button size="sm" onClick={() => { const a = pf.accounts.find((x) => x.id === h.accountId); if (a) upsertAccount({ ...a, walletIds: [...a.walletIds, h.walletId] }); }}>Relier</Button>}
+        >
+          Ces quantités sont comptées deux fois : une fois par ton journal, une fois par la blockchain. En reliant le wallet au compte, la blockchain fait foi pour la quantité et le journal ne sert plus qu’au prix d’achat.
+        </Banner>
+      ))}
+      {pf.walletsIncomplete && (
+        <Banner tone="warn" title="Un wallet n’a pas pu être lu entièrement">
+          Certains soldes sont illisibles (nœud public en erreur ou limité) : ils ne sont pas comptés, ce n’est pas un solde nul. Le total est donc partiel. Ouvre l’onglet « Wallets » pour le détail, puis actualise.
+        </Banner>
+      )}
+      {pf.totals.unpriced > 0 && (
+        <Banner tone="info" title={`${pf.totals.unpriced} ligne${pf.totals.unpriced > 1 ? 's' : ''} sans prix : leur valeur n’est pas comptée`}>
+          Le prix de ces cryptos n’a pas pu être récupéré (CoinGecko limite les requêtes, ou la crypto est trop petite). Le total affiché est donc sous-estimé, et leur plus-value n’est pas calculée.
+        </Banner>
+      )}
+      {stockCount > 0 && (
+        <Banner tone="warn" title={`${stockCount} vente${stockCount > 1 ? 's' : ''} ou retrait${stockCount > 1 ? 's' : ''} sans stock dans ton journal`}>
+          Ton journal vend plus ({stock.slice(0, 4).map((m) => m.symbol.toUpperCase()).join(', ')}) que ce qu’il a acheté : il manque un solde d’ouverture (ce que tu détenais déjà). Ajoute une transaction « Dépôt » datée avant la première vente, ou ré-importe ton historique en renseignant le solde d’ouverture : sinon tes quantités et tes plus-values sont faussées.
+        </Banner>
+      )}
     </div>
   );
 }

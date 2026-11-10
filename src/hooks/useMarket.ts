@@ -12,6 +12,7 @@ import { altSeasonIndex, computeCycle } from '../lib/cycle';
 import { analyze, type Analysis } from '../lib/signals';
 import type { Candle } from '../lib/indicators';
 import { isStable, isWrappedOrStaked } from '../lib/portfolio';
+import { FALLBACK_EUR_PER_USD, sanitizeFx } from '../lib/fx';
 
 const MIN = 60_000;
 
@@ -21,9 +22,9 @@ const FX_KEY = 'boussole-fx';
 function readFx(): number {
   try {
     const v = Number(localStorage.getItem(FX_KEY));
-    return v > 0.3 && v < 3 ? v : 0.86;
+    return sanitizeFx(v);
   } catch {
-    return 0.86;
+    return FALLBACK_EUR_PER_USD;
   }
 }
 
@@ -39,6 +40,17 @@ export function useFx(): number {
     retry: 1,
   });
   return q.data ?? readFx();
+}
+
+/** Cours EUR/USD quotidien (dollars pour 1 euro) depuis fin 2018, pour donner à une opération PASSÉE le taux de son jour. */
+export function useEurUsdHistory(enabled: boolean) {
+  return useQuery({
+    queryKey: ['eurusd-history'],
+    enabled,
+    staleTime: 12 * 60 * MIN,
+    retry: 1,
+    queryFn: async () => new Map((await getDailyHistory('EURUSDT', Date.UTC(2018, 10, 1))).map((c) => [new Date(c.time * 1000).toISOString().slice(0, 10), c.close] as const)),
+  });
 }
 
 // ------------------------------------------------------------------ Marché global
