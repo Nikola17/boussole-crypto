@@ -1,4 +1,4 @@
-import { Download, ExternalLink, Eye, EyeOff, FolderOpen, KeyRound, RotateCcw, Save, Upload } from 'lucide-react';
+import { CandlestickChart, Download, ExternalLink, Eye, EyeOff, FolderOpen, Gem, KeyRound, RotateCcw, Save, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useStore, exportBackup } from '../store/useStore';
 import { countsOf, validateBackup, type BackupCheck } from '../lib/backup';
@@ -9,10 +9,12 @@ import { buildAiConfig, testConnection } from '../ai/run';
 import { NOUS_BASE_URL } from '../ai/openai';
 import { useCompatModels } from '../hooks/useAiModels';
 import { backupFolderLabel, ensureNotificationPermission, isElectron, isNative, openBackupFolder, openExternal, platformLabel, saveTextFile } from '../lib/platform';
+import { Link } from '../router';
+import { useAiContext } from '../ai/context';
 import { describeRunnerStatus, readRunnerStatus } from '../lib/runnerSync';
 import { useQuery } from '@tanstack/react-query';
-import { isoDay } from '../lib/format';
-import { Banner, Button, Card, Field, Input, Modal, NumberInput, PageHeader, Segmented, Select, Toggle } from '../components/ui';
+import { fmtNum, isoDay } from '../lib/format';
+import { Banner, Button, Card, Field, Input, Modal, NumberInput, PageHeader, Segmented, Select, Spinner, Toggle } from '../components/ui';
 import type { AiModel, AiProvider, ThemeMode } from '../types';
 
 /** Modèles proposés en priorité sur Nous Portal (identifiants vérifiés dans son catalogue). */
@@ -61,6 +63,7 @@ export default function Settings() {
   const [pending, setPending] = useState<{ check: BackupCheck; name: string } | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [ctxOpen, setCtxOpen] = useState(false);
 
   async function test() {
     setTesting(true);
@@ -129,7 +132,7 @@ export default function Settings() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader title="Réglages" subtitle={`Version ${__APP_VERSION__} · ${platformLabel}. Toutes tes données restent stockées sur cet appareil.`} />
+      <PageHeader title="Réglages" subtitle={`Version ${__APP_VERSION__} · ${platformLabel}. Tes données sont stockées sur cet appareil ; seules les analyses IA envoient un résumé de ton dossier au fournisseur choisi (contenu vérifiable plus bas).`} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={<span className="inline-flex items-center gap-2"><KeyRound className="size-4 text-accent" />Intelligence artificielle</span>} subtitle="Le brief quotidien, le comité des sages et le conseiller utilisent ta propre clé API : tu ne paies que ce que tu consommes.">
@@ -152,7 +155,7 @@ export default function Settings() {
                   <Select value={inShortlist && !customOpen ? settings.compatModel : CUSTOM} onChange={(e) => { if (e.target.value === CUSTOM) setCustomOpen(true); else { setCustomOpen(false); set({ compatModel: e.target.value }); } }}>
                     {RECOMMENDED.map((r) => {
                       const m = catalog.data?.find((x) => x.id === r.id);
-                      const price = m?.inPerM != null && m.outPerM != null ? ` — ${m.inPerM.toFixed(2).replace('.', ',')} $ / ${m.outPerM.toFixed(2).replace('.', ',')} $ par million` : '';
+                      const price = m?.inPerM != null && m.outPerM != null ? ` — ${fmtNum(m.inPerM, 2)} $ / ${fmtNum(m.outPerM, 2)} $ par million` : '';
                       return <option key={r.id} value={r.id}>{r.label}{price}</option>;
                     })}
                     <option value={CUSTOM}>Autre modèle…</option>
@@ -192,12 +195,24 @@ export default function Settings() {
             )}
 
             <Toggle checked={settings.briefingAuto} onChange={(v) => set({ briefingAuto: v })} label="Brief automatique chaque jour" hint="Généré à la première ouverture de l’application dans la journée." />
+            <Toggle checked={settings.aiAnonymous} onChange={(v) => set({ aiAnonymous: v })} label="Anonymiser ce qui part vers l’IA" hint="Sans ton prénom ni tes montants : l’IA reçoit des pourcentages à la place des valeurs en euros. Certains conseils seront un peu moins précis." />
+            <div className="flex flex-wrap items-center gap-3">
+              <Button icon={<Eye className="size-4" />} onClick={() => setCtxOpen(true)}>Voir ce qui part vers l’IA</Button>
+            </div>
             <div className="flex flex-wrap items-center gap-3">
               <Button disabled={!(compat ? settings.compatKey : settings.anthropicKey)} loading={testing} onClick={() => void test()}>Tester la connexion</Button>
               {testMsg && <span className={`text-sm ${testMsg.ok ? 'text-up' : 'text-down'}`}>{testMsg.text}</span>}
             </div>
             <p className="text-xs text-muted">{compat ? 'Le coût réel de chaque analyse (renvoyé par le fournisseur) est affiché sur le rapport.' : 'Ordre de grandeur avec Opus 5.5 : ~0,15 à 0,40 $ par brief, ~0,60 à 1,50 $ par comité des sages. Le coût réel de chaque analyse est affiché sur le rapport.'}</p>
           </div>
+        </Card>
+
+        <Card title="Outils avancés" subtitle="Pépites et Trading sont sortis du menu principal : l’essentiel tient dans le panier DCA, les signaux et le portefeuille. Ces outils restent complets et toujours accessibles.">
+          <div className="flex flex-wrap gap-2">
+            <Link to="/pepites" className="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-ink hover:bg-surface-2"><Gem className="size-4 text-accent" />Pépites <span className="text-xs text-muted">petites capis, tokens on-chain, DeFi, narratives</span></Link>
+            <Link to="/trading" className="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-ink hover:bg-surface-2"><CandlestickChart className="size-4 text-accent" />Trading <span className="text-xs text-muted">taille de position, journal, alertes de prix</span></Link>
+          </div>
+          <p className="mt-3 text-xs text-muted">Les liens internes vers ces pages (Cockpit, fiche crypto…) continuent de fonctionner. Le scanner de setups reste dans Signaux, le comité des sages se lance depuis la fiche d’une crypto.</p>
         </Card>
 
         <Card title="Données & affichage">
@@ -267,6 +282,8 @@ export default function Settings() {
         </Card>
       </div>
 
+      <AiContextModal open={ctxOpen} onClose={() => setCtxOpen(false)} />
+
       <Modal
         open={!!pending}
         onClose={() => { if (!busy) setPending(null); }}
@@ -310,5 +327,32 @@ export default function Settings() {
         <p className="text-sm text-ink-2">Toutes tes données locales (transactions, wallets, plans DCA, journal, thèses, rapports IA, réglages) seront supprimées de cet appareil. Exporte une sauvegarde avant si besoin.</p>
       </Modal>
     </div>
+  );
+}
+
+/** Transparence : montre exactement le dossier envoyé au fournisseur IA, selon les réglages actuels. */
+function AiContextModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const ctx = useAiContext();
+  const provider = useStore((s) => (s.settings.aiProvider === 'compat' ? 'Nous Portal (adresse configurée plus haut)' : 'Anthropic (Claude)'));
+  const anonymous = useStore((s) => s.settings.aiAnonymous);
+  const dossier = ctx.ready ? {
+    profil: ctx.profile(),
+    portefeuille: ctx.portfolio(),
+    dca: ctx.dca(ctx.cycle?.temperature),
+    marche: ctx.market(),
+  } : null;
+  return (
+    <Modal open={open} onClose={onClose} title="Ce qui part vers l’IA" footer={<Button variant="ghost" onClick={onClose}>Fermer</Button>}>
+      <div className="space-y-3 text-sm text-ink-2">
+        <p>Quand tu génères un brief, une analyse ou une question au conseiller, Boussole construit ce dossier et l’envoie à <b className="text-ink">{provider}</b>, avec ta question. Rien d’autre : ton journal brut, tes adresses de wallet et tes clés API ne partent jamais.</p>
+        {anonymous && <Banner tone="info" title="Mode anonymisé actif">Les montants sont remplacés par des pourcentages et ton prénom n’est pas envoyé.</Banner>}
+        {!ctx.ready ? (
+          <p className="text-muted"><Spinner label="Chargement des données de marché pour composer le dossier…" /></p>
+        ) : (
+          <pre className="max-h-[60dvh] overflow-auto rounded-lg bg-surface-2 p-3 text-xs leading-relaxed text-ink-2">{JSON.stringify(dossier, null, 2)}</pre>
+        )}
+        <p className="text-xs text-muted">Les rapports reçoivent ensuite tes données de marché du jour ; ils sont conservés sur cet appareil. Si tu changes d’avis sur ce qui t’identifie, active « Anonymiser ce qui part vers l’IA » juste au-dessus.</p>
+      </div>
+    </Modal>
   );
 }

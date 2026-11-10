@@ -11,7 +11,7 @@ import { BUCKET_LABEL, isStable, isWrappedOrStaked, rebalance, rebalanceAction }
 import { brokenThesisCoins, lagsBitcoin } from '../lib/rules';
 import { useToday } from './useClock';
 import { aggregateByCoin } from '../lib/holdings';
-import { fmtMoney } from '../lib/format';
+import { fmtMoney, fmtNum } from '../lib/format';
 import { rulesOf } from '../lib/profile';
 import { scatterReport } from '../lib/scatter';
 import type { DcaPlan } from '../types';
@@ -96,7 +96,7 @@ export function useGuidance(): Guidance[] {
         key: 'basket',
         tone: 'up',
         title: `Panier DCA : échéance du ${bd.last.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}`,
-        detail: `${String(bd.basket.amountUsd).replace('.', ',')} USDC à répartir entre ton cœur et ta ligne découverte. L’ordre du jour tient compte du marché, de ta réserve et de tes règles.`,
+        detail: `${fmtNum(bd.basket.amountUsd, 2)} USDC à répartir entre ton cœur et ta ligne découverte. L’ordre du jour tient compte du marché, de ta réserve et de tes règles.`,
         to: '/dca',
       });
     }
@@ -118,7 +118,7 @@ export function useGuidance(): Guidance[] {
         key: `dca-${d.plan.id}`,
         tone: 'up',
         title: `DCA ${d.plan.symbol.toUpperCase()} : ${fmtMoney(d.recommended, currency, 0)} cette période`,
-        detail: d.multiplier === 1 ? 'Montant habituel, le marché est dans une zone neutre.' : `Multiplicateur ×${String(d.multiplier).replace('.', ',')} (${d.reason}).`,
+        detail: d.multiplier === 1 ? 'Montant habituel, le marché est dans une zone neutre.' : `Multiplicateur ×${fmtNum(d.multiplier, 2)} (${d.reason}).`,
         to: '/dca',
       });
     }
@@ -139,7 +139,7 @@ export function useGuidance(): Guidance[] {
         out.push({
           key: 'scatter',
           tone: 'warn',
-          title: sc.tooMany ? `${sc.lines.length} lignes dans ton portefeuille (maximum conseillé : ${rules.maxLines})` : `${sc.tiny.length} lignes pèsent moins de ${String(rules.minLinePct).replace('.', ',')} % chacune`,
+          title: sc.tooMany ? `${sc.lines.length} lignes dans ton portefeuille (maximum conseillé : ${rules.maxLines})` : `${sc.tiny.length} lignes pèsent moins de ${fmtNum(rules.minLinePct, 2)} % chacune`,
           detail: `Elles ne représentent que ${Math.round(sc.tinyPct * 10) / 10} % de ta valeur (${fmtMoney(sc.tinyValue, currency, 0)}) : même un ×10 ne change presque rien. Regroupe-les vers Bitcoin, ou renforce celles auxquelles tu crois vraiment.`,
           to: '/portefeuille',
         });

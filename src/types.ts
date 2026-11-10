@@ -16,6 +16,8 @@ export interface Settings {
   anthropicKey: string;
   aiModel: AiModel;
   aiWebSearch: boolean;
+  /** Anonymiser le dossier envoyé à l'IA : pas de prénom, des pourcentages à la place des montants. */
+  aiAnonymous: boolean;
   compatKey: string;
   compatBaseUrl: string;
   compatModel: string;

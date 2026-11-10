@@ -1,4 +1,4 @@
-import { CalendarCheck, Check, FlaskConical, Pause, Pencil, Play, Plus, Repeat, SkipForward, Trash2 } from 'lucide-react';
+import { CalendarCheck, Check, FlaskConical, Pause, Pencil, Play, Plus, SkipForward, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../store/useStore';
@@ -9,7 +9,7 @@ import { getFearGreed } from '../api/feargreed';
 import { backtestDca, dayKeyUTC, FREQUENCY_LABEL, STRATEGY_HELP, STRATEGY_LABEL, type DcaStrategy, type Frequency } from '../lib/dca';
 import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, isoDay, uid } from '../lib/format';
 import {
-  Badge, Banner, Button, Card, CoinIcon, Empty, ErrorNote, Field, Modal, NumberInput, PageHeader, Select, Spinner, Table, Td,
+  Badge, Banner, Button, Card, CoinIcon, ErrorNote, Field, Modal, NumberInput, PageHeader, Select, Spinner, Table, Td,
 } from '../components/ui';
 import { DcaPlanModal } from '../components/forms';
 import { BasketSection } from '../components/Basket';
@@ -23,7 +23,6 @@ export default function Dca() {
   const remove = useStore((s) => s.removeDcaPlan);
   const removeExec = useStore((s) => s.removeDcaExecution);
   const currency = useStore((s) => s.settings.currency);
-  const basket = useStore((s) => s.basket);
   const status = useDcaStatus();
   const markets = useMarkets();
   const imageOf = (p: DcaPlan) => p.image ?? markets.data?.find((m) => m.id === p.coinId)?.image;
@@ -48,18 +47,23 @@ export default function Dca() {
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="DCA — investissement programmé"
-        subtitle="Investir un montant régulier lisse ton prix d’achat et retire l’émotion. Le DCA intelligent ajuste le montant au climat du marché : plus quand il a peur, moins quand il s’emballe."
-        actions={<Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setCreate(true)}>Nouveau plan</Button>}
+        subtitle="Le panier est ton parcours principal : il répartit ton budget entre le cœur (Bitcoin, Ethereum…) et une ligne de découverte, en suivant tes règles. Les plans à une seule crypto, pour les cas particuliers, restent en « avancé »."
       />
 
       <BasketSection />
 
-      {!plans.length ? (basket ? null : (
-        <Empty icon={<Repeat className="size-8" />} title="Aucun plan DCA" action={<Button variant="primary" onClick={() => setCreate(true)}>Créer mon premier plan</Button>}>
-          Exemple solide pour débuter : 70 % Bitcoin et 30 % Ethereum chaque semaine, en mode « Fear & Greed ».
-        </Empty>
-      )) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Avancé : plans sur une seule crypto</h2>
+            <p className="text-xs text-muted">Si ton cœur est déjà couvert par le panier, ne crée pas un plan par crypto : tu achèterais Bitcoin et Ethereum deux fois. Ces plans servent aux stratégies propres à une ligne (multiple de Mayer, Fear & Greed, température).</p>
+          </div>
+          <Button icon={<Plus className="size-4" />} onClick={() => setCreate(true)}>Nouveau plan avancé</Button>
+        </div>
+        {!plans.length ? (
+          <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">Aucun plan avancé : parfait si le panier couvre déjà tes achats.</p>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
           {status.map((s) => {
             const t = totals.get(s.plan.id);
             return (
@@ -78,7 +82,7 @@ export default function Dca() {
                       <div>
                         <p className="text-sm text-ink-2">À investir cette période</p>
                         <p className="text-2xl font-semibold text-ink">{fmtMoney(s.recommended, currency, 0)}</p>
-                        <p className="text-xs text-muted">×{String(s.multiplier).replace('.', ',')} — {s.reason}</p>
+                        <p className="text-xs text-muted">×{fmtNum(s.multiplier, 2)} — {s.reason}</p>
                       </div>
                       <div className="flex gap-2">
                         <Button variant="primary" icon={<Check className="size-4" />} onClick={() => setBuy(s)}>J’ai acheté</Button>
@@ -96,8 +100,9 @@ export default function Dca() {
               </Card>
             );
           })}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {executions.length > 0 && (
         <Card padded={false} title="Historique des achats DCA">
@@ -111,7 +116,7 @@ export default function Dca() {
                   <Td className="font-medium text-ink">{e.skipped ? <Badge>Passé</Badge> : fmtMoney(e.amount, currency, 0)}</Td>
                   <Td>{e.skipped ? '—' : fmtPrice(e.price, currency)}</Td>
                   <Td>{e.skipped ? '—' : fmtNum(e.quantity, 8)}</Td>
-                  <Td className="text-ink-2">×{String(e.multiplier).replace('.', ',')}</Td>
+                  <Td className="text-ink-2">×{fmtNum(e.multiplier, 2)}</Td>
                   <Td><Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} aria-label="Supprimer" onClick={() => removeExec(e.id)} /></Td>
                 </tr>
               );
@@ -170,10 +175,10 @@ function BuyModal({ status, onClose }: { status: DcaStatus | null; onClose: () =
       <Button variant="primary" disabled={amount === '' || price === '' || qty <= 0} onClick={() => save(false)}>Enregistrer l’achat</Button>
     </>}>
       <div className="space-y-3">
-        <p className="text-sm text-ink-2">Montant recommandé : <span className="font-semibold text-ink">{fmtMoney(status.recommended, currency, 0)}</span> (×{String(status.multiplier).replace('.', ',')} — {status.reason}).</p>
+        <p className="text-sm text-ink-2">Montant recommandé : <span className="font-semibold text-ink">{fmtMoney(status.recommended, currency, 0)}</span> (×{fmtNum(status.multiplier, 2)} — {status.reason}).</p>
         <div className="grid grid-cols-3 gap-3">
           <Field label={`Montant (${currency === 'EUR' ? '€' : '$'})`}><NumberInput value={amount} onChange={setAmount} /></Field>
-          <Field label="Prix payé"><NumberInput value={price} onChange={setPrice} /></Field>
+          <Field label={`Prix payé (${currency === 'EUR' ? '€' : '$'})`}><NumberInput value={price} onChange={setPrice} /></Field>
           <Field label="Frais"><NumberInput value={fee} onChange={setFee} /></Field>
         </div>
         <p className="text-sm text-ink-2">Quantité obtenue : <span className="tnum font-medium text-ink">{qty > 0 ? fmtNum(qty, 8) : '—'}</span> {status.plan.symbol.toUpperCase()}</p>

@@ -1,15 +1,13 @@
-import { Bell, Bot, Calculator, Pencil, Plus, Radar, Trash2 } from 'lucide-react';
+import { Bell, Bot, Calculator, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { useCycle, useFx, useMarkets, useScan } from '../hooks/useMarket';
+import { useFx, useMarkets } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { positionSize, tradePnl, tradeR, tradeStats } from '../lib/risk';
-import { isStable, isWrappedOrStaked } from '../lib/portfolio';
-import { SETUP_KEYS } from '../lib/signals';
 import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice } from '../lib/format';
-import { Link, setQuery, useHashPath } from '../router';
+import { setQuery, useHashPath } from '../router';
 import {
-  Badge, Banner, Button, Card, CoinIcon, Empty, Field, NumberInput, PageHeader, Segmented, Select, Spinner, Stat, Table, Td,
+  Badge, Banner, Button, Card, Empty, Field, NumberInput, PageHeader, Segmented, Select, Stat, Table, Td,
 } from '../components/ui';
 import { AlertModal, TradeModal } from '../components/forms';
 import { LineChart } from '../components/LineChart';
@@ -18,22 +16,20 @@ import { useAiContext } from '../ai/context';
 import { runJournalReview } from '../ai/tasks';
 import type { TradeEntry } from '../types';
 
-type Tab = 'calc' | 'scanner' | 'journal' | 'alertes';
+type Tab = 'calc' | 'journal' | 'alertes';
 
 export default function Trading() {
   const { query } = useHashPath();
   const tab = (query.get('tab') as Tab) || 'calc';
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader title="Trading" subtitle="Calcule la bonne taille de position, repère les setups techniques, tiens ton journal et fais-toi coacher par l’IA. Règle n°1 : chaque trade a un stop." />
+      <PageHeader title="Trading" subtitle="Calcule la bonne taille de position, tiens ton journal et fais-toi coacher par l’IA. Règle n°1 : chaque trade a un stop. (Les setups détectés sont dans Signaux.)" />
       <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[
         { value: 'calc', label: 'Calculateur' },
-        { value: 'scanner', label: 'Scanner de setups' },
         { value: 'journal', label: 'Journal' },
         { value: 'alertes', label: 'Alertes de prix' },
       ]} />
       {tab === 'calc' && <SizeCalculator />}
-      {tab === 'scanner' && <Scanner />}
       {tab === 'journal' && <Journal />}
       {tab === 'alertes' && <Alerts />}
     </div>
@@ -82,68 +78,6 @@ function SizeCalculator() {
           </div>
         )}
       </Card>
-    </div>
-  );
-}
-
-function Scanner() {
-  const markets = useMarkets();
-  const cycle = useCycle();
-  const currency = useStore((s) => s.settings.currency);
-  const fx = useFx();
-  const rate = currency === 'EUR' ? fx : 1;
-  const [size, setSize] = useState(100);
-  const [filter, setFilter] = useState<string>('bull');
-  const [preset, setPreset] = useState<Partial<TradeEntry> | null>(null);
-  const coins = useMemo(() => (markets.data ?? []).filter((m) => !isStable(m.symbol, m.id) && !isWrappedOrStaked(m.symbol, m.name, m.id)).slice(0, size), [markets.data, size]);
-  const scan = useScan(coins, cycle.data?.temperature);
-
-  const rows = useMemo(() => coins.flatMap((m) => {
-    const a = scan.data?.get(m.id);
-    if (!a) return [];
-    return a.setups
-      .filter((s) => filter === 'all' || (filter === 'bull' ? s.bias === 'bull' : filter === 'bear' ? s.bias === 'bear' : s.key === filter))
-      .map((s) => ({ m, a, s }));
-  }), [coins, scan.data, filter]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <Field label="Univers"><Select value={size} onChange={(e) => setSize(Number(e.target.value))}><option value={50}>Top 50</option><option value={100}>Top 100</option><option value={150}>Top 150</option></Select></Field>
-        <Field label="Setup"><Select value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="bull">Tous les setups haussiers</option>
-          <option value="bear">Tous les signaux baissiers</option>
-          <option value="all">Tout</option>
-          {Object.entries(SETUP_KEYS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </Select></Field>
-      </div>
-      {scan.isLoading && <Spinner label={`Analyse de ${coins.length} cryptos sur données journalières…`} />}
-      {!scan.isLoading && !rows.length && <Empty icon={<Radar className="size-8" />} title="Aucun setup pour ce filtre">Les setups apparaissent et disparaissent avec le marché : reviens plus tard ou élargis le filtre.</Empty>}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {rows.map(({ m, a, s }) => (
-          <div key={`${m.id}-${s.key}`} className="rounded-xl border border-line bg-surface p-4">
-            <div className="flex items-center gap-3">
-              <CoinIcon src={m.image} symbol={m.symbol} size={28} />
-              <Link to={`/coin/${m.id}`} className="min-w-0 flex-1 truncate font-medium text-ink hover:underline">{m.name} <span className="text-muted">{m.symbol.toUpperCase()}</span></Link>
-              <Badge tone={s.bias === 'bull' ? 'up' : s.bias === 'bear' ? 'down' : 'neutral'}>{s.label}</Badge>
-            </div>
-            <p className="mt-2 text-sm text-ink-2">{s.detail}</p>
-            {a.plan && s.bias === 'bull' && (
-              <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-surface-2 p-2.5 text-xs">
-                <div><div className="text-muted">Entrée</div><div className="tnum text-ink">{fmtPrice(a.plan.entry * rate, currency)}</div></div>
-                <div><div className="text-muted">Stop</div><div className="tnum text-down">{fmtPrice(a.plan.stop * rate, currency)}</div></div>
-                <div><div className="text-muted">Objectif 1</div><div className="tnum text-up">{fmtPrice(a.plan.tp1 * rate, currency)}</div></div>
-              </div>
-            )}
-            <div className="mt-3 flex items-center justify-between text-xs text-muted">
-              <span>Trader : {a.trader.label} ({a.trader.score > 0 ? '+' : ''}{a.trader.score}) · RSI {Math.round(a.rsi14)}</span>
-              {a.plan && s.bias === 'bull' && <Button size="sm" variant="ghost" onClick={() => setPreset({ coinId: m.id, symbol: m.symbol, entryPrice: Math.round(a.plan!.entry * 1e6) / 1e6, stopLoss: Math.round(a.plan!.stop * 1e6) / 1e6, takeProfit: Math.round(a.plan!.tp1 * 1e6) / 1e6, setup: s.label })}>Journaliser</Button>}
-            </div>
-          </div>
-        ))}
-      </div>
-      <p className="text-xs text-muted">Niveaux en {currency === 'EUR' ? 'euros (convertis)' : 'dollars'} calculés avec l’ATR 14 jours et les supports récents. Un setup n’est pas une garantie : c’est une situation où la probabilité est légèrement en ta faveur.</p>
-      <TradeModal open={!!preset} preset={preset} onClose={() => setPreset(null)} />
     </div>
   );
 }

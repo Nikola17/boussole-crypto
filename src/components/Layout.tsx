@@ -2,7 +2,7 @@
 
 import { clsx } from 'clsx';
 import {
-  Bot, CandlestickChart, Coins, Compass, Gem, Gift, GraduationCap, LayoutDashboard, LineChart, Menu, Repeat, Settings, Wallet, X,
+  Bot, Coins, Compass, Gift, GraduationCap, LayoutDashboard, LineChart, Menu, Repeat, Settings, Wallet, X,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useHashPath } from '../router';
@@ -13,11 +13,9 @@ import { StaleDataBanner, StorageBanner } from './StatusBanners';
 export const NAV = [
   { to: '/', label: 'Cockpit', icon: LayoutDashboard, mobile: true },
   { to: '/marche', label: 'Signaux', icon: LineChart, mobile: true },
-  { to: '/pepites', label: 'Pépites', icon: Gem, mobile: true },
+  { to: '/dca', label: 'DCA', icon: Repeat, mobile: true },
   { to: '/portefeuille', label: 'Wallet', icon: Wallet, mobile: true },
   { to: '/ia', label: 'Copilote IA', icon: Bot, mobile: true },
-  { to: '/dca', label: 'DCA', icon: Repeat },
-  { to: '/trading', label: 'Trading', icon: CandlestickChart },
   { to: '/airdrops', label: 'Airdrops', icon: Gift },
   { to: '/defi', label: 'Rendement & DeFi', icon: Coins },
   { to: '/guide', label: 'Guide & profil', icon: GraduationCap },

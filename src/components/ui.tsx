@@ -9,7 +9,7 @@ import {
   type SelectHTMLAttributes, type TextareaHTMLAttributes,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { fmtPct } from '../lib/format';
+import { fmtNum, fmtPct } from '../lib/format';
 
 // ------------------------------------------------------------------ Structure
 
@@ -270,7 +270,7 @@ export function SegmentedBar({ segments, format }: { segments: Segment[]; format
               key={s.key}
               className="flex h-full min-w-[3px] items-center overflow-hidden rounded px-1.5 text-[0.7rem] font-semibold text-white first:rounded-l-md last:rounded-r-md"
               style={{ width: `${pct}%`, background: s.color }}
-              title={`${s.label} : ${format(s.value)} (${pct.toFixed(1).replace('.', ',')} %)`}
+              title={`${s.label} : ${format(s.value)} (${fmtNum(pct, 1)} %)`}
             >
               {pct >= 9 ? `${Math.round(pct)} %` : ''}
             </div>

@@ -8,7 +8,7 @@ import { searchCoins } from '../api/coingecko';
 import {
   buildCryptoComTransactions, CLASS_LABEL, parseCryptoComCsv, resolveSymbols, type ImportClass, type ParsedCryptoCom,
 } from '../lib/importers/cryptocom';
-import { fmtDate } from '../lib/format';
+import { fmtDate, fmtQty } from '../lib/format';
 import { dayBeforeFirst, matchManualEntries, missingStock } from '../lib/stock';
 import type { CoinRef, Transaction } from '../types';
 import { CoinPicker } from './CoinPicker';
@@ -231,7 +231,7 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
                   const set = (patch: Partial<typeof row>) => setOpening({ ...opening, [m.coinId]: { ...row, ...patch } });
                   return (
                     <li key={m.coinId} className="grid items-center gap-2 py-2 sm:grid-cols-[1fr_9rem_9rem_auto]">
-                      <span className="text-ink">{m.symbol.toUpperCase()} <span className="text-xs text-muted">manque au moins {String(m.missing).replace('.', ',')} ({m.count} vente(s))</span></span>
+                      <span className="text-ink">{m.symbol.toUpperCase()} <span className="text-xs text-muted">manque au moins {fmtQty(m.missing)} ({m.count} vente(s))</span></span>
                       <NumberInput value={row.qty} onChange={(v) => set({ qty: v })} placeholder="Quantité" />
                       <NumberInput value={row.price} onChange={(v) => set({ price: v })} placeholder="Prix d’achat € (facultatif)" />
                       <Toggle checked={row.on} onChange={(v) => set({ on: v })} label="Ajouter" />

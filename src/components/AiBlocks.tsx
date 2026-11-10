@@ -9,7 +9,7 @@ import { buildAiConfig, prettyModel } from '../ai/run';
 import type { AiConfig, Progress } from '../ai/tasks';
 import { useCompatModels, findModel } from '../hooks/useAiModels';
 import type { AiReport } from '../types';
-import { fmtDate } from '../lib/format';
+import { fmtDate, fmtNum } from '../lib/format';
 import { openExternal } from '../lib/platform';
 import { navigate } from '../router';
 import { Banner, Button, Card, Spinner } from './ui';
@@ -82,7 +82,7 @@ export function CostHint({ calls, searches = 0 }: { calls: number; searches?: nu
   }
   if (perCall == null) return <span className="text-xs text-muted">coût très faible · {label}</span>;
   const est = perCall * calls;
-  return <span className="text-xs text-muted">≈ {est < 0.01 ? '< 0,01' : est.toFixed(2).replace('.', ',')} $ · {label}</span>;
+  return <span className="text-xs text-muted">≈ {est < 0.01 ? '< 0,01' : fmtNum(est, 2)} $ · {label}</span>;
 }
 
 export function AiProgress({ progress, onCancel }: { progress: Progress | null; onCancel?: () => void }) {
@@ -131,7 +131,7 @@ export function ReportView({ report, onDelete, headerExtra }: { report: AiReport
   return (
     <Card
       title={<span className="inline-flex items-center gap-2"><Sparkles className="size-4 text-accent" />{report.title}</span>}
-      subtitle={`${fmtDate(report.createdAt, true)} · ${prettyModel(report.model)}${report.usage && report.usage.costKnown !== false ? ` · ${report.usage.costUsd.toFixed(3).replace('.', ',')} $` : ''}${report.usage?.searches ? ` · ${report.usage.searches} recherches` : ''}`}
+      subtitle={`${fmtDate(report.createdAt, true)} · ${prettyModel(report.model)}${report.usage && report.usage.costKnown !== false ? ` · ${fmtNum(report.usage.costUsd, 3)} $` : ''}${report.usage?.searches ? ` · ${report.usage.searches} recherches` : ''}`}
       actions={<>{headerExtra}{onDelete && <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={onDelete} aria-label="Supprimer le rapport" />}</>}
     >
       <Markdown>{report.markdown}</Markdown>

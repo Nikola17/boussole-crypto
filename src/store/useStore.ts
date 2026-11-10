@@ -97,6 +97,7 @@ export const defaultSettings: Settings = {
   anthropicKey: '',
   aiModel: 'claude-opus-5-5',
   aiWebSearch: true,
+  aiAnonymous: false,
   compatKey: '',
   compatBaseUrl: NOUS_BASE_URL,
   compatModel: DEFAULT_COMPAT_MODEL,

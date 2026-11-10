@@ -7,7 +7,7 @@ import { useAltSeason, useCategories, useCycle, useFearGreed, useGlobal, useMark
 import { usePortfolio } from '../hooks/usePortfolio';
 import { useFocusCoins, useGuidance } from '../hooks/useGuidance';
 import { useBriefing } from '../hooks/useBriefing';
-import { fmtCompact, fmtMoney, fmtPrice } from '../lib/format';
+import { fmtCompact, fmtMoney, fmtNum, fmtPrice } from '../lib/format';
 import { Link, navigate } from '../router';
 import { readBriefActions } from '../lib/reportData';
 import { BackupReminder } from '../components/StatusBanners';
@@ -78,7 +78,7 @@ export default function Dashboard() {
                 <span className="text-5xl font-semibold leading-none text-ink sm:text-6xl">{Math.round(cycle.data.temperature)}</span>
                 <div className="pb-1">
                   <div className="text-lg font-semibold text-ink">{cycle.data.zone.label}</div>
-                  <div className="text-xs text-muted">sur 100 · DCA conseillé ×{String(cycle.data.zone.dcaMultiplier).replace('.', ',')}</div>
+                  <div className="text-xs text-muted">sur 100 · DCA conseillé ×{fmtNum(cycle.data.zone.dcaMultiplier, 2)}</div>
                 </div>
               </div>
               <p className="mt-3 text-sm text-ink-2">{cycle.data.zone.action}</p>
@@ -149,7 +149,7 @@ export default function Dashboard() {
         <Stat label="Plus-value latente" value={fmtMoney(pf.totals.unrealized, currency, 0)} delta={<Delta value={pf.totals.unrealizedPct} />} hint="vs investi" />
         <Stat label="Bitcoin" value={btc ? fmtPrice(btc.current_price * rate, currency) : '—'} delta={<Delta value={btc?.price_change_percentage_24h} />} hint="24 h" trend={btc?.sparkline_in_7d ? <Sparkline values={btc.sparkline_in_7d.price} width={110} /> : undefined} />
         <Stat label="Fear & Greed" value={fngNow ? `${fngNow.value} · ${fngLabel(fngNow.value)}` : '—'} hint={fngWeek ? `il y a 7 j : ${fngWeek.value}` : undefined} trend={fng.data ? <Sparkline values={fng.data.slice(-30).map((f) => f.value)} width={110} tone="neutral" /> : undefined} />
-        <Stat label="Dominance Bitcoin" value={global.data ? `${global.data.data.market_cap_percentage.btc.toFixed(1).replace('.', ',')} %` : '—'} hint={global.data ? `Capi totale ${fmtCompact(global.data.data.total_market_cap.usd * rate, currency)}` : undefined} />
+        <Stat label="Dominance Bitcoin" value={global.data ? `${fmtNum(global.data.data.market_cap_percentage.btc, 1)} %` : '—'} hint={global.data ? `Capi totale ${fmtCompact(global.data.data.total_market_cap.usd * rate, currency)}` : undefined} />
         <Stat label="Saison des altcoins" value={alt != null ? `${alt}/100` : '—'} hint={alt == null ? undefined : alt >= 75 ? 'Altseason' : alt <= 25 ? 'Saison Bitcoin' : 'Mixte'} />
       </div>
 
@@ -240,7 +240,7 @@ function Narratives() {
         ))}
       </div>
       {cold.length > 0 && (
-        <p className="mt-3 text-xs text-muted">En retrait : {cold.map((c) => `${c.name} (${(c.market_cap_change_24h ?? 0).toFixed(1).replace('.', ',')} %)`).join(' · ')}</p>
+        <p className="mt-3 text-xs text-muted">En retrait : {cold.map((c) => `${c.name} (${fmtNum(c.market_cap_change_24h ?? 0, 1)} %)`).join(' · ')}</p>
       )}
     </Card>
   );

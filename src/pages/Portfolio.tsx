@@ -44,7 +44,7 @@ export default function Portfolio() {
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Mon portefeuille"
-        subtitle="Tes achats (journal) et tes wallets publics, valorisés en temps réel. Tes données restent sur cet appareil."
+        subtitle="Tes achats (journal) et tes wallets publics, valorisés en temps réel."
         actions={<Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setTxOpen(true)}>Transaction</Button>}
       />
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
@@ -150,35 +150,75 @@ function Positions() {
 
       <ConsolidateCard />
 
-      <Card padded={false} title="Positions" subtitle="Clique sur une ligne pour voir ses signaux">
-        <Table head={['Crypto', 'Quantité', 'Prix', 'Valeur', 'Poids', '24 h', 'Prix moyen', 'Plus-value', 'Source']}>
-          {pf.holdings.map((h) => {
-            // Prix moyen = coût ÷ quantité QUI A UN COÛT dans le journal (pas la quantité totale de la ligne, qui peut inclure des unités sans historique).
-            const avg = h.cost != null && (h.costQty ?? h.quantity) > 0 ? h.cost / (h.costQty ?? h.quantity) : null;
-            const partial = h.costQty != null && h.costQty < h.quantity * 0.999;
-            const coinTotal = pf.holdings.filter((x) => (x.coinId ?? x.key) === (h.coinId ?? h.key)).reduce((sum, x) => sum + x.value, 0);
-            return (
-              <tr key={h.key} className="hover:bg-surface-2">
-                <Td left>
-                  {h.coinId ? (
-                    <Link to={`/coin/${h.coinId}`} className="flex items-center gap-2"><CoinIcon src={h.image} symbol={h.symbol} size={22} /><span className="font-medium text-ink">{h.symbol}</span><span className="max-w-[140px] truncate text-xs text-muted">{h.name}</span></Link>
-                  ) : (
-                    <span className="flex items-center gap-2"><CoinIcon src={h.image} symbol={h.symbol} size={22} /><span className="font-medium text-ink">{h.symbol}</span></span>
-                  )}
-                </Td>
-                <Td>{fmtQty(h.quantity)}</Td>
-                <Td>{fmtPrice(h.priceUsd != null ? h.priceUsd * pf.rate : null, currency)}</Td>
-                <Td className="font-medium text-ink">{h.priceUsd == null ? <span className="text-xs font-normal text-warn" title="Prix indisponible : cette valeur n’est pas comptée dans le total">prix indisponible</span> : fmtMoney(h.value, currency, 0)}</Td>
-                <Td className="text-ink-2"><span title="Poids de cette crypto, toutes lignes confondues">{total > 0 ? `${fmtNum((coinTotal / total) * 100, 1)} %` : '—'}</span></Td>
-                <Td><Delta value={h.change24h} /></Td>
-                <Td className="text-ink-2">{avg != null ? <span title={partial ? `Calculé sur ${fmtQty(h.costQty ?? 0)} des ${fmtQty(h.quantity)} : le reste n’a pas d’historique dans ton journal` : undefined}>{fmtPrice(avg, currency)}{partial ? '*' : ''}</span> : '—'}</Td>
-                <Td>{h.pnl != null ? <span className="inline-flex flex-col items-end"><span className={h.pnl >= 0 ? 'text-up' : 'text-down'}>{fmtMoney(h.pnl, currency, 0)}</span><Delta value={h.pnlPct} className="text-xs" /></span> : <span className="text-muted">—</span>}</Td>
-                <Td><Badge>{h.accountName ?? (h.source === 'wallet' ? h.walletLabel ?? 'Wallet' : 'Journal')}</Badge></Td>
-              </tr>
-            );
-          })}
-        </Table>
-      </Card>
+      {(() => {
+        // Prix moyen = coût ÷ quantité QUI A UN COÛT dans le journal (pas la quantité totale de la ligne, qui peut inclure des unités sans historique).
+        const rows = pf.holdings.map((h) => {
+          const avg = h.cost != null && (h.costQty ?? h.quantity) > 0 ? h.cost / (h.costQty ?? h.quantity) : null;
+          const partial = h.costQty != null && h.costQty < h.quantity * 0.999;
+          const coinTotal = pf.holdings.filter((x) => (x.coinId ?? x.key) === (h.coinId ?? h.key)).reduce((sum, x) => sum + x.value, 0);
+          return { h, avg, partial, coinTotal };
+        });
+        return (
+          <>
+            {/* Téléphone : cartes */}
+            <div className="space-y-2 md:hidden">
+              {rows.map(({ h, avg, partial, coinTotal }) => {
+                const body = (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <CoinIcon src={h.image} symbol={h.symbol} size={28} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-ink">{h.symbol} <span className="text-xs font-normal text-muted">{h.name}</span></div>
+                        <div className="mt-0.5 text-xs text-muted">{h.accountName ?? (h.source === 'wallet' ? h.walletLabel ?? 'Wallet' : 'Journal')}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="tnum text-sm font-semibold text-ink">{h.priceUsd == null ? <span className="text-xs font-normal text-warn">prix indisponible</span> : fmtMoney(h.value, currency, 0)}</div>
+                        <div className="text-xs"><Delta value={h.change24h} /></div>
+                      </div>
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-2 rounded-lg bg-surface-2 p-2 text-xs">
+                      <div><div className="text-muted">Quantité</div><div className="tnum text-ink-2">{fmtQty(h.quantity)}</div></div>
+                      <div><div className="text-muted">Prix unitaire</div><div className="tnum text-ink-2">{fmtPrice(h.priceUsd != null ? h.priceUsd * pf.rate : null, currency)}</div></div>
+                      <div><div className="text-muted">Poids</div><div className="tnum text-ink-2">{total > 0 ? `${fmtNum((coinTotal / total) * 100, 1)} %` : '—'}</div></div>
+                      <div><div className="text-muted">Prix moyen{partial ? '*' : ''}</div><div className="tnum text-ink-2">{avg != null ? fmtPrice(avg, currency) : '—'}</div></div>
+                      <div className="col-span-2"><div className="text-muted">Plus-value</div><div className="tnum">{h.pnl != null ? <span className={h.pnl >= 0 ? 'text-up' : 'text-down'}>{fmtMoney(h.pnl, currency, 0)} ({fmtPct(h.pnlPct, 1)})</span> : <span className="text-ink-2">—</span>}</div></div>
+                    </div>
+                  </>
+                );
+                return h.coinId ? (
+                  <Link key={h.key} to={`/coin/${h.coinId}`} className="block rounded-xl border border-line bg-surface p-3">{body}</Link>
+                ) : (
+                  <div key={h.key} className="rounded-xl border border-line bg-surface p-3">{body}</div>
+                );
+              })}
+            </div>
+            {/* Ordinateur : tableau */}
+            <Card padded={false} className="hidden md:block" title="Positions" subtitle="Clique sur une ligne pour voir ses signaux">
+              <Table head={['Crypto', 'Quantité', 'Prix', 'Valeur', 'Poids', '24 h', 'Prix moyen', 'Plus-value', 'Source']}>
+                {rows.map(({ h, avg, partial, coinTotal }) => (
+                  <tr key={h.key} className="hover:bg-surface-2">
+                    <Td left>
+                      {h.coinId ? (
+                        <Link to={`/coin/${h.coinId}`} className="flex items-center gap-2"><CoinIcon src={h.image} symbol={h.symbol} size={22} /><span className="font-medium text-ink">{h.symbol}</span><span className="max-w-[140px] truncate text-xs text-muted">{h.name}</span></Link>
+                      ) : (
+                        <span className="flex items-center gap-2"><CoinIcon src={h.image} symbol={h.symbol} size={22} /><span className="font-medium text-ink">{h.symbol}</span></span>
+                      )}
+                    </Td>
+                    <Td>{fmtQty(h.quantity)}</Td>
+                    <Td>{fmtPrice(h.priceUsd != null ? h.priceUsd * pf.rate : null, currency)}</Td>
+                    <Td className="font-medium text-ink">{h.priceUsd == null ? <span className="text-xs font-normal text-warn" title="Prix indisponible : cette valeur n’est pas comptée dans le total">prix indisponible</span> : fmtMoney(h.value, currency, 0)}</Td>
+                    <Td className="text-ink-2"><span title="Poids de cette crypto, toutes lignes confondues">{total > 0 ? `${fmtNum((coinTotal / total) * 100, 1)} %` : '—'}</span></Td>
+                    <Td><Delta value={h.change24h} /></Td>
+                    <Td className="text-ink-2">{avg != null ? <span title={partial ? `Calculé sur ${fmtQty(h.costQty ?? 0)} des ${fmtQty(h.quantity)} : le reste n’a pas d’historique dans ton journal` : undefined}>{fmtPrice(avg, currency)}{partial ? '*' : ''}</span> : '—'}</Td>
+                    <Td>{h.pnl != null ? <span className="inline-flex flex-col items-end"><span className={h.pnl >= 0 ? 'text-up' : 'text-down'}>{fmtMoney(h.pnl, currency, 0)}</span><Delta value={h.pnlPct} className="text-xs" /></span> : <span className="text-muted">—</span>}</Td>
+                    <Td><Badge>{h.accountName ?? (h.source === 'wallet' ? h.walletLabel ?? 'Wallet' : 'Journal')}</Badge></Td>
+                  </tr>
+                ))}
+              </Table>
+            </Card>
+          </>
+        );
+      })()}
     </div>
   );
 }
@@ -338,7 +378,34 @@ function Transactions({ onImport }: { onImport: () => void }) {
   return (
     <div className="space-y-4">
       <RealFeesCard />
-    <Card padded={false} title="Historique" actions={<><Button size="sm" className="shrink-0 whitespace-nowrap" icon={<FileUp className="size-3.5" />} onClick={onImport}>Importer un CSV</Button><Input className="h-8 w-40" placeholder="Filtrer…" value={q} onChange={(e) => setQ(e.target.value)} /></>}>
+      {/* Téléphone : cartes */}
+      <div className="flex gap-2 md:hidden">
+        <Button size="sm" className="shrink-0 whitespace-nowrap" icon={<FileUp className="size-3.5" />} onClick={onImport}>Importer un CSV</Button>
+        <Input placeholder="Filtrer…" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      <div className="space-y-2 md:hidden">
+        {list.map((t) => (
+          <div key={t.id} className="rounded-xl border border-line bg-surface p-3">
+            <div className="flex items-center gap-3">
+              <CoinIcon src={t.image} symbol={t.symbol} size={28} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 text-sm font-medium text-ink">{t.symbol.toUpperCase()} <Badge tone={t.type === 'transfer' ? 'neutral' : t.type === 'buy' || t.type === 'deposit' || t.type === 'reward' ? 'up' : 'down'}>{typeLabel[t.type]}</Badge></div>
+                <div className="text-xs text-muted">{fmtDate(t.date)}{t.type === 'transfer' ? ` · ${accountName(t.accountId) ?? '—'} → ${accountName(t.toAccountId) ?? '—'}` : accountName(t.accountId) ? ` · ${accountName(t.accountId)}` : ''}</div>
+              </div>
+              <div className="text-right">
+                <div className="tnum text-sm font-medium text-ink">{fmtMoney(t.price * t.quantity, t.currency)}{t.type === 'sell' && t.toFiat === false ? ' (crypto)' : ''}</div>
+                <div className="tnum text-xs text-muted">{fmtQty(t.quantity)} × {fmtPrice(t.price, t.currency)}</div>
+              </div>
+            </div>
+            {(t.fee > 0 || t.source) && <div className="mt-1.5 flex justify-between text-xs text-muted"><span>{t.fee > 0 ? `Frais : ${fmtMoney(t.fee, t.currency)}` : ''}</span>{t.source ? <span>Source : {t.source === 'manual' ? 'saisie' : t.source}</span> : null}</div>}
+            <div className="mt-2 flex justify-end gap-1">
+              <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} aria-label="Modifier" onClick={() => setEdit(t)} />
+              <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} aria-label="Supprimer" onClick={() => remove(t.id)} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <Card padded={false} className="hidden md:block" title="Historique" actions={<><Button size="sm" className="shrink-0 whitespace-nowrap" icon={<FileUp className="size-3.5" />} onClick={onImport}>Importer un CSV</Button><Input className="h-8 w-40" placeholder="Filtrer…" value={q} onChange={(e) => setQ(e.target.value)} /></>}>
       <Table head={['Date', 'Type', 'Crypto', 'Compte', 'Quantité', 'Prix', 'Total', 'Frais', '']}>
         {list.map((t) => (
           <tr key={t.id} className="hover:bg-surface-2">
@@ -381,7 +448,7 @@ function Taxes() {
   return (
     <div className="space-y-4">
       <Banner tone="info" title="Fiscalité des particuliers en France (article 150 VH bis du CGI)">
-        Seules les conversions en monnaie classique (ou les paiements en crypto) sont imposables ; les échanges crypto contre crypto sont neutres. Exonération si le total des ventes de l’année ne dépasse pas {EXEMPTION_THRESHOLD_EUR} €. Taux appliqué : {String(rateSetting).replace('.', ',')} % (flat tax 2026 : 12,8 % d’impôt + 18,6 % de prélèvements sociaux). Estimation pédagogique : en cas de doute, consulte un professionnel.
+        Seules les conversions en monnaie classique (ou les paiements en crypto) sont imposables ; les échanges crypto contre crypto sont neutres. Exonération si le total des ventes de l’année ne dépasse pas {EXEMPTION_THRESHOLD_EUR} €. Taux appliqué : {fmtNum(rateSetting, 1)} % (flat tax 2026 : 12,8 % d’impôt + 18,6 % de prélèvements sociaux). Estimation pédagogique : en cas de doute, consulte un professionnel.
       </Banner>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Simuler une vente aujourd’hui" subtitle="Combien d’impôt si tu convertis en euros ?">

@@ -94,6 +94,14 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Alertes de prix** : sur ordinateur, les alertes sur une petite crypto (hors top 250) sont vérifiées. Sur Android, le script d'arrière-plan lit les erreurs de CoinGecko, utilise ta clé « Demo », ne « consomme » une alerte qu'une fois sa notification programmée, réessaie son envoi au lancement, et Réglages affiche « dernier contrôle réussi il y a … ». Désactiver les notifications arrête vraiment la surveillance et annule les rappels programmés.
 - Android : l'état du script d'arrière-plan n'est plus renvoyé à chaque redessin de l'écran (batterie).
 
+### v1.7.0 — Plus simple, surtout sur téléphone
+- **Menu réduit** : DCA remplace Pépites dans la barre du bas du téléphone ; Pépites et Trading passent dans Réglages, rubrique « Outils avancés » (tous les liens internes continuent de fonctionner).
+- **Doublons viés** : le scanner de setups ne vit plus que dans Signaux ; l'onglet Comité du Copilote disparaît (le comité se lance depuis la fiche d'une crypto, ses rapports restent dans l'Historique).
+- **DCA** : le panier est le parcours principal ; les plans à une seule crypto sont rangés en « Avancé » (plus un plan Bitcoin + un plan Ethereum en double du cœur).
+- **Téléphone** : positions et transactions du Wallet s'affichent en cartes, plus en tableaux de 9 colonnes (tableaux conservés sur ordinateur).
+- **Cohérence** : tous les montants de l'interface passent par `lib/format.ts` ; « Prix payé » du DCA affiche son unité ; la promesse du simulateur dit depuis quand chaque historique remonte.
+- **Transparence IA** : écran « Voir ce qui part vers l'IA » dans Réglages (dossier exact envoyé au fournisseur : profil, positions, ordre du jour, marché) et option « Anonymiser » (pourcentages à la place des montants, pas de prénom). Les mentions « tes données restent sur ton appareil » sont corrigées dans l'application et dans le README.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

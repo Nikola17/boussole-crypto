@@ -89,23 +89,26 @@ export function useAiContext() {
     };
   }, [markets.data, global.data, fng.data, cycle.data, alt, cats.data, trending.data]);
 
+  const anonymous = settings.aiAnonymous;
+
   const portfolio = useCallback(() => {
     const total = pf.totals.value;
     const allocPct = Object.fromEntries(BUCKET_ORDER.map((b) => [BUCKET_LABEL[b], total > 0 ? r2((pf.alloc[b] / total) * 100, 1) : 0]));
     const targetPct = Object.fromEntries(BUCKET_ORDER.map((b) => [BUCKET_LABEL[b], profile.target[b]]));
     return {
       devise: settings.currency,
-      valeurTotale: r2(total, 0),
-      investi: r2(pf.totals.cost, 0),
-      plusValueLatente: r2(pf.totals.unrealized, 0),
+      // Mode anonymisé : pas de montants absolus, seulement la structure en pourcentages.
+      valeurTotale: anonymous ? null : r2(total, 0),
+      investi: anonymous ? null : r2(pf.totals.cost, 0),
+      plusValueLatente: anonymous ? null : r2(pf.totals.unrealized, 0),
       plusValueLatentePct: r2(pf.totals.unrealizedPct, 1),
-      plusValueRealisee: r2(pf.totals.realized, 0),
+      plusValueRealisee: anonymous ? null : r2(pf.totals.realized, 0),
       repartitionActuellePct: allocPct,
       repartitionCiblePct: targetPct,
       // Une ligne par crypto (Ledger + Crypto.com réunis) : l'IA ne voit pas deux fois la même crypto.
       positions: aggregateByCoin(pf.holdings).slice(0, 25).map((h) => ({
         actif: h.symbol,
-        valeur: r2(h.value, 0),
+        valeur: anonymous ? null : r2(h.value, 0),
         poidsPct: total > 0 ? r2((h.value / total) * 100, 1) : 0,
         plusValuePct: r2(h.pnlPct, 1),
         poche: BUCKET_LABEL[h.bucket],
@@ -113,7 +116,7 @@ export function useAiContext() {
       })),
       theses: theses.map((t) => ({ actif: t.symbol.toUpperCase(), these: t.sentences.filter(Boolean).join(' '), lignesRouges: t.redLines })),
     };
-  }, [pf, profile.target, settings.currency, theses]);
+  }, [pf, profile.target, settings.currency, settings.aiAnonymous, theses]);
 
   const dca = useCallback((temperature?: number, mayerBySymbol?: Record<string, number>) => {
     const today = new Date();
@@ -156,13 +159,13 @@ export function useAiContext() {
   }, [dcaPlans, dcaExecutions, fng.data, basket, basketExecutions]);
 
   const profileCtx = useCallback(() => ({
-    prenom: profile.name || null,
+    prenom: anonymous ? null : (profile.name || null),
     archetype: profile.archetype,
     horizon: ['court terme (< 1 an)', 'moyen terme (1-4 ans)', 'long terme (4 ans et +)'][profile.horizon - 1],
     toleranceRisque: `${profile.riskTolerance}/5`,
     experience: ['débutant', 'intermédiaire', 'avancé'][profile.experience - 1],
-    budgetMensuel: profile.monthlyBudget,
-    capitalPrevu: profile.capital,
+    budgetMensuel: anonymous ? null : profile.monthlyBudget,
+    capitalPrevu: anonymous ? null : profile.capital,
     regles: {
       maxParPepitePct: profile.rules.maxPerGemPct,
       maxParAltcoinPct: profile.rules.maxPerAltPct,
@@ -170,7 +173,7 @@ export function useAiContext() {
       risqueParTradePct: profile.rules.riskPerTradePct,
     },
     centresInteret: Object.entries(profile.interests).filter(([, v]) => v).map(([k]) => k),
-  }), [profile]);
+  }), [profile, settings.aiAnonymous]);
 
   // Prêt seulement quand le portefeuille est complètement chargé : sinon l'IA décrirait un portefeuille sans le Ledger.
   // `loadError` : pourquoi les données ne se chargent pas (réseau, CoinGecko saturé) : l'écran le dit au lieu d'afficher « Chargement… » sans fin.

@@ -13,7 +13,7 @@ import { isStable, isWrappedOrStaked } from '../lib/portfolio';
 import { NETWORKS, getTokenPairs, networkByKey, poolLinks, type DexPair, type DexPool } from '../api/dex';
 import { scanEvm, scanSolana, type SecurityReport } from '../api/security';
 import { getMarkets } from '../api/coingecko';
-import { fmtAge, fmtCompact, fmtPct, fmtPrice } from '../lib/format';
+import { fmtAge, fmtCompact, fmtNum, fmtPct, fmtPrice } from '../lib/format';
 import { openExternal } from '../lib/platform';
 import { Link, setQuery, useHashPath } from '../router';
 import {
@@ -355,10 +355,10 @@ function DefiGems() {
               <Td className="text-ink-2">{p.category}</Td>
               <Td>{fmtCompact((p.tvl ?? 0) * rate, currency)}</Td>
               <Td>{fmtCompact((p.mcap ?? 0) * rate, currency)}</Td>
-              <Td>{Number.isFinite(s.mcapTvl) ? s.mcapTvl.toFixed(2).replace('.', ',') : '—'}</Td>
+              <Td>{Number.isFinite(s.mcapTvl) ? fmtNum(s.mcapTvl, 2) : '—'}</Td>
               <Td><Delta value={p.change_7d} /></Td>
               <Td>{revenue30d ? fmtCompact(revenue30d * rate, currency) : '—'}</Td>
-              <Td>{s.ps != null ? `${s.ps.toFixed(1).replace('.', ',')}${s.psBasis === 'frais' ? '*' : ''}` : '—'}</Td>
+              <Td>{s.ps != null ? `${fmtNum(s.ps, 1)}${s.psBasis === 'frais' ? '*' : ''}` : '—'}</Td>
               <Td><span className="font-semibold text-ink">{s.score}</span></Td>
             </tr>
           ))}

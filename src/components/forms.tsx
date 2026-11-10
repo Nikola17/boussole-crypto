@@ -305,7 +305,7 @@ export function DcaPlanModal({ open, onClose, initial, presetCoin }: { open: boo
           </Select>
         </Field>
         <Field label="Plateforme (facultatif)"><Input value={exchange} onChange={(e) => setExchange(e.target.value)} placeholder="Ex : Coinbase, Kraken, Bitpanda…" /></Field>
-        <Toggle checked={reminder} onChange={setReminder} label="Rappel le jour de l’achat" hint="Notification à 9 h sur Android, et au lancement sur ordinateur." />
+        <Toggle checked={reminder} onChange={setReminder} label="Rappel le jour de l’achat" hint="Notification à 9 h sur Android. Sur ordinateur, l’échéance s’affiche dans l’application, sans notification séparée." />
         <p className="text-xs text-muted">≈ {fmtMoney(monthly, currency, 0)} par mois en mode classique{budget ? ` (budget mensuel du profil : ${fmtMoney(budget, currency, 0)})` : ''}.</p>
       </div>
     </Modal>

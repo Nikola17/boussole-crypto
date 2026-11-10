@@ -1,4 +1,4 @@
-import { Bot, Eraser, History, MessageSquare, Send, Sparkles, Users } from 'lucide-react';
+import { Eraser, History, MessageSquare, Send, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { useStore } from '../store/useStore';
@@ -7,15 +7,14 @@ import { useAiConfig } from '../components/AiBlocks';
 import { useAiContext } from '../ai/context';
 import { runChat } from '../ai/tasks';
 import { aiLabel } from '../ai/run';
-import { fmtDate, uid } from '../lib/format';
-import { navigate, setQuery, useHashPath } from '../router';
+import { fmtDate, fmtNum, uid } from '../lib/format';
+import { setQuery, useHashPath } from '../router';
 import { AiProgress, CostHint, NeedKey, ReportView } from '../components/AiBlocks';
 import { Badge, Banner, Button, Card, Empty, ErrorNote, PageHeader, Segmented, Textarea } from '../components/ui';
 import { Markdown } from '../components/Markdown';
-import { CoinPicker } from '../components/CoinPicker';
 import type { AiReportKind } from '../types';
 
-type Tab = 'brief' | 'chat' | 'comite' | 'historique';
+type Tab = 'brief' | 'chat' | 'historique';
 
 const KIND_LABEL: Record<AiReportKind, string> = {
   briefing: 'Brief', committee: 'Comité', quick: 'Analyse rapide', pulse: 'Pourquoi ça bouge', airdrops: 'Airdrops', journal: 'Journal', thesis: 'Thèse', gem: 'Pépite',
@@ -36,12 +35,10 @@ export default function Advisor() {
       <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[
         { value: 'brief', label: 'Brief du jour' },
         { value: 'chat', label: 'Conseiller' },
-        { value: 'comite', label: 'Comité des sages' },
         { value: 'historique', label: 'Historique' },
       ]} />
       {tab === 'brief' && <BriefTab />}
       {tab === 'chat' && <ChatTab />}
-      {tab === 'comite' && <CommitteeTab />}
       {tab === 'historique' && <HistoryTab />}
     </div>
   );
@@ -141,7 +138,7 @@ function ChatTab() {
           <div key={m.id} className={clsx('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
             <div className={clsx('max-w-[92%] rounded-2xl px-4 py-2.5 sm:max-w-[80%]', m.role === 'user' ? 'bg-accent text-accent-ink' : 'border border-line bg-surface-2')}>
               {m.role === 'user' ? <p className="whitespace-pre-wrap text-sm">{m.content}</p> : <Markdown>{m.content}</Markdown>}
-              {m.usage && <p className="mt-1 text-[0.65rem] text-muted">{m.usage.costUsd.toFixed(3).replace('.', ',')} $</p>}
+              {m.usage && <p className="mt-1 text-[0.65rem] text-muted">{fmtNum(m.usage.costUsd, 3)} $</p>}
             </div>
           </div>
         ))}
@@ -172,35 +169,6 @@ function ChatTab() {
   );
 }
 
-function CommitteeTab() {
-  const reports = useStore((s) => s.reports);
-  const [coin, setCoin] = useState<{ coinId: string; symbol: string; name: string; image?: string } | null>(null);
-  const committees = reports.filter((r) => r.kind === 'committee').slice(0, 10);
-  return (
-    <div className="space-y-4">
-      <Card title={<span className="inline-flex items-center gap-2"><Users className="size-4 text-accent" />Le comité des 4 sages</span>} subtitle="Quatre analystes IA étudient une crypto en parallèle, chacun avec la grille d’un grand investisseur, puis un président tranche.">
-        <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ['Le Bâtisseur', 'Duan Yongping', 'Produit, adoption, modèle économique, capture de valeur par le token.'],
-            ['L’Évaluateur', 'Warren Buffett', 'Tokenomics, déblocages, valorisation (P/F, P/S), marge de sécurité.'],
-            ['L’Avocat du diable', 'Charlie Munger', 'Concurrence, inversion : comment ce projet peut-il mourir ?'],
-            ['Le Gardien', 'Li Lu', 'Équipe, gouvernance, sécurité, réglementation, horizon 5-10 ans.'],
-          ].map(([n, i, d]) => (
-            <div key={n} className="rounded-lg bg-surface-2 p-3"><p className="font-medium text-ink">{n}</p><p className="text-xs text-muted">inspiré de {i}</p><p className="mt-1 text-xs text-ink-2">{d}</p></div>
-          ))}
-        </div>
-        <div className="mt-4 flex flex-wrap items-end gap-3">
-          <div className="w-full max-w-sm"><CoinPicker value={coin} onChange={setCoin} /></div>
-          <Button variant="primary" disabled={!coin} icon={<Bot className="size-4" />} onClick={() => coin && navigate(`/coin/${coin.coinId}`)}>Ouvrir la fiche et lancer le comité</Button>
-          <CostHint calls={5} searches={16} />
-        </div>
-        <p className="mt-2 text-xs text-muted">Le comité se lance depuis la fiche d’une crypto, pour profiter de ses données techniques.</p>
-      </Card>
-      {committees.map((r) => <ReportView key={r.id} report={r} />)}
-    </div>
-  );
-}
-
 function HistoryTab() {
   const { query } = useHashPath();
   const reports = useStore((s) => s.reports);
@@ -214,7 +182,7 @@ function HistoryTab() {
   if (!reports.length) return <Empty icon={<History className="size-8" />} title="Aucun rapport">Tes analyses IA sont conservées ici (les 60 dernières).</Empty>;
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <Card title="Rapports" subtitle={`Coût IA estimé ce mois-ci : ${monthCost.toFixed(2).replace('.', ',')} $`}>
+      <Card title="Rapports" subtitle={`Coût IA estimé ce mois-ci : ${fmtNum(monthCost, 2)} $`}>
         <ul className="max-h-[70dvh] divide-y divide-line overflow-y-auto">
           {reports.map((r) => (
             <li key={r.id}>

@@ -192,7 +192,7 @@ function Welcome() {
         </ul>
         <div className="mt-6 flex gap-3 rounded-xl border border-warn/40 bg-warn/10 p-4 text-sm text-ink-2">
           <ShieldCheck className="mt-0.5 size-5 shrink-0 text-warn" />
-          <p>Boussole est un outil d’aide à la décision et d’éducation, <b className="text-ink">pas un conseiller financier agréé</b>. Aucun indicateur ni aucune IA ne prédit le marché avec certitude. Les cryptoactifs peuvent perdre la majeure partie de leur valeur : n’investis que ce que tu peux te permettre de perdre. Tes données restent sur ton appareil.</p>
+          <p>Boussole est un outil d’aide à la décision et d’éducation, <b className="text-ink">pas un conseiller financier agréé</b>. Aucun indicateur ni aucune IA ne prédit le marché avec certitude. Les cryptoactifs peuvent perdre la majeure partie de leur valeur : n’investis que ce que tu peux te permettre de perdre. Tes données sont stockées sur ton appareil ; les analyses IA envoient un résumé de ton dossier au fournisseur choisi (contenu visible dans Réglages).</p>
         </div>
         <Button variant="primary" className="mt-6 w-full" onClick={() => { set({ disclaimerAccepted: true }); window.location.hash = '/guide'; }}>
           J’ai compris, je configure mon profil
