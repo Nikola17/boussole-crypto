@@ -2,7 +2,7 @@
 // se propagent, les horloges décalées ne causent aucune perte. `bundleOf`/`mergeBundles` sont pures.
 
 import { describe, expect, it } from 'vitest';
-import { bundleOf, mergeBundles, mergeBackupInto, type SyncBundle } from './merge';
+import { bundleOf, mergeBundles, mergeBackupInto, sameSyncBundle, type SyncBundle } from './merge';
 import type { SyncDeletion } from '../../types';
 
 const T0 = '2026-11-01T10:00:00.000Z';
@@ -102,5 +102,21 @@ describe('fusion d’un fichier de sauvegarde (import « Fusionner »)', () => {
     expect(m.watchlist).toEqual(['bitcoin']); // le fichier n'a pas de date : l'appareil garde sa version
     expect(m.syncStamp.watchlist).toBe(T1);
     expect(m.checklist).toBeUndefined(); // rubrique absente des deux côtés : pas inventée
+  });
+});
+
+describe('sameSyncBundle — décider de réécrire ou non le dépôt', () => {
+  it('les champs de plomberie (device, savedAt) du fichier distant ne sont pas une différence', () => {
+    const local = pc();
+    const remote = { ...pc(), device: 'telephone-nico', savedAt: '2026-11-12T22:57:02Z' };
+    expect(sameSyncBundle(local, remote)).toBe(true); // sinon le dépôt serait réécrit en boucle à chaque lecture
+  });
+
+  it('une vraie différence de contenu, si petite soit-elle, est vue', () => {
+    const local = pc();
+    const remote = { ...pc(), device: 'telephone-nico', savedAt: 'now', data: { ...pc().data, transactions: [tx('a', T2, 120), tx('b'), tx('c', T1)] } };
+    expect(sameSyncBundle(local, remote)).toBe(false);
+    expect(sameSyncBundle(local, { ...pc(), stamps: { profile: T2, basket: T1 } })).toBe(false);
+    expect(sameSyncBundle(local, null)).toBe(false);
   });
 });

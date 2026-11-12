@@ -118,7 +118,12 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Transparence** : l'écran Wallet précise que le suivi d'une xpub Bitcoin interroge mempool.space adresse par adresse, ce qui relie tes adresses à ton adresse IP.
 - **Qualité** : code mort supprimé (`useStablecoins`, `Grid`, `deriveAddresses`), les quatre `eslint-disable` obsolètes sont retirés, et les utilitaires critiques sans tests en ont (formatage, `extractJson`).
 
+### v1.8.2 — La synchronisation n'écrit plus quand rien n'a changé
+- **Correctif de tempête d'écritures** : l'application comparait son faisceau local au fichier distant *avec* les champs de plomberie (appareil écrivain, date) que le distant porte en plus — elle voyait donc « une différence » à chaque lecture et réécrivait le dépôt GitHub en continu (une écriture toutes les ~5 secondes tant qu'elle était ouverte). Conséquence en cascade : l'autre appareil, heurtant l'empreinte à chaque tentative, finissait par renoncer (« l'autre appareil a synchronisé trois fois de suite ») et ne synchronisait jamais.
+- Désormais, seule le **contenu synchronisé** décide d'une réécriture (`sameSyncBundle`), et un changement de l'état ne déclenche la synchronisation groupée que si une **rubrique synchronisée** a réellement changé (un cycle d'horloge ou un rafraîchissement de marché ne compte pas).
+
 ### v1.9.0 — Runner serveur : surveillance 24/7 + alertes Telegram (idées 6-8 du plan des 50)
+
 - **Un service headless sur ton VPS** (`runner/` du dépôt, un seul fichier Node autonome, aucune dépendance à installer, aucun port ouvert) : il lit le même fichier de synchronisation chiffré que le PC et le téléphone, et veille application fermée.
 - **Alertes de prix sur Telegram** : contrôle toutes les 5 minutes réglables ; une alerte envoyée est consommée dans le fichier de synchronisation (l'application la voit déclenchée, elle n'est jamais re-notifiée ni coté PC ni sur le téléphone) ; l'empreinte du fichier (anti-écrasement) est respectée, un conflit passe au cycle suivant.
 - **Paliers de vente sur Telegram** : recalculés depuis le journal, les paliers atteints et pas vendus sont rappelés une fois par semaine. Limitation documentée : les wallets blockchain ne sont pas relus par le runner, et BTC/ETH (le cœur) n'ont pas de paliers.

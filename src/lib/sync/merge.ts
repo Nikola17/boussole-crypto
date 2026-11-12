@@ -19,6 +19,18 @@ export interface SyncBundle {
   stamps: Partial<Record<StampKey, string>>;
 }
 
+/**
+ * Deux faisceaux sont-ils identiques dans leur CONTENU synchronisé ?
+ * Le fichier distant porte aussi des champs de plomberie (appareil écrivain, date) : ils ne doivent pas
+ * compter, sinon chaque lecture voit une « différence » qui n'en est pas une et réécrit le dépôt sans fin.
+ */
+export function sameSyncBundle(a: SyncBundle, b: unknown): boolean {
+  if (!b || typeof b !== 'object') return false;
+  const o = b as SyncBundle;
+  const pick = (x: SyncBundle) => JSON.stringify({ data: x.data, deletions: x.deletions, stamps: x.stamps });
+  return pick(a) === pick(o);
+}
+
 /** L'état de l'application, vu par la fusion (seules les rubriques synchronisées comptent). */
 export type SyncSource = {
   deletions?: SyncDeletion[];
