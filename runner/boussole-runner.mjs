@@ -750,7 +750,7 @@ async function post(token, method, body) {
 async function sendMessage(token, chatId, text) {
   if (text.length > 4096) text = `${text.slice(0, 4090)}
 \u2026`;
-  await post(token, "sendMessage", { chatId, text });
+  await post(token, "sendMessage", { chat_id: chatId, text });
 }
 async function recentChats(token) {
   const r = await post(token, "getUpdates", { timeout: 0, limit: 20 });
