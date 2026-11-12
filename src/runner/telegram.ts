@@ -23,7 +23,7 @@ async function post<T>(token: string, method: string, body: Record<string, unkno
 /** Envoie un message texte (limite Telegram : 4096 caractères — le brief est bien en dessous). */
 export async function sendMessage(token: string, chatId: string, text: string): Promise<void> {
   if (text.length > 4096) text = `${text.slice(0, 4090)}\n…`;
-  await post<unknown>(token, 'sendMessage', { chatId, text });
+  await post<unknown>(token, 'sendMessage', { chat_id: chatId, text }); // l'API attend « chat_id », pas « chatId »
 }
 
 /** Dernières conversations vues par le bot (pour la commande --discover : trouver ton chat id). */
