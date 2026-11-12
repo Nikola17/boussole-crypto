@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { hasUserData } from '../lib/backup';
-import { bundleOf, mergeBundles, splitForState, type SyncBundle } from '../lib/sync/merge';
+import { bundleOf, mergeBundles, sameSyncBundle, splitForState, type SyncBundle, ITEM_KEYS, STAMP_KEYS } from '../lib/sync/merge';
 import { seal, unseal } from '../lib/sync/crypto';
 import { fetchRemote, pushRemote, CONFLICT } from '../lib/sync/github';
 import { uid } from '../lib/format';
@@ -71,7 +71,9 @@ async function syncRound(repo: string, token: string, passphrase: string): Promi
       }
     }
     const out = bundleOf(useStore.getState());
-    const differs = !remoteBundle || JSON.stringify(out) !== JSON.stringify(remoteBundle);
+    // Seul le CONTENU synchronisé compte : le fichier distant porte aussi l'appareil et la date d'écriture.
+    // Sans ça, chaque lecture voit une « différence » (device/savedAt) et réécrit le dépôt en boucle.
+    const differs = !remoteBundle || !sameSyncBundle(out, remoteBundle);
     if (!differs) return; // déjà identique : rien à écrire, rien à risquer
     try {
       const text = await seal({ ...out, device: useStore.getState().settings.deviceId, savedAt: new Date().toISOString() }, passphrase);
@@ -103,7 +105,14 @@ export function useSyncLifecycle(): void {
   useEffect(() => {
     if (!enabled) return;
     void runSync();
-    const unsubscribe = useStore.subscribe(() => scheduleSync());
+    // Seules les rubriques synchronisées comptent : un cycle d'horloge ou un rafraîchissement de marché
+    // ne doit pas déclencher d'écriture dans le dépôt (avant, chaque changement de l'état repartait).
+    const watchedKeys = [...ITEM_KEYS, ...STAMP_KEYS, 'deletions', 'syncStamp'] as const;
+    const unsubscribe = useStore.subscribe((s, prev) => {
+      for (const k of watchedKeys) {
+        if (s[k] !== prev[k]) { scheduleSync(); return; }
+      }
+    });
     const interval = setInterval(() => void runSync(), 15 * 60 * 1000);
     return () => { unsubscribe(); clearInterval(interval); };
   }, [enabled]);
