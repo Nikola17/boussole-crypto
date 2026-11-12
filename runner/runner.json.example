@@ -1,0 +1,17 @@
+{
+  "_commentaire": "Copie ce fichier vers ~/.config/boussole/runner.json sur le serveur, puis remplis les valeurs. Les secrets (syncToken, passphrase, telegramToken) peuvent rester vides ici s'ils sont fournis par l'environnement du service systemd (BOUSSOLE_SYNC_TOKEN, BOUSSOLE_PASSPHRASE, TELEGRAM_BOT_TOKEN). Jamais de secrets dans le chat, jamais committés.",
+  "syncRepo": "Nikola17/boussole-sync",
+  "syncPath": "boussole-sync.enc",
+  "syncToken": "",
+  "passphrase": "",
+  "telegramToken": "",
+  "telegramChatId": "",
+  "coingeckoKey": "",
+  "currency": "EUR",
+  "intervalMinutes": 5,
+  "briefHour": 8,
+  "briefEnabled": true,
+  "timeZone": "Europe/Paris",
+  "stateDir": "",
+  "device": "hermes-vps"
+}

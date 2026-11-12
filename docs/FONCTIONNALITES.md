@@ -118,6 +118,15 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Transparence** : l'écran Wallet précise que le suivi d'une xpub Bitcoin interroge mempool.space adresse par adresse, ce qui relie tes adresses à ton adresse IP.
 - **Qualité** : code mort supprimé (`useStablecoins`, `Grid`, `deriveAddresses`), les quatre `eslint-disable` obsolètes sont retirés, et les utilitaires critiques sans tests en ont (formatage, `extractJson`).
 
+### v1.9.0 — Runner serveur : surveillance 24/7 + alertes Telegram (idées 6-8 du plan des 50)
+- **Un service headless sur ton VPS** (`runner/` du dépôt, un seul fichier Node autonome, aucune dépendance à installer, aucun port ouvert) : il lit le même fichier de synchronisation chiffré que le PC et le téléphone, et veille application fermée.
+- **Alertes de prix sur Telegram** : contrôle toutes les 5 minutes réglables ; une alerte envoyée est consommée dans le fichier de synchronisation (l'application la voit déclenchée, elle n'est jamais re-notifiée ni coté PC ni sur le téléphone) ; l'empreinte du fichier (anti-écrasement) est respectée, un conflit passe au cycle suivant.
+- **Paliers de vente sur Telegram** : recalculés depuis le journal, les paliers atteints et pas vendus sont rappelés une fois par semaine. Limitation documentée : les wallets blockchain ne sont pas relus par le runner, et BTC/ETH (le cœur) n'ont pas de paliers.
+- **Brief quotidien sur Telegram** à l'heure choisie (8 h par défaut) : Fear & Greed et Bitcoin, valeur du portefeuille au journal, échéances DCA/panier du jour ou à venir, paliers atteints non vendus, alertes armées, fraîcheur des données de synchronisation. C'est un brief de données ; le brief IA reste dans l'application.
+- **Fiabilité du runner, testée de bout en bout** (faux GitHub, faux Telegram, prix simulés) : un échec d'envoi ne consomme jamais rien, un échec réseau retente au cycle suivant, le brief ne part qu'une fois par jour et retente tant qu'il n'est pas parti, `--check` déroule toute la chaîne à blanc, `--discover` trouve le chat id.
+- **Secrets** : jeton GitHub fine-grained (ce seul dépôt, « Contents : Read and write »), phrase de passe de synchronisation et jeton du bot — saisis sur le serveur (fichier chmod 600 ou variables d'environnement du service systemd), jamais dans le chat, jamais dans les journaux.
+- Documentation d'installation pour un VPS Ubuntu : `runner/README.md`, service systemd `runner/boussole-runner.service`.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute
@@ -140,6 +149,7 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 ## Limites connues
 - La synchronisation tourne quand l'application est ouverte (au lancement, après tes modifications, toutes les 15 minutes) : une saisie faite hors ligne sur un appareil n'arrive sur l'autre qu'au prochain cycle des deux côtés. La phrase de passe et le jeton ne sont pas récupérables : garde-les (coffre-fort de mots de passe).
 - Les API gratuites (surtout CoinGecko sans clé) limitent le nombre de requêtes : ajoute une clé « Demo » gratuite.
+- Le runner VPS veille en plus de l'application : si les notifications de l'application restent actives, un même événement peut arriver deux fois (Telegram + notification native). Choisis une source principale ; avec Telegram, désactive les notifications dans l'application.
 - Alertes application fermée : sous Windows, elles exigent que Boussole reste dans la zone de notification (option activée par défaut). Sous Android, le script d'arrière-plan couvre les alertes de prix et les paliers de vente (vérification toutes les 30 minutes environ, au bon vouloir du système et des économiseurs de batterie) ; les autres alertes (marché, euphorie) n'arrivent que lorsque l'application est ouverte.
 - Le CSV Crypto.com est lu d'après le format connu de l'application : un export réel peut contenir des natures d'opération inédites, que Boussole te demande alors de classer.
 - Le suivi des wallets EVM lit le solde natif et une liste de tokens courants, plus tes tokens personnalisés ; ce n'est pas un indexeur complet.
