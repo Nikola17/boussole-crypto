@@ -37,7 +37,7 @@ const PATH_DEFAULT = 'boussole-sync.enc';
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
 /** Valide un objet de configuration brut ; renvoie les champs manquants ou invalides, en français, pour un message clair. */
-export function validateConfig(raw: unknown): { config: RunnerConfig | null; problems: string[] } {
+export function validateConfig(raw: unknown, opts: { allowMissingChatId?: boolean } = {}): { config: RunnerConfig | null; problems: string[] } {
   const problems: string[] = [];
   if (typeof raw !== 'object' || raw === null) return { config: null, problems: ['Configuration illisible : attends un objet JSON.'] };
   const r = raw as Record<string, unknown>;
@@ -79,8 +79,8 @@ export function validateConfig(raw: unknown): { config: RunnerConfig | null; pro
   if (!syncToken) problems.push('syncToken manquant (ou variable d’environnement BOUSSOLE_SYNC_TOKEN).');
   if (!passphrase) problems.push('passphrase manquante (ou BOUSSOLE_PASSPHRASE) — la même que dans l’application, Réglages → Synchronisation.');
   if (!telegramToken) problems.push('telegramToken manquant (ou TELEGRAM_BOT_TOKEN) — créé avec @BotFather.');
-  if (!telegramChatId) problems.push('telegramChatId manquant (ou TELEGRAM_CHAT_ID) — obtenu par la commande --discover.');
-
+  // --discover sert précisément à trouver le chat id : il doit pouvoir tourner sans.
+  if (!telegramChatId && !opts.allowMissingChatId) problems.push('telegramChatId manquant (ou TELEGRAM_CHAT_ID) — obtenu par la commande --discover.');
   if (problems.length) return { config: null, problems };
 
   return {

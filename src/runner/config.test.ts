@@ -44,6 +44,14 @@ describe('configuration du runner', () => {
     expect(validateConfig('pas un objet').problems[0]).toContain('illisible');
   });
 
+  it('--discover doit pouvoir tourner sans chat id (c’est son rôle de le trouver)', () => {
+    const { config, problems } = validateConfig({ ...OK, telegramChatId: '' }, { allowMissingChatId: true });
+    expect(problems).toEqual([]);
+    expect(config?.telegramChatId).toBe('');
+    // Sans l'option, le chat id reste exigé (les autres modes en ont besoin).
+    expect(validateConfig({ ...OK, telegramChatId: '' }).problems.some((p) => p.includes('telegramChatId'))).toBe(true);
+  });
+
   it('l’environnement remplace la configuration lue (les secrets n’ont pas à vivre dans un fichier)', () => {
     const merged = applyEnv({ syncRepo: 'a/b', passphrase: 'dans-le-fichier', telegramChatId: 'chat-du-fichier' }, {
       BOUSSOLE_SYNC_TOKEN: 'tok-env',

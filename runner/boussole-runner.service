@@ -15,7 +15,8 @@ User=ubuntu
 Group=ubuntu
 # Le fuseau compte : « échéance du jour » et « brief à 8 h » sont lus dans l'heure locale.
 Environment=TZ=Europe/Paris
-ExecStart=/usr/bin/node /home/ubuntu/boussole-crypto/runner/boussole-runner.mjs --config /home/ubuntu/.config/boussole/runner.json
+# Shell de login : Node peut être installé par l'utilisateur (~/.local/bin, nvm…) plutôt que dans /usr/bin.
+ExecStart=/bin/bash -lc 'exec node /home/ubuntu/boussole-crypto/runner/boussole-runner.mjs --config /home/ubuntu/.config/boussole/runner.json'
 Restart=always
 RestartSec=30
 # Durcir sans casser : le runner n'écrit que dans son état local.

@@ -48,10 +48,10 @@ function parseArgs(argv: string[]): { configPath: string; mode: 'loop' | 'once' 
   return { configPath, mode };
 }
 
-function loadConfig(path: string): RunnerConfig {
+function loadConfig(path: string, allowMissingChatId: boolean): RunnerConfig {
   // Le fichier peut être absent : tous les secrets peuvent venir de l'environnement du service.
   const raw = existsSync(path) ? ((JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>)) : {};
-  const { config, problems } = validateConfig(applyEnv(raw));
+  const { config, problems } = validateConfig(applyEnv(raw), { allowMissingChatId });
   if (!config) throw new Error(`Configuration incomplète (${path}) :\n- ${problems.join('\n- ')}`);
   return config;
 }
@@ -134,7 +134,7 @@ async function modeMain(cfg: RunnerConfig, mode: 'loop' | 'once' | 'brief' | 'di
 
 async function main(): Promise<void> {
   const { configPath, mode } = parseArgs(process.argv.slice(2));
-  const cfg = loadConfig(configPath);
+  const cfg = loadConfig(configPath, mode === 'discover'); // --discover sert à trouver le chat id : il tourne sans.
   log(`Configuration : dépôt ${cfg.syncRepo}, devise ${cfg.currency}, appareil « ${cfg.device} », brief ${cfg.briefEnabled ? `${cfg.briefHour} h` : 'désactivé'} ${cfg.timeZone}.`);
   if (mode === 'check') await modeCheck(cfg);
   else await modeMain(cfg, mode);

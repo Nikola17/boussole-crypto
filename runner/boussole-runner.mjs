@@ -60,7 +60,7 @@ async function pushRemote(repo, path, token, content, knownSha) {
 // src/runner/config.ts
 var PATH_DEFAULT = "boussole-sync.enc";
 var str = (v) => typeof v === "string" ? v.trim() : "";
-function validateConfig(raw) {
+function validateConfig(raw, opts = {}) {
   const problems = [];
   if (typeof raw !== "object" || raw === null) return { config: null, problems: ["Configuration illisible : attends un objet JSON."] };
   const r = raw;
@@ -94,7 +94,7 @@ function validateConfig(raw) {
   if (!syncToken) problems.push("syncToken manquant (ou variable d\u2019environnement BOUSSOLE_SYNC_TOKEN).");
   if (!passphrase) problems.push("passphrase manquante (ou BOUSSOLE_PASSPHRASE) \u2014 la m\xEAme que dans l\u2019application, R\xE9glages \u2192 Synchronisation.");
   if (!telegramToken) problems.push("telegramToken manquant (ou TELEGRAM_BOT_TOKEN) \u2014 cr\xE9\xE9 avec @BotFather.");
-  if (!telegramChatId) problems.push("telegramChatId manquant (ou TELEGRAM_CHAT_ID) \u2014 obtenu par la commande --discover.");
+  if (!telegramChatId && !opts.allowMissingChatId) problems.push("telegramChatId manquant (ou TELEGRAM_CHAT_ID) \u2014 obtenu par la commande --discover.");
   if (problems.length) return { config: null, problems };
   return {
     config: {
@@ -787,9 +787,9 @@ function parseArgs(argv) {
   if (!configPath) configPath = join(homedir(), ".config", "boussole", "runner.json");
   return { configPath, mode };
 }
-function loadConfig(path) {
+function loadConfig(path, allowMissingChatId) {
   const raw = existsSync(path) ? JSON.parse(readFileSync(path, "utf-8")) : {};
-  const { config, problems } = validateConfig(applyEnv(raw));
+  const { config, problems } = validateConfig(applyEnv(raw), { allowMissingChatId });
   if (!config) throw new Error(`Configuration incompl\xE8te (${path}) :
 - ${problems.join("\n- ")}`);
   return config;
@@ -857,7 +857,7 @@ async function modeMain(cfg, mode) {
 }
 async function main() {
   const { configPath, mode } = parseArgs(process.argv.slice(2));
-  const cfg = loadConfig(configPath);
+  const cfg = loadConfig(configPath, mode === "discover");
   log(`Configuration : d\xE9p\xF4t ${cfg.syncRepo}, devise ${cfg.currency}, appareil \xAB ${cfg.device} \xBB, brief ${cfg.briefEnabled ? `${cfg.briefHour} h` : "d\xE9sactiv\xE9"} ${cfg.timeZone}.`);
   if (mode === "check") await modeCheck(cfg);
   else await modeMain(cfg, mode);
