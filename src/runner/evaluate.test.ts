@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PriceAlert, Thesis, Transaction } from '../types';
 import type { SyncBundle } from '../lib/sync/merge';
-import { alertKey, alertMessage, consumeAlerts, hitAlerts, hitRungs, rungKey, rungMessage, watchOf, type WatchData } from './evaluate';
+import { alertKey, alertMessage, consumeAlerts, hitAlerts, hitRungs, priceLabel, rungKey, rungMessage, watchOf, zoneMessage, type MessageCurrency, type WatchData } from './evaluate';
 
 const tx = (over: Partial<Transaction> = {}): Transaction => ({
   id: 't1', coinId: 'solana', symbol: 'sol', name: 'Solana', date: '2026-01-10', type: 'buy',
@@ -21,8 +21,11 @@ describe('paliers de vente du runner (journal)', () => {
     expect(rungs).toHaveLength(1);
     expect(rungs[0]).toMatchObject({ coinId: 'solana', symbol: 'sol', multiple: 2, pct: 25, targetUsd: 4 });
     expect(rungs[0].valueUsd).toBe(100); // 25 % de 100 SOL à 4 $ = 100 $
-    expect(rungMessage(rungs[0])).toContain('Palier ×2 atteint sur SOL');
-    expect(rungMessage(rungs[0])).toContain('25 %');
+    const cur: MessageCurrency = { currency: 'EUR', eurPerUsd: 0.86 };
+    expect(rungMessage(rungs[0], cur)).toContain('Palier ×2 atteint sur SOL');
+    expect(rungMessage(rungs[0], cur)).toContain('25 %');
+    expect(rungMessage(rungs[0], cur)).toContain('86'); // ≈ 86 € à vendre, pas 100 $
+    expect(rungMessage(rungs[0], { currency: 'USD', eurPerUsd: 0.86 })).toContain('$US'); // 100 $US
   });
 
   it('un palier déjà vendu, ou sous 20 $ de valeur, n’est pas signalé', () => {
@@ -86,10 +89,13 @@ describe('messages d’alerte', () => {
     const a: PriceAlert = { id: 'a1', coinId: 'bitcoin', symbol: 'btc', name: 'Bitcoin', condition: 'above', priceUsd: 100_000, createdAt: '2026-11-01T00:00:00Z', active: true };
     expect(alertKey('a1')).toBe('alert:a1');
     expect(rungKey('solana', 2)).toBe('exit:solana:2');
-    const msg = alertMessage(a, 105_000);
+    const msg = alertMessage(a, 105_000, { currency: 'USD', eurPerUsd: 0.92 });
     expect(msg.split('\n')[0]).toBe('Alerte BTC');
     expect(msg).toContain('au-dessus');
     expect(msg).toContain('105');
+    // En euros : l'alerte créée en dollars est présentée dans la devise de l'utilisateur (≈ 96 600 €).
+    const eur = alertMessage(a, 105_000, { currency: 'EUR', eurPerUsd: 0.92 }).replace(/\s| | /g, '');
+    expect(eur).toContain('96600€');
   });
 
   it('une alerte consommée n’est plus surveillée au cycle suivant', () => {
@@ -98,5 +104,20 @@ describe('messages d’alerte', () => {
     expect(hitAlerts(w, prices)).toHaveLength(1);
     const consumed = consumeAlerts(bundleOf({ alerts: w.alerts }), ['a1'], '2026-11-10T09:00:00Z');
     expect(hitAlerts(watchOf(consumed), prices)).toHaveLength(0);
+  });
+});
+
+describe('prix et zone dans la devise de l’utilisateur', () => {
+  it('priceLabel convertit en euros via le taux, ou laisse en dollars', () => {
+    expect(priceLabel(100, { currency: 'EUR', eurPerUsd: 0.9 })).toContain('90');
+    expect(priceLabel(100, { currency: 'USD', eurPerUsd: 0.9 })).toContain('100');
+  });
+
+  it('un changement de zone nomme la nouvelle zone, la température et la marche à suivre', () => {
+    const msg = zoneMessage({ label: 'Euphorie', action: 'Prends des profits progressivement.' }, 84, 'Marché chaud');
+    expect(msg.split('\n')[0]).toBe('Le marché change de zone : Euphorie');
+    expect(msg).toContain('84/100');
+    expect(msg).toContain('Marché chaud');
+    expect(msg).toContain('Prends des profits');
   });
 });

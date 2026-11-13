@@ -270,7 +270,7 @@ export interface Thesis extends CoinRef {
   id: string;
   createdAt: string;
   buyPrice?: number;
-  sentences: string[]; // 5 phrases (test du miroir)
+  sentences: string[]; // phrases de la thèse, une par ligne (longueur libre)
   hypotheses: ThesisHypothesis[];
   redLines: string[];
   sellPlan: { multiple: number; pct: number }[];

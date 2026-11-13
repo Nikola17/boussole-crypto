@@ -68,7 +68,7 @@ export function defaultProfile(): Profile {
 
 export const GOLDEN_RULES: { title: string; detail: string }[] = [
   { title: 'Le DCA est ton socle', detail: 'Investis un montant régulier sur BTC/ETH quoi qu’il arrive. Le temps passé sur le marché bat le timing.' },
-  { title: 'Écris ta thèse avant d’acheter', detail: 'Si tu ne peux pas expliquer en 5 phrases pourquoi tu achètes, n’achète pas (test du miroir).' },
+  { title: 'Écris ta thèse avant d’acheter', detail: 'Formule pourquoi tu achètes et ce qui invaliderait ta thèse — par écrit, à froid.' },
   { title: 'Définis ta sortie à l’entrée', detail: 'Paliers de prise de profits (×2, ×3, ×5) et conditions d’invalidation, fixés à froid.' },
   { title: 'Taille de position = gestion du risque', detail: 'Une pépite ne dépasse jamais ta limite par ligne. Tu dois pouvoir la perdre à 100 % sans souffrir.' },
   { title: 'Jamais d’argent emprunté ni de levier excessif', detail: 'Le levier transforme une correction normale en liquidation.' },
@@ -85,7 +85,7 @@ export const BUY_CHECKLIST: { q: string; help: string; critical?: boolean }[] = 
   { q: 'La liquidité est suffisante pour sortir sans casser le prix', help: 'Volume quotidien et liquidité des pools au moins 50× ta position.' },
   { q: 'Le contrat a été vérifié (pas de honeypot, pas de mint illimité)', help: 'Utilise le scan sécurité de Boussole pour les tokens on-chain.', critical: true },
   { q: 'Je respecte ma taille de position maximale', help: 'Selon ton profil : limite par pépite et par altcoin.', critical: true },
-  { q: 'J’ai écrit ma thèse en 5 phrases et mes conditions de sortie', help: 'Objectifs de profits ET niveau d’invalidation.' },
+  { q: 'J’ai écrit ma thèse et mes conditions de sortie', help: 'Pourquoi tu achètes, objectifs de profits ET niveau d’invalidation.' },
   { q: 'Je n’achète pas sous l’effet du FOMO (pas +50 % en 7 jours)', help: 'Si c’est le cas, attends un repli ou passe ton tour.' },
   { q: 'J’ai lu au moins une analyse critique (bear case)', help: 'Cherche activement les arguments contre ton achat.' },
   { q: 'Je peux supporter -70 % sur cette ligne sans paniquer', help: 'Les altcoins chutent régulièrement de 70 à 90 % en marché baissier.' },

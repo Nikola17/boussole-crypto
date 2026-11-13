@@ -134,16 +134,15 @@ function applyEnv(raw, env = process.env) {
 // src/runner/state.ts
 var DAY_MS = 24 * 36e5;
 var SENT_RETENTION_MS = 30 * DAY_MS;
-var RUNG_REPEAT_MS = 7 * DAY_MS;
 function emptyState() {
-  return { sent: {}, lastBriefDay: null, okAt: null, attemptAt: null, error: null };
+  return { sent: {}, lastBriefDay: null, zoneLabel: null, okAt: null, attemptAt: null, error: null };
 }
 function parseState(json) {
   if (!json) return emptyState();
   try {
     const r = JSON.parse(json);
     const sent = r.sent && typeof r.sent === "object" && !Array.isArray(r.sent) ? r.sent : {};
-    const out = { sent: {}, lastBriefDay: typeof r.lastBriefDay === "string" ? r.lastBriefDay : null, okAt: typeof r.okAt === "number" ? r.okAt : null, attemptAt: typeof r.attemptAt === "number" ? r.attemptAt : null, error: typeof r.error === "string" ? r.error : null };
+    const out = { sent: {}, lastBriefDay: typeof r.lastBriefDay === "string" ? r.lastBriefDay : null, zoneLabel: typeof r.zoneLabel === "string" ? r.zoneLabel : null, okAt: typeof r.okAt === "number" ? r.okAt : null, attemptAt: typeof r.attemptAt === "number" ? r.attemptAt : null, error: typeof r.error === "string" ? r.error : null };
     for (const [k, v] of Object.entries(sent)) if (typeof v === "number" && Number.isFinite(v)) out.sent[k] = v;
     return out;
   } catch {
@@ -154,16 +153,17 @@ function pruneSent(state, now) {
   const kept = {};
   let changed = false;
   for (const [k, at] of Object.entries(state.sent)) {
+    if (k.startsWith("exit:")) {
+      kept[k] = at;
+      continue;
+    }
     if (now - at > SENT_RETENTION_MS) changed = true;
     else kept[k] = at;
   }
   return changed ? { ...state, sent: kept } : state;
 }
-function shouldSend(state, key, now, repeatMs = null) {
-  const at = state.sent[key];
-  if (at == null) return true;
-  if (repeatMs == null) return false;
-  return now - at >= repeatMs;
+function shouldSend(state, key) {
+  return state.sent[key] == null;
 }
 function markSent(state, keys, now) {
   if (!keys.length) return state;
@@ -345,6 +345,166 @@ function buildPositions(txs) {
   return map;
 }
 
+// src/lib/indicators.ts
+function sma(values, period) {
+  const out = new Array(values.length).fill(NaN);
+  if (period <= 0) return out;
+  let sum = 0;
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i];
+    if (i >= period) sum -= values[i - period];
+    if (i >= period - 1) out[i] = sum / period;
+  }
+  return out;
+}
+function rsi(values, period = 14) {
+  const out = new Array(values.length).fill(NaN);
+  if (values.length <= period) return out;
+  let gain = 0;
+  let loss = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = values[i] - values[i - 1];
+    if (d >= 0) gain += d;
+    else loss -= d;
+  }
+  let avgGain = gain / period;
+  let avgLoss = loss / period;
+  out[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  for (let i = period + 1; i < values.length; i++) {
+    const d = values[i] - values[i - 1];
+    avgGain = (avgGain * (period - 1) + (d > 0 ? d : 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + (d < 0 ? -d : 0)) / period;
+    out[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+  return out;
+}
+function toWeekly(daily) {
+  const out = [];
+  let cur = null;
+  let curWeek = -1;
+  for (const c of daily) {
+    const d = new Date(c.time * 1e3);
+    const day = (d.getUTCDay() + 6) % 7;
+    const monday = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day) / 1e3;
+    if (monday !== curWeek) {
+      if (cur) out.push(cur);
+      cur = { time: monday, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume };
+      curWeek = monday;
+    } else if (cur) {
+      cur.high = Math.max(cur.high, c.high);
+      cur.low = Math.min(cur.low, c.low);
+      cur.close = c.close;
+      cur.volume += c.volume;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+// src/lib/thresholds.ts
+var TEMPERATURE = { extremeFear: 20, fear: 40, warm: 60, euphoria: 80 };
+var MIN_RUNG_VALUE_USD = 20;
+
+// src/lib/cycle.ts
+function piecewise(x, points) {
+  if (!Number.isFinite(x)) return NaN;
+  if (x <= points[0][0]) return points[0][1];
+  for (let i = 1; i < points.length; i++) {
+    const [x1, y1] = points[i];
+    const [x0, y0] = points[i - 1];
+    if (x <= x1) return y0 + (x - x0) / (x1 - x0) * (y1 - y0);
+  }
+  return points[points.length - 1][1];
+}
+function zoneFor(t) {
+  if (t < TEMPERATURE.extremeFear) return { key: "capitulation", label: "Peur extr\xEAme", action: "Zone d'achat historique : renforce ton DCA (\xD72) sur BTC/ETH, par paliers, sans tout miser d'un coup.", dcaMultiplier: 2, tone: "up" };
+  if (t < TEMPERATURE.fear) return { key: "accumulation", label: "Accumulation", action: "Bon moment pour accumuler : DCA renforc\xE9 (\xD71,5), privil\xE9gie la qualit\xE9.", dcaMultiplier: 1.5, tone: "up" };
+  if (t < TEMPERATURE.warm) return { key: "neutre", label: "Neutre", action: "DCA normal, aucun exc\xE8s : respecte ton plan et ta r\xE9partition cible.", dcaMultiplier: 1, tone: "neutral" };
+  if (t < TEMPERATURE.euphoria) return { key: "chaleur", label: "March\xE9 chaud", action: "DCA r\xE9duit (\xD70,5) et pr\xE9pare tes prises de profits par paliers sur les positions en gain.", dcaMultiplier: 0.5, tone: "down" };
+  return { key: "euphorie", label: "Euphorie", action: "Prends des profits progressivement, stoppe les achats d\u2019altcoins, remonte ta part de stablecoins.", dcaMultiplier: 0.25, tone: "down" };
+}
+function computeCycle({ btcDaily, fng, fundingRate }) {
+  if (btcDaily.length < 200) return null;
+  const closes = btcDaily.map((c) => c.close);
+  const price = closes[closes.length - 1];
+  const comps = [];
+  if (fng != null && Number.isFinite(fng)) {
+    comps.push({
+      key: "fng",
+      label: "Fear & Greed",
+      value: `${Math.round(fng)}/100`,
+      heat: fng,
+      weight: 25,
+      explain: "Sentiment agr\xE9g\xE9 (volatilit\xE9, volumes, r\xE9seaux sociaux, dominance). Sous 25 : peur extr\xEAme, au-dessus de 75 : avidit\xE9."
+    });
+  }
+  const s200 = sma(closes, 200);
+  const mayer = price / s200[s200.length - 1];
+  comps.push({
+    key: "mayer",
+    label: "Multiple de Mayer (BTC)",
+    value: mayer.toFixed(2).replace(".", ","),
+    weight: 25,
+    heat: piecewise(mayer, [[0.6, 0], [1, 35], [1.5, 65], [2.4, 100]]),
+    explain: "Prix du BTC divis\xE9 par sa moyenne 200 jours. Sous 0,8 : zone d\u2019achat historique ; au-dessus de 2,4 : bulle."
+  });
+  const weekly = toWeekly(btcDaily);
+  const wCloses = weekly.map((w) => w.close);
+  let ratio200w = NaN;
+  if (wCloses.length >= 200) {
+    const s200w = sma(wCloses, 200);
+    ratio200w = price / s200w[s200w.length - 1];
+    comps.push({
+      key: "ma200w",
+      label: "Prix / moyenne 200 semaines",
+      value: `${ratio200w.toFixed(2).replace(".", ",")}\xD7`,
+      weight: 20,
+      heat: piecewise(ratio200w, [[0.8, 0], [1, 15], [1.5, 40], [2.5, 75], [3.5, 100]]),
+      explain: "La moyenne 200 semaines a marqu\xE9 tous les creux majeurs du Bitcoin. Pr\xE8s de 1\xD7 : opportunit\xE9 rare."
+    });
+  }
+  const rw = rsi(wCloses, 14);
+  const rsiW = rw[rw.length - 1];
+  if (Number.isFinite(rsiW)) {
+    comps.push({
+      key: "rsiw",
+      label: "RSI hebdomadaire (BTC)",
+      value: `${Math.round(rsiW)}`,
+      weight: 15,
+      heat: piecewise(rsiW, [[30, 0], [50, 45], [70, 75], [85, 100]]),
+      explain: "Au-dessus de 80 en hebdo, le march\xE9 est historiquement euphorique ; sous 35, il est \xE9puis\xE9."
+    });
+  }
+  let piCycle = NaN;
+  if (closes.length >= 350) {
+    const s111 = sma(closes, 111);
+    const s350 = sma(closes, 350);
+    piCycle = s111[s111.length - 1] / (2 * s350[s350.length - 1]);
+    comps.push({
+      key: "pi",
+      label: "Indicateur Pi Cycle",
+      value: `${Math.round(piCycle * 100)} %`,
+      weight: 10,
+      heat: piecewise(piCycle, [[0.4, 0], [0.7, 50], [1, 100]]),
+      explain: "Rapport MM111 / (2 \xD7 MM350). \xC0 100 %, il a signal\xE9 les sommets de cycle de 2013, 2017 et 2021."
+    });
+  }
+  if (fundingRate != null && Number.isFinite(fundingRate)) {
+    const f = fundingRate * 100;
+    comps.push({
+      key: "funding",
+      label: "Taux de financement (perp BTC)",
+      value: `${f.toFixed(3).replace(".", ",")} %`,
+      weight: 5,
+      heat: piecewise(f, [[-0.01, 10], [0, 30], [0.01, 50], [0.03, 75], [0.05, 100]]),
+      explain: "Co\xFBt pay\xE9 par les positions longues \xE0 effet de levier. Tr\xE8s \xE9lev\xE9 = exc\xE8s de sp\xE9culation."
+    });
+  }
+  const wsum = comps.reduce((s, c) => s + (Number.isFinite(c.heat) ? c.weight : 0), 0);
+  const temperature = wsum > 0 ? comps.reduce((s, c) => s + (Number.isFinite(c.heat) ? c.heat * c.weight : 0), 0) / wsum : 50;
+  return { temperature, zone: zoneFor(temperature), components: comps, mayer, ratio200w, piCycle };
+}
+
 // src/lib/alerts.ts
 var watchedAlerts = (alerts) => alerts.filter((a) => a.active && !a.triggeredAt);
 function checkPriceAlerts(alerts, prices) {
@@ -356,9 +516,6 @@ function checkPriceAlerts(alerts, prices) {
   }
   return out;
 }
-
-// src/lib/thresholds.ts
-var MIN_RUNG_VALUE_USD = 20;
 
 // src/lib/exit.ts
 var DEFAULT_LADDER = [{ multiple: 2, pct: 25 }, { multiple: 3, pct: 25 }, { multiple: 5, pct: 25 }];
@@ -386,13 +543,17 @@ function watchOf(bundle) {
 }
 var alertKey = (id) => `alert:${id}`;
 var rungKey = (coinId, multiple) => `exit:${coinId}:${multiple}`;
+function priceLabel(usd, cur) {
+  return fmtPrice(cur.currency === "EUR" ? usd * (cur.eurPerUsd > 0 ? cur.eurPerUsd : 1) : usd, cur.currency);
+}
 function hitAlerts(watch, prices) {
   return checkPriceAlerts(watch.alerts, prices);
 }
-function alertMessage(a, price) {
+function alertMessage(a, price, cur) {
   const side = a.condition === "above" ? "au-dessus" : "en dessous";
   return `Alerte ${a.symbol.toUpperCase()}
-${a.name} est pass\xE9 ${side} de ${fmtPrice(a.priceUsd, "USD")} (cours : ${fmtPrice(price, "USD")}).`;
+${a.name} est pass\xE9 ${side} de ${priceLabel(a.priceUsd, cur)} (cours : ${priceLabel(price, cur)}).`;
+  ;
 }
 function hitRungs(watch, prices) {
   const out = [];
@@ -410,9 +571,14 @@ function hitRungs(watch, prices) {
   }
   return out;
 }
-function rungMessage(t) {
+function rungMessage(t, cur) {
   return `Palier \xD7${t.multiple} atteint sur ${t.symbol.toUpperCase()}
-Vends ${t.pct} % de ta position de d\xE9part : ce palier a \xE9t\xE9 fix\xE9 \xE0 froid (\u2248 ${fmtPrice(t.valueUsd, "USD")} \xE0 vendre). Ouvre Boussole.`;
+Vends ${t.pct} % de ta position de d\xE9part : ce palier a \xE9t\xE9 fix\xE9 \xE0 froid (\u2248 ${priceLabel(t.valueUsd, cur)} \xE0 vendre). Ouvre Boussole.`;
+}
+function zoneMessage(zone, temperature, previous) {
+  return `Le march\xE9 change de zone : ${zone.label}
+Temp\xE9rature ${Math.round(temperature)}/100 (elle \xE9tait \xAB ${previous} \xBB).
+${zone.action}`;
 }
 function consumeAlerts(bundle, alertIds, nowIso) {
   if (!alertIds.length) return bundle;
@@ -525,6 +691,7 @@ function buildBrief(i) {
   const btc = i.prices.bitcoin;
   const market = [];
   if (i.fng) market.push(`Fear & Greed ${i.fng.value} (${i.fng.label})`);
+  if (i.temperature) market.push(`zone : ${i.temperature.zoneLabel} (${Math.round(i.temperature.value)}/100)`);
   if (btc?.usd != null) market.push(`BTC ${fmtPrice(btc.usd, "USD")}${btc.change != null ? ` (${fmtPct(btc.change, 1, true)} / 24 h)` : ""}`);
   lines.push(market.length ? `March\xE9 : ${market.join(" \xB7 ")}` : "March\xE9 : donn\xE9es indisponibles pour l\u2019instant.");
   const priceOf = (coinId) => {
@@ -593,6 +760,8 @@ function buildBrief(i) {
 }
 
 // src/runner/cycle.ts
+var DAY_MS2 = 24 * 36e5;
+var ZONE_REPEAT_MS = 7 * DAY_MS2;
 function coinsOf(bundle, watch) {
   const ids = /* @__PURE__ */ new Set(["bitcoin"]);
   for (const coinId of buildPositions(watch.transactions).keys()) if (coinId) ids.add(coinId);
@@ -641,14 +810,27 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
   const priceMap = /* @__PURE__ */ new Map();
   for (const [id, p] of Object.entries(priceRows)) if (typeof p.usd === "number" && p.usd > 0) priceMap.set(id, p.usd);
   result.watching = watch.alerts.filter((a) => a.active && !a.triggeredAt).length;
+  const eurPerUsd = priceRows.bitcoin?.usd && priceRows.bitcoin.eur ? priceRows.bitcoin.eur / priceRows.bitcoin.usd : 0.92;
+  const cur = { currency: cfg.currency, eurPerUsd };
   const queue = [];
   for (const { alert, price } of hitAlerts(watch, priceMap)) {
     const key = alertKey(alert.id);
-    if (shouldSend(state, key, nowMs)) queue.push({ key, text: alertMessage(alert, price), alertId: alert.id });
+    if (shouldSend(state, key)) queue.push({ key, text: alertMessage(alert, price, cur), alertId: alert.id });
   }
   for (const t of hitRungs(watch, priceMap)) {
     const key = rungKey(t.coinId, t.multiple);
-    if (shouldSend(state, key, nowMs, RUNG_REPEAT_MS)) queue.push({ key, text: rungMessage(t) });
+    if (shouldSend(state, key)) queue.push({ key, text: rungMessage(t, cur) });
+  }
+  const fng = await deps.fearGreed().catch(() => null);
+  const temperature = await marketTemperature(deps, fng);
+  if (temperature) {
+    if (!state.zoneLabel) {
+      if (!opts.dry) state = { ...state, zoneLabel: temperature.zone.label };
+    } else if (state.zoneLabel !== temperature.zone.label) {
+      const key = `zone:${temperature.zone.label}`;
+      const last = state.sent[key];
+      if (last == null || nowMs - last >= ZONE_REPEAT_MS) queue.push({ key, text: zoneMessage(temperature.zone, temperature.temperature, state.zoneLabel) });
+    }
   }
   const consumedIds = [];
   for (const m of queue) {
@@ -661,6 +843,9 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
       state = markSent(state, [m.key], nowMs);
       result.sent++;
       if (m.alertId) consumedIds.push(m.alertId);
+      if (m.key.startsWith("zone:") && temperature && temperature.zone.label !== state.zoneLabel) {
+        state = { ...state, zoneLabel: temperature.zone.label };
+      }
     } catch (e) {
       result.error = e instanceof Error ? e.message : String(e);
       break;
@@ -679,7 +864,7 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
   }
   const dueBrief = opts.forceBrief || cfg.briefEnabled && now.getHours() >= cfg.briefHour && state.lastBriefDay !== dayKey;
   if (dueBrief) {
-    const brief = buildBrief({ now, bundle, prices: priceRows, fng: await deps.fearGreed(), currency: cfg.currency, syncSavedAt: bundle.savedAt ?? null, syncDevice: bundle.device ?? null });
+    const brief = buildBrief({ now, bundle, prices: priceRows, fng, currency: cfg.currency, syncSavedAt: bundle.savedAt ?? null, syncDevice: bundle.device ?? null, temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null });
     try {
       await send(brief);
       if (!opts.dry) state = { ...state, lastBriefDay: dayKey };
@@ -689,6 +874,13 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
   }
   state = recordStatus(state, result.error == null, result.error, nowMs);
   return { state, result };
+}
+async function marketTemperature(deps, fng) {
+  const btcDaily = await deps.btcDaily().catch(() => null);
+  if (!btcDaily) return null;
+  const funding = await deps.funding().catch(() => null);
+  const r = computeCycle({ btcDaily, fng: fng?.value, fundingRate: funding ?? void 0 });
+  return r ? { temperature: r.temperature, zone: { key: r.zone.key, label: r.zone.label, action: r.zone.action } } : null;
 }
 
 // src/runner/market.ts
@@ -705,6 +897,27 @@ async function getJson(url, headers) {
     return await res.json();
   } finally {
     clearTimeout(timer);
+  }
+}
+async function fetchBtcDaily() {
+  try {
+    const res = await fetch("https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=500", { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (!res.ok) return null;
+    const raw = await res.json();
+    return raw.map((k) => ({ time: Math.round(k[0] / 1e3), open: Number(k[1]), high: Number(k[2]), low: Number(k[3]), close: Number(k[4]), volume: Number(k[5]) })).filter((c) => Number.isFinite(c.close));
+  } catch {
+    return null;
+  }
+}
+async function fetchBtcFunding() {
+  try {
+    const res = await fetch("https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT", { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(1e4) });
+    if (!res.ok) return null;
+    const r = await res.json();
+    const v = Number(r.lastFundingRate);
+    return Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
   }
 }
 async function fetchPrices(ids, coingeckoKey) {
@@ -810,12 +1023,22 @@ function saveState(cfg, st) {
   } catch {
   }
 }
+var btcDailyCache = null;
+async function cachedBtcDaily() {
+  if (!btcDailyCache || Date.now() - btcDailyCache.at > 90 * 6e4) {
+    const data = await fetchBtcDaily();
+    if (data) btcDailyCache = { at: Date.now(), data };
+  }
+  return btcDailyCache?.data ?? null;
+}
 var depsOf = (cfg) => ({
   fetchRemote: () => fetchRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken),
   pushRemote: (text, sha) => pushRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken, text, sha),
   telegram: (text) => sendMessage(cfg.telegramToken, cfg.telegramChatId, text),
   prices: (ids) => fetchPrices(ids, cfg.coingeckoKey),
-  fearGreed: () => fetchFearGreed()
+  fearGreed: () => fetchFearGreed(),
+  btcDaily: () => cachedBtcDaily(),
+  funding: () => fetchBtcFunding()
 });
 async function modeCheck(cfg) {
   const { result } = await runCycle(cfg, loadState(cfg), { dry: true, forceBrief: true, onDry: (text) => log(`[\xE0 blanc] ${text.split("\n").join(" \u2014 ")}`) }, depsOf(cfg));

@@ -153,7 +153,7 @@ Petit tableau (prix, capitalisation, FDV, variation 30 j, tendance technique, si
 ## Signaux à surveiller
 3 signaux de renforcement, 3 signaux d'allègement.
 ## Test du miroir
-La thèse résumée en 5 phrases. Si c'est impossible, dis-le : c'est un signal de ne pas acheter.
+La thèse résumée en quelques phrases claires, sans jargon. S’il y a des zones de flou, nomme-les honnêtement.
 ## Conclusion
 100 mots maximum.
 

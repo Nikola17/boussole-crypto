@@ -30,14 +30,22 @@ export function watchOf(bundle: SyncBundle): WatchData {
 export const alertKey = (id: string): string => `alert:${id}`;
 export const rungKey = (coinId: string, multiple: number): string => `exit:${coinId}:${multiple}`;
 
+/** Devise d'affichage des messages : EUR (par défaut) via le taux du jour, ou USD. */
+export interface MessageCurrency { currency: 'EUR' | 'USD'; eurPerUsd: number }
+
+/** Prix affiché dans la devise de l'utilisateur, pas en dollars bruts. */
+export function priceLabel(usd: number, cur: MessageCurrency): string {
+  return fmtPrice(cur.currency === 'EUR' ? usd * (cur.eurPerUsd > 0 ? cur.eurPerUsd : 1) : usd, cur.currency);
+}
+
 /** Alertes de prix atteintes d'après un jeu de prix connus ; une crypto sans prix n'est jamais considérée atteinte. */
 export function hitAlerts(watch: WatchData, prices: ReadonlyMap<string, number>) {
   return checkPriceAlerts(watch.alerts, prices);
 }
 
-export function alertMessage(a: PriceAlert, price: number): string {
+export function alertMessage(a: PriceAlert, price: number, cur: MessageCurrency): string {
   const side = a.condition === 'above' ? 'au-dessus' : 'en dessous';
-  return `Alerte ${a.symbol.toUpperCase()}\n${a.name} est passé ${side} de ${fmtPrice(a.priceUsd, 'USD')} (cours : ${fmtPrice(price, 'USD')}).`;
+  return `Alerte ${a.symbol.toUpperCase()}\n${a.name} est passé ${side} de ${priceLabel(a.priceUsd, cur)} (cours : ${priceLabel(price, cur)}).`;;
 }
 
 export interface RungTarget {
@@ -71,8 +79,13 @@ export function hitRungs(watch: WatchData, prices: ReadonlyMap<string, number>):
   return out;
 }
 
-export function rungMessage(t: RungTarget): string {
-  return `Palier ×${t.multiple} atteint sur ${t.symbol.toUpperCase()}\nVends ${t.pct} % de ta position de départ : ce palier a été fixé à froid (≈ ${fmtPrice(t.valueUsd, 'USD')} à vendre). Ouvre Boussole.`;
+export function rungMessage(t: RungTarget, cur: MessageCurrency): string {
+  return `Palier ×${t.multiple} atteint sur ${t.symbol.toUpperCase()}\nVends ${t.pct} % de ta position de départ : ce palier a été fixé à froid (≈ ${priceLabel(t.valueUsd, cur)} à vendre). Ouvre Boussole.`;
+}
+
+/** Le marché a changé de zone (température 0-100) : préviens avec la marche à suivre, même application fermée. */
+export function zoneMessage(zone: { label: string; action: string }, temperature: number, previous: string): string {
+  return `Le marché change de zone : ${zone.label}\nTempérature ${Math.round(temperature)}/100 (elle était « ${previous} »).\n${zone.action}`;
 }
 
 /**

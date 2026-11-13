@@ -11,6 +11,9 @@ export interface WatchState {
   exits: { coinId: string; symbol: string; multiple: number; pct: number; targetUsd: number }[];
   /** Clé « Demo » CoinGecko de l'utilisateur (facultative) : sans elle, le script se heurte plus vite à la limite de requêtes. */
   cgKey?: string;
+  /** Devise d'affichage et taux du jour (unités de devise pour 1 $) : les notifications partent dans la devise de l'utilisateur. */
+  currency?: 'EUR' | 'USD';
+  fxRate?: number;
 }
 
 export const EMPTY_WATCH: WatchState = { alerts: [], exits: [] };

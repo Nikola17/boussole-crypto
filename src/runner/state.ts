@@ -3,10 +3,12 @@
 // une alerte n'est marquée envoyée qu'APRÈS l'envoi réussi, un échec réseau ne consomme jamais rien.
 
 export interface RunnerState {
-  /** Clé de dédoublonnage → dernier envoi réussi (ms). Ex : « alert:a1 », « exit:solana:2 ». */
+  /** Clé de dédoublonnage → dernier envoi réussi (ms). Ex : « alert:a1 », « exit:solana:2 », « news:ab12cd34 ». */
   sent: Record<string, number>;
   /** Jour (AAAA-MM-JJ) du dernier brief quotidien envoyé. */
   lastBriefDay: string | null;
+  /** Dernière zone de marché constatée (peur extrême, accumulation, neutre, chaleur, euphorie) : un changement déclenche une alerte. */
+  zoneLabel: string | null;
   /** Dernier contrôle réussi (ms) ; null si aucun. */
   okAt: number | null;
   /** Dernière tentative, réussie ou non (ms). */
@@ -16,13 +18,12 @@ export interface RunnerState {
 }
 
 const DAY_MS = 24 * 3600_000;
-/** Une clé d'alerte notifiée est gardée 30 jours, puis nettoyée (l'alerte est normalement consommée bien avant). */
+/** Une clé d'alerte notifiée est gardée 30 jours, puis nettoyée (l'alerte est normalement consommée bien avant) ;
+ *  les paliers (« exit: ») passés sont gardés sans limite : ils ne sonnent qu'une fois, jusqu'à la vente enregistrée. */
 export const SENT_RETENTION_MS = 30 * DAY_MS;
-/** Un palier de vente atteint mais pas vendu est rappelé au rythme d'une fois par semaine. */
-export const RUNG_REPEAT_MS = 7 * DAY_MS;
 
 export function emptyState(): RunnerState {
-  return { sent: {}, lastBriefDay: null, okAt: null, attemptAt: null, error: null };
+  return { sent: {}, lastBriefDay: null, zoneLabel: null, okAt: null, attemptAt: null, error: null };
 }
 
 /** Lit un état depuis un texte JSON (fichier corrompu ou absent : on repart de zéro, rien n'est perdu côté application). */
@@ -31,7 +32,7 @@ export function parseState(json: string | null | undefined): RunnerState {
   try {
     const r = JSON.parse(json) as Partial<RunnerState>;
     const sent = (r.sent && typeof r.sent === 'object' && !Array.isArray(r.sent)) ? r.sent : {};
-    const out: RunnerState = { sent: {}, lastBriefDay: typeof r.lastBriefDay === 'string' ? r.lastBriefDay : null, okAt: typeof r.okAt === 'number' ? r.okAt : null, attemptAt: typeof r.attemptAt === 'number' ? r.attemptAt : null, error: typeof r.error === 'string' ? r.error : null };
+    const out: RunnerState = { sent: {}, lastBriefDay: typeof r.lastBriefDay === 'string' ? r.lastBriefDay : null, zoneLabel: typeof r.zoneLabel === 'string' ? r.zoneLabel : null, okAt: typeof r.okAt === 'number' ? r.okAt : null, attemptAt: typeof r.attemptAt === 'number' ? r.attemptAt : null, error: typeof r.error === 'string' ? r.error : null };
     for (const [k, v] of Object.entries(sent)) if (typeof v === 'number' && Number.isFinite(v)) out.sent[k] = v;
     return out;
   } catch {
@@ -39,11 +40,12 @@ export function parseState(json: string | null | undefined): RunnerState {
   }
 }
 
-/** Supprime les clés trop vieilles ; renvoie un nouvel objet si quelque chose a changé, sinon l'original. */
+/** Supprime les clés trop vieilles ; renvoie un nouvel objet si quelque chose a changé, sinon l'original. Les paliers restent. */
 export function pruneSent(state: RunnerState, now: number): RunnerState {
   const kept: Record<string, number> = {};
   let changed = false;
   for (const [k, at] of Object.entries(state.sent)) {
+    if (k.startsWith('exit:')) { kept[k] = at; continue; }
     if (now - at > SENT_RETENTION_MS) changed = true;
     else kept[k] = at;
   }
@@ -51,15 +53,11 @@ export function pruneSent(state: RunnerState, now: number): RunnerState {
 }
 
 /**
- * Faut-il envoyer cette clé maintenant ?
- *  - jamais envoyée : oui ;
- *  - déjà envoyée : non, sauf rappel périodique (paliers : une fois par semaine tant que rien n'est vendu).
+ * Faut-il envoyer cette clé maintenant ? Une clé déjà envoyée ne se renvoie jamais : le rappel hebdomadaire
+ * des paliers atteints a été retiré (il reste rappelé chaque jour dans le brief tant que rien n'est vendu).
  */
-export function shouldSend(state: RunnerState, key: string, now: number, repeatMs: number | null = null): boolean {
-  const at = state.sent[key];
-  if (at == null) return true;
-  if (repeatMs == null) return false;
-  return now - at >= repeatMs;
+export function shouldSend(state: RunnerState, key: string): boolean {
+  return state.sent[key] == null;
 }
 
 /** Note un envoi réussi (après l'envoi, jamais avant). */

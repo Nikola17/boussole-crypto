@@ -8,7 +8,7 @@ import { useNow } from './useClock';
 import { useBasketDue } from './useBasket';
 import { useExitPlan } from './useExitPlan';
 import { notify } from '../lib/platform';
-import { claimNotification, weekKey } from '../lib/notified';
+import { claimNotification, EXIT_TTL_MS, weekKey } from '../lib/notified';
 import { fmtMoney, isoDay } from '../lib/format';
 
 const DAY = 86400_000;
@@ -26,8 +26,9 @@ export function useSmartAlerts() {
     const fire = (key: string, ttl: number, title: string, body: string) => {
       if (claimNotification(key, ttl)) void notify(title, body);
     };
+    // Un palier atteint n'est notifié qu'une fois : il reste ensuite visible dans l'app (et rappelé par le brief Telegram).
     for (const { coin, rung } of exit.pending) {
-      fire(`exit:${coin.coinId}:${rung.multiple}`, 7 * DAY, `Palier ×${rung.multiple} atteint sur ${coin.symbol}`, `Vends ${rung.pct} % de ta position de départ (≈ ${fmtMoney(rung.valueUsd * exit.rate, exit.currency, 0)}). Ouvre Boussole.`);
+      fire(`exit:${coin.coinId}:${rung.multiple}`, EXIT_TTL_MS, `Palier ×${rung.multiple} atteint sur ${coin.symbol}`, `Vends ${rung.pct} % de ta position de départ (≈ ${fmtMoney(rung.valueUsd * exit.rate, exit.currency, 0)}). Ouvre Boussole.`);
     }
     if (exit.euphoria.active && exit.coins.some((c) => c.core)) fire(`euphoria:${weekKey()}`, 7 * DAY, 'Marché en euphorie', exit.euphoria.label);
     if (bd.due && bd.basket && bd.periodKey) fire(`basket:${bd.periodKey}`, 3 * DAY, 'Panier DCA : échéance du jour', `${bd.basket.amountUsd} USDC à répartir. Ouvre Boussole pour l’ordre du jour.`);

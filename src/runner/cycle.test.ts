@@ -3,10 +3,11 @@
 
 import { describe, expect, it } from 'vitest';
 import type { PriceAlert, Transaction } from '../types';
+import type { Candle } from '../lib/indicators';
 import { seal, unseal } from '../lib/sync/crypto';
 import { CONFLICT } from '../lib/sync/github';
 import { runCycle, type CycleDeps, type CycleOptions } from './cycle';
-import { emptyState, RUNG_REPEAT_MS } from './state';
+import { emptyState } from './state';
 import type { RunnerConfig } from './config';
 
 const PASS = 'phrase de passe du runner';
@@ -27,7 +28,7 @@ const FLAT = { solana: { usd: 2, eur: 1.72, change: 0.1 }, bitcoin: { usd: 200_0
 const H = (h: number, m = 0): Date => new Date(2026, 10, 11, h, m);
 
 /** Faux services autour du cycle : tout est enregistré, rien ne sort. */
-function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; telegramError?: string; noFile?: boolean; prices?: Record<string, { usd?: number; eur?: number; change?: number }> } = {}) {
+function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; telegramError?: string; noFile?: boolean; prices?: Record<string, { usd?: number; eur?: number; change?: number }>; fng?: { value: number; label: string } | null; btcDaily?: Candle[] | null } = {}) {
   const sent: string[] = [];
   const pushes: { text: string; sha: string | null }[] = [];
   let sha: string | null = 'sha-initial';
@@ -51,7 +52,10 @@ function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; t
     },
     // Palier ×2 de SOL (coût moyen 2 $) atteint seulement quand le prix est « haut ».
     prices: async () => opts.prices ?? UP,
-    fearGreed: async () => ({ value: 40, label: 'Peur' }),
+    fearGreed: async () => opts.fng ?? { value: 40, label: 'Peur' },
+    // Historique BTC absent par défaut : pas de température (les tests de zone le fournissent).
+    btcDaily: async () => opts.btcDaily === undefined ? null : opts.btcDaily,
+    funding: async () => 0.0001,
   };
   return { deps, sent, pushes };
 }
@@ -91,24 +95,25 @@ describe('cycle du runner — alertes et paliers', () => {
     expect(first.result.consumed).toBe(0);
     expect(first.result.error).toContain('prochain cycle');
     expect(pushes).toHaveLength(0);
-    // Le cycle d'après : l'alerte ne repart pas (envoi déjà réussi), le palier non plus (rappel à 7 jours).
+    // Le cycle d'après : l'alerte ne repart pas (envoi déjà réussi), le palier non plus (le brief le rappelle).
     const second = await runCycle(CFG, first.state, dry(), deps, H(6, 35));
     expect(second.result.sent).toBe(0);
     expect(sent).toHaveLength(2);
   });
 
-  it('le palier est rappelé une fois par semaine, l’alerte n’est jamais répétée', async () => {
+  it('ni le palier ni l’alerte ne sont jamais répétés une fois envoyés (plus de rappel hebdomadaire)', async () => {
     const at = Date.now();
-    const wantRepeat = await runCycle(CFG, {
+    const done = await runCycle(CFG, {
       ...emptyState(),
-      sent: { 'alert:a1': at - 2 * RUNG_REPEAT_MS, 'exit:solana:2': at - 2 * RUNG_REPEAT_MS },
+      sent: { 'alert:a1': at, 'exit:solana:2': at },
     }, dry(), makeDeps({ alerts: [alert], transactions: [txSol] }).deps, H(6, 30));
-    expect(wantRepeat.result.sent).toBe(1); // seulement le palier
-    const recentlySent = await runCycle(CFG, {
+    expect(done.result.sent).toBe(0);
+    // … même des semaines plus tard : le palier reste rappelé chaque jour par le brief, pas par une notification.
+    const weeksLater = await runCycle(CFG, {
       ...emptyState(),
-      sent: { 'alert:a1': at, 'exit:solana:2': at - RUNG_REPEAT_MS / 3 },
+      sent: { 'alert:a1': at - 30 * 86400_000, 'exit:solana:2': at - 30 * 86400_000 },
     }, dry(), makeDeps({ alerts: [alert], transactions: [txSol] }).deps, H(6, 30));
-    expect(recentlySent.result.sent).toBe(0);
+    expect(weeksLater.result.sent).toBe(0);
   });
 
   it('l’alerte déjà consommée par l’application n’est plus surveillée', async () => {
@@ -139,6 +144,50 @@ describe('cycle du runner — alertes et paliers', () => {
     expect(state.sent).toEqual({});
     expect(shown).toHaveLength(3); // alerte + palier + brief du jour
     expect(shown[2]).toContain('Boussole — brief');
+  });
+});
+
+// 400 bougies BTC construites pour situer la température sans ambiguïté (fonctions pures, pas de dépendance à la chance).
+const btcCandles = (slope: number, last: number): Candle[] => {
+  const t0 = Date.UTC(2025, 6, 1) / 1000;
+  return Array.from({ length: 400 }, (_, i) => {
+    const c = 100 + i * slope + (i === 399 ? last : 0); // pente régulière, dernier cours ajusté
+    return { time: t0 + i * 86400, open: c, high: c, low: c, close: c, volume: 1000 };
+  });
+};
+
+describe('cycle du runner — zone de marché (.Température)', () => {
+  it('au premier passage, la zone est mémorisée sans rien envoyer', async () => {
+    const { deps, sent } = makeDeps({ transactions: [txSol] }, { prices: FLAT, fng: { value: 10, label: 'Peur extrême' }, btcDaily: btcCandles(-0.05, 0) });
+    const { state, result } = await runCycle(CFG, emptyState(), dry(), deps, H(10, 0));
+    expect(sent).toHaveLength(1); // le brief du matin seulement
+    expect(state.zoneLabel).toBeTruthy();
+    expect(result.error).toBeNull();
+  });
+
+  it('un changement de zone prévient sur Telegram, puis ne se répète pas', async () => {
+    // Premier passage : marché froid.
+    const cold = makeDeps({ transactions: [txSol] }, { prices: FLAT, fng: { value: 10, label: 'Peur extrême' }, btcDaily: btcCandles(-0.05, 0) });
+    const first = await runCycle(CFG, emptyState(), dry(), cold.deps, H(10, 0));
+    expect(first.state.zoneLabel).toBeTruthy();
+    // Deuxième passage : le marché a chauffé, le message part, la référence change.
+    const hot = makeDeps({ transactions: [txSol] }, { prices: FLAT, fng: { value: 95, label: 'Avidité extrême' }, btcDaily: btcCandles(0.05, 120) });
+    const second = await runCycle(CFG, first.state, dry(), hot.deps, H(11, 0));
+    expect(second.result.sent).toBe(1);
+    expect(hot.sent.some((t) => t.startsWith('Le marché change de zone'))).toBe(true);
+    expect(second.state.zoneLabel).not.toBe(first.state.zoneLabel);
+    // Troisième passage : rien de neuf, silence.
+    const third = await runCycle(CFG, second.state, dry(), hot.deps, H(12, 0));
+    expect(third.result.sent).toBe(0);
+  });
+
+  it('un échec Telegram laisse l’ancienne zone : le message repartira au cycle suivant', async () => {
+    const cold = makeDeps({ transactions: [txSol] }, { prices: FLAT, fng: { value: 10, label: 'Peur extrême' }, btcDaily: btcCandles(-0.05, 0) });
+    const first = await runCycle(CFG, emptyState(), dry(), cold.deps, H(10, 0));
+    const failing = makeDeps({ transactions: [txSol] }, { prices: FLAT, fng: { value: 95, label: 'Avidité extrême' }, btcDaily: btcCandles(0.05, 120), telegramError: 'Telegram a refusé sendMessage' });
+    const second = await runCycle(CFG, first.state, dry(), failing.deps, H(11, 0));
+    expect(second.state.zoneLabel).toBe(first.state.zoneLabel); // inchangée
+    expect(second.state.sent['zone:Euphorie']).toBeUndefined(); // rien n'a été marqué envoyé
   });
 });
 
