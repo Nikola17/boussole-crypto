@@ -67,6 +67,8 @@ export interface BriefInputs {
   news?: RatedNews[];
   /** Smart money : lignes des mouvements des wallets suivis depuis 24 h (ventes en tête). */
   smart?: string[];
+  /** Pépites émergentes : jeunes paires Solana/Base en traction, scannées, une ligne chacune. */
+  emerging?: string[];
 }
 
 const HEAD_TOP = 3;
@@ -195,6 +197,13 @@ export function buildBrief(i: BriefInputs): string {
   if (smart.length && !short) {
     lines.push(`Wallets suivis : ${smart[0]}`);
     for (const l of smart.slice(1)) lines.push(`  ${l}`);
+  }
+
+  // Pépites émergentes : les jeunes paires en traction passées au scan — des pistes, jamais des conseils d'achat.
+  const emerging = i.emerging ?? [];
+  if (emerging.length && !short) {
+    lines.push(`Émergentes (Solana/Base, à scanner avant tout) : ${emerging[0]}`);
+    for (const l of emerging.slice(1)) lines.push(`  ${l}`);
   }   
 
   // Fraîcheur du fichier de synchronisation : sans ça, le brief peut paraître “du jour” avec des données anciennes.

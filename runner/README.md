@@ -42,7 +42,12 @@ Il n'a besoin de **rien installer** : Node ≥ 20 suffit (le bundle
   suivi achète un token de ta liste (tokens suivis du DEX, positions du journal,
   alertes armées), l'alerte part sur Telegram ; **sa VENTE** est mise en avant :
   c'est le signal « relis ta thèse de sortie ». Le brief du matin résume leurs
-  mouvements des dernières 24 h (`smartMoneyEnabled`, activé par défaut).
+  mouvements des dernières 24 h (`smartMoneyEnabled`, activé par défaut) ;
+- **pépites émergentes** : le brief du matin égrène les toutes nouvelles paires
+  Solana/Base en traction réelle (âge ≤ 7 jours, liquidité et volume
+  suffisants, pression acheteuse nette), chacune passée au scan de sécurité,
+  avec les wallets suivus qui y sont entrés (`emergingEnabled`, activé par
+  défaut). Des pistes à vérifier, jamais des conseils d'achat.
 
 ## Limites connues (voulu ainsi pour cette première version)
 
