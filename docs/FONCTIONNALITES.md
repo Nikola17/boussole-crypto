@@ -122,7 +122,7 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Correctif de tempête d'écritures** : l'application comparait son faisceau local au fichier distant *avec* les champs de plomberie (appareil écrivain, date) que le distant porte en plus — elle voyait donc « une différence » à chaque lecture et réécrivait le dépôt GitHub en continu (une écriture toutes les ~5 secondes tant qu'elle était ouverte). Conséquence en cascade : l'autre appareil, heurtant l'empreinte à chaque tentative, finissait par renoncer (« l'autre appareil a synchronisé trois fois de suite ») et ne synchronisait jamais.
 - Désormais, seule le **contenu synchronisé** décide d'une réécriture (`sameSyncBundle`), et un changement de l'état ne déclenche la synchronisation groupée que si une **rubrique synchronisée** a réellement changé (un cycle d'horloge ou un rafraîchissement de marché ne compte pas).
 
-### v1.9.0 — Runner serveur : surveillance 24/7 + alertes Telegram (idées 6-8 du plan des 50)
+### Lot 9 (v1.8.2) — Runner serveur : surveillance 24/7 + alertes Telegram (idées 6-8 du plan des 50)
 
 - **Un service headless sur ton VPS** (`runner/` du dépôt, un seul fichier Node autonome, aucune dépendance à installer, aucun port ouvert) : il lit le même fichier de synchronisation chiffré que le PC et le téléphone, et veille application fermée.
 - **Alertes de prix sur Telegram** : contrôle toutes les 5 minutes réglables ; une alerte envoyée est consommée dans le fichier de synchronisation (l'application la voit déclenchée, elle n'est jamais re-notifiée ni coté PC ni sur le téléphone) ; l'empreinte du fichier (anti-écrasement) est respectée, un conflit passe au cycle suivant.
@@ -132,11 +132,25 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Secrets** : jeton GitHub fine-grained (ce seul dépôt, « Contents : Read and write »), phrase de passe de synchronisation et jeton du bot — saisis sur le serveur (fichier chmod 600 ou variables d'environnement du service systemd), jamais dans le chat, jamais dans les journaux.
 - Documentation d'installation pour un VPS Ubuntu : `runner/README.md`, service systemd `runner/boussole-runner.service`.
 
+### v1.9.0 — Alertes au cordeau (lot 10)
+
+- **Devise de l'utilisateur partout** : alertes de prix et paliers notifiés en euros (ou selon ton réglage) avec le taux du jour — sur PC, sur Telegram et sur Android — plus en dollars bruts.
+- **Un palier atteint ne sonne qu'une fois** : fini la re-notification hebdomadaire ; le palier reste rappelé chaque jour dans le brief Telegram tant que la vente n'est pas enregistrée (app, runner VPS et script Android alignés).
+- **Identifiants de notification Android sans collision** : plage dédiée élargie (les notifications ne s'écrasent plus entre elles).
+- **Changement de zone de marché calculé sur le VPS** : le runner calcule la température (mêmes indicateurs que l'application) et prévient sur Telegram quand le marché change de zone (accumulation, chaleur, euphorie…), application fermée. Au premier passage, la zone est seulement mémorisée ; un allers-retour rapide ne re-sonne pas avant une semaine.
+- **Thèse libre** : la contrainte « 5 phrases » disparaît de l'application (rédaction libre, une phrase ou une page), de l'IA et des règles du profil.
+- Vérifié au passage : la lecture d'une xpub couvre bien 20 adresses de suite sans historique (gap limit BIP44).
+
+### v1.10.0 — Veille presse et briefs aux moments clés (lot 11)
+
+- **Veille presse par crypto** : pour chaque crypto suivie (positions du journal + alertes armées, hors BTC/ETH et stablecoins), le runner lit l'actualité (Google News, flux rafraîchi toutes les 45 minutes). Une actu importante arrive sur Telegram — résumée en 3 lignes par Mistral si une clé API est configurée, sinon filtrée par heuristique de mots-clés. Au plus 3 alertes par cycle, une seule fois par actu ; un échec de l'IA ne consomme rien.
+- **Trois briefs de données par jour** : le matin (complet : marché et zone, échéances, portefeuille, paliers, alertes armées, actus, fraîcheur de la sync), puis à l'ouverture des marchés américains (9 h 30, New York) et à leur clôture (16 h) sous forme courte avec les actus du moment. Heures exactes été comme hiver ; chaque créneau se désactive dans la configuration (briefUsOpen, briefUsClose).
+- **Configuration runner enrichie** : newsEnabled, mistralApiKey (ou variable d'environnement MISTRAL_API_KEY), mistralModel. Sans clé, tout marche quand même, en heuristique.
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute
 1. **Import CSV des autres plateformes** (Binance, Coinbase, Kraken, Bitpanda) sur le modèle de l'import Crypto.com.
-2. **Alertes Android plus complètes** (changement de zone du marché, euphorie) : elles demandent de porter le calcul de la température dans le script d'arrière-plan.
+2. Alertes plus complètes (changement de zone du marché, euphorie) : LIVRÉES en v1.9.0 — calculées par le runner du VPS, elles arrivent sur Telegram même application fermée.
 3. **Calendrier des déblocages de tokens** (Tokenomist) sur les positions et la watchlist, avec alerte J-7 : aucune source gratuite fiable aujourd'hui.
 
 ### Priorité moyenne
