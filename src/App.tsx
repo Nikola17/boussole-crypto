@@ -28,6 +28,7 @@ const Market = lazy(() => import('./pages/Market'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
 const Gems = lazy(() => import('./pages/Gems'));
 const Portfolio = lazy(() => import('./pages/Portfolio'));
+const Paper = lazy(() => import('./pages/Paper'));
 const Dca = lazy(() => import('./pages/Dca'));
 const Trading = lazy(() => import('./pages/Trading'));
 const Airdrops = lazy(() => import('./pages/Airdrops'));
@@ -44,6 +45,7 @@ function Routes() {
     case '/marche': return <Market />;
     case '/pepites': return <Gems />;
     case '/portefeuille': return <Portfolio />;
+    case '/papier': return <Paper />;
     case '/dca': return <Dca />;
     case '/trading': return <Trading />;
     case '/airdrops': return <Airdrops />;

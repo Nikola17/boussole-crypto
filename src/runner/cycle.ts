@@ -77,6 +77,7 @@ export interface RemoteBundle extends SyncBundle {
 export function coinsOf(bundle: SyncBundle, watch: ReturnType<typeof watchOf>): string[] {
   const ids = new Set<string>(['bitcoin']);
   for (const coinId of buildPositions(watch.transactions).keys()) if (coinId) ids.add(coinId);
+  for (const t of watch.paperTrades) ids.add(t.coinId); // le papier est valorisé aux mêmes prix réels
   for (const a of watch.alerts) if (a.active && !a.triggeredAt) ids.add(a.coinId);
   const ref = (v: unknown) => { if (v && typeof v === 'object') { const c = v as { coinId?: string }; if (c.coinId) ids.add(c.coinId); } };
   const arr = (k: string): unknown[] => (Array.isArray(bundle.data[k as keyof typeof bundle.data]) ? (bundle.data[k as keyof typeof bundle.data] as unknown[]) : []);
