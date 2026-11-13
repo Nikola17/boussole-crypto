@@ -430,7 +430,7 @@ export function TradeModal({ open, onClose, initial, preset }: {
 
 export function ThesisModal({ open, onClose, coin, initial }: { open: boolean; onClose: () => void; coin: CoinRef; initial?: Thesis | null }) {
   const upsert = useStore((s) => s.upsertThesis);
-  const [sentences, setSentences] = useState<string[]>(['', '', '', '', '']);
+  const [sentences, setSentences] = useState<string[]>(['']);
   const [hyp, setHyp] = useState<string[]>(['']);
   const [red, setRed] = useState<string[]>(['']);
   const [buyPrice, setBuyPrice] = useState<number | ''>('');
@@ -438,20 +438,14 @@ export function ThesisModal({ open, onClose, coin, initial }: { open: boolean; o
 
   useEffect(() => {
     if (!open) return;
-    setSentences(initial?.sentences ?? ['', '', '', '', '']);
+    setSentences(initial?.sentences?.filter((s) => s.trim()) ?? ['']);
     setHyp(initial?.hypotheses.map((h) => h.label) ?? ['', '', '']);
     setRed(initial?.redLines ?? ['', '']);
     setBuyPrice(initial?.buyPrice ?? (live ? Math.round(live * 1e6) / 1e6 : ''));
   }, [open, initial, live]);
 
-  const prompts = [
-    'Ce projet gagne de la valeur parce que…',
-    'Son avantage durable face aux concurrents est…',
-    'L’équipe / la communauté est digne de confiance car…',
-    'Le prix actuel est intéressant parce que…',
-    'Si je me trompe, ma perte reste limitée car…',
-  ];
-  const valid = sentences.filter((s) => s.trim()).length >= 3;
+  const placeholder = `Pourquoi détiens-tu ${coin.name} ? (ex : la valeur vient de…, l’avantage durable est…, si je me trompe, ma perte reste limitée car…)`;
+  const valid = sentences.some((s) => s.trim()) || hyp.some((h) => h.trim());
 
   function save() {
     upsert({
@@ -483,14 +477,10 @@ export function ThesisModal({ open, onClose, coin, initial }: { open: boolean; o
   return (
     <Modal wide open={open} onClose={onClose} title={`Ma thèse sur ${coin.name}`} footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button><Button variant="primary" disabled={!valid} onClick={save}>Enregistrer la thèse</Button></>}>
       <div className="space-y-5">
-        <Banner tone="info" title="Le test du miroir">Si tu ne peux pas expliquer en 5 phrases pourquoi tu achètes, n’achète pas. Écris ta thèse à froid, avant d’acheter : elle te protégera de la panique comme de l’euphorie.</Banner>
-        <div className="space-y-2">
-          {prompts.map((p, i) => (
-            <Field key={i} label={`${i + 1}. ${p}`}>
-              <Input value={sentences[i] ?? ''} onChange={(e) => setSentences(sentences.map((s, j) => (j === i ? e.target.value : s)))} />
-            </Field>
-          ))}
-        </div>
+        <Banner tone="info" title="Écris-la à froid">Rédige ta thèse avant d’acheter, librement : en une phrase ou en une page. Elle te protégera de la panique comme de l’euphorie le jour où le prix la testera.</Banner>
+        <Field label="Pourquoi je détiens (ou veux détenir) cette crypto">
+          <Textarea value={sentences.join('\n')} onChange={(e) => setSentences(e.target.value.split('\n'))} placeholder={placeholder} className="min-h-28" />
+        </Field>
         <Field label="Prix de référence ($)"><NumberInput value={buyPrice} onChange={setBuyPrice} /></Field>
         <div>
           <p className="mb-2 text-sm font-medium text-ink">Hypothèses à vérifier régulièrement</p>

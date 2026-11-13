@@ -15,8 +15,15 @@ Il n'a besoin de **rien installer** : Node ≥ 20 suffit (le bundle
 - une alerte de prix envoyée est **consommée dans le fichier de synchronisation**
   (`triggeredAt`, `active: false`) : le PC et le téléphone la voient déclenchée à leur
   propre synchronisation et ne la re-notifient pas ;
-- un palier atteint non vendu est rappelé une fois par semaine (même règle que le
-  script d'arrière-plan Android) ;
+- un palier atteint non vendu est envoyé **une seule fois** (même règle que le script
+  d'arrière-plan Android) : il reste rappelé chaque jour dans le brief tant que la
+  vente n'est pas enregistrée ;
+- la **température du marché** (mêmes indicateurs que l'application : Fear & Greed,
+  multiple de Mayer, RSI hebdomadaire, taux de financement) est calculée sur le
+  serveur : un changement de zone (accumulation, chaleur, euphorie…) prévient sur
+  Telegram, application fermée. Au premier passage, la zone est seulement mémorisée ;
+- tous les messages (alertes, paliers) partent dans la **devise de l'utilisateur**
+  (EUR via le taux du jour, ou USD), plus en dollars bruts ;
 - une fois par jour (8 h par défaut, fuseau du service) : un **brief de données**
   (marché, échéances DCA du jour, valeur du portefeuille au journal, paliers, alertes
   armées, fraîcheur de la sync). Ce n'est pas le brief IA de l'application.

@@ -8,7 +8,7 @@ import { Layout } from './components/Layout';
 import { Button, Spinner } from './components/ui';
 import { setCoinGeckoKey } from './api/coingecko';
 import { setCoinGeckoKeyPresent } from './api/http';
-import { useMarkets, usePrices } from './hooks/useMarket';
+import { useFx, useMarkets, usePrices } from './hooks/useMarket';
 import { useToday } from './hooks/useClock';
 import { aiReady } from './ai/run';
 import { alertCoinsToFetch, checkPriceAlerts } from './lib/alerts';
@@ -67,6 +67,9 @@ function AppEffects() {
   const plans = useStore((s) => s.dcaPlans);
   const basket = useStore((s) => s.basket);
   const markets = useMarkets();
+  // Alarmes notifiées dans la devise affichée (EUR par défaut) : le taux du jour est appliqué aux montants en $.
+  const fx = useFx();
+  const rate = currency === 'EUR' ? fx : 1;
   // Alertes sur une petite capitalisation : leur prix n'est pas dans le top 250 déjà chargé, on le demande à part.
   const marketIds = useMemo(() => new Set((markets.data ?? []).map((m) => m.id)), [markets.data]);
   const extraAlertPrices = usePrices(useMemo(() => alertCoinsToFetch(alerts, marketIds), [alerts, marketIds]));
@@ -118,9 +121,9 @@ function AppEffects() {
     for (const m of markets.data ?? []) prices.set(m.id, m.current_price);
     for (const { alert: a, price: p } of checkPriceAlerts(alerts, prices)) {
       upsertAlert({ ...a, triggeredAt: new Date().toISOString(), active: false });
-      if (notifications) void notify(`Alerte ${a.symbol.toUpperCase()}`, `${a.name} est passé ${a.condition === 'above' ? 'au-dessus' : 'en dessous'} de ${fmtPrice(a.priceUsd, 'USD')} (cours : ${fmtPrice(p, 'USD')}).`);
+      if (notifications) void notify(`Alerte ${a.symbol.toUpperCase()}`, `${a.name} est passé ${a.condition === 'above' ? 'au-dessus' : 'en dessous'} de ${fmtPrice(a.priceUsd * rate, currency)} (cours : ${fmtPrice(p * rate, currency)}).`);
     }
-  }, [markets.data, extraAlertPrices.data, alerts, upsertAlert, notifications]);
+  }, [markets.data, extraAlertPrices.data, alerts, upsertAlert, notifications, currency, rate]);
 
   // Android : l'état à surveiller (alertes de prix, paliers de vente) est confié au script d'arrière-plan.
   // Notifications désactivées : le script ne surveille plus rien et les rappels déjà programmés sont annulés (avant, ils continuaient).
@@ -132,13 +135,13 @@ function AppEffects() {
       return;
     }
     const exits = exit.coins.flatMap((c) => c.rungs.filter((r) => !r.done).map((r) => ({ coinId: c.coinId, symbol: c.symbol, multiple: r.multiple, pct: r.pct, targetUsd: r.targetPrice }))).slice(0, 60);
-    void syncRunner({ alerts: watchAlerts(alerts), exits, cgKey: cgKeySetting || undefined }, (ids) => {
+    void syncRunner({ alerts: watchAlerts(alerts), exits, cgKey: cgKeySetting || undefined, currency, fxRate: rate }, (ids) => {
       for (const id of ids) {
         const a = alerts.find((x) => x.id === id);
         if (a && !a.triggeredAt) upsertAlert({ ...a, triggeredAt: new Date().toISOString(), active: false });
       }
     });
-  }, [alerts, exit.coins, notifications, upsertAlert, cgKeySetting]);
+  }, [alerts, exit.coins, notifications, upsertAlert, cgKeySetting, currency, rate]);
 
   // Rappels DCA programmés (Android)
   useEffect(() => {

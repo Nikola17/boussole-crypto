@@ -1,7 +1,7 @@
-// État local du runner : dédoublonnage des envois, rappels hebdomadaires des paliers, statut du dernier contrôle.
+// État local du runner : dédoublonnage des envois (une fois seulement), zone de marché, statut du dernier contrôle.
 
 import { describe, expect, it } from 'vitest';
-import { emptyState, markSent, parseState, shouldSend, pruneSent, recordStatus, RUNG_REPEAT_MS, SENT_RETENTION_MS } from './state';
+import { emptyState, markSent, parseState, shouldSend, pruneSent, recordStatus, SENT_RETENTION_MS } from './state';
 
 const NOW = 1_800_000_000_000;
 
@@ -9,29 +9,30 @@ describe('état du runner', () => {
   it('un état corrompu ou absent repart de zéro sans rien casser', () => {
     expect(parseState(null)).toEqual(emptyState());
     expect(parseState('Pas du tout du JSON')).toEqual(emptyState());
-    const st = parseState(JSON.stringify({ sent: { 'exit:solana:2': 123 }, lastBriefDay: '2026-11-10', okAt: 7, attemptAt: 8, error: null }));
+    const st = parseState(JSON.stringify({ sent: { 'exit:solana:2': 123 }, lastBriefDay: '2026-11-10', zoneLabel: 'Neutre', okAt: 7, attemptAt: 8, error: null }));
     expect(st.sent).toEqual({ 'exit:solana:2': 123 });
+    expect(st.zoneLabel).toBe('Neutre');
     // Champs aberrants ignorés silencieusement (le runner ne doit jamais planter sur son propre état).
-    const odd = parseState(JSON.stringify({ sent: { a: 'x', b: 5 }, lastBriefDay: 42 }));
+    const odd = parseState(JSON.stringify({ sent: { a: 'x', b: 5 }, lastBriefDay: 42, zoneLabel: 17 }));
     expect(odd.sent).toEqual({ b: 5 });
     expect(odd.lastBriefDay).toBeNull();
+    expect(odd.zoneLabel).toBeNull();
   });
 
-  it('une clé jamais envoyée part ; une clé envoyée ne repart pas ; un palier repart après 7 jours', () => {
+  it('une clé déjà envoyée ne repart jamais — ni l’alerte, ni le palier (plus de rappel hebdomadaire)', () => {
     const st = emptyState();
-    expect(shouldSend(st, 'alert:a1', NOW)).toBe(true);
-    const sent = markSent(st, ['alert:a1'], NOW);
-    expect(shouldSend(sent, 'alert:a1', NOW + 60_000)).toBe(false);
-    expect(shouldSend(sent, 'alert:a1', NOW + RUNG_REPEAT_MS - 1, RUNG_REPEAT_MS)).toBe(false);
-    expect(shouldSend(sent, 'alert:a1', NOW + RUNG_REPEAT_MS, RUNG_REPEAT_MS)).toBe(true);
-    // Sans répétition prévue : jamais réenvoyée, quel que soit l'âge (l'alerte est consommée entre-temps).
-    expect(shouldSend(sent, 'alert:a1', NOW + SENT_RETENTION_MS * 3, null)).toBe(false);
+    expect(shouldSend(st, 'alert:a1')).toBe(true);
+    const sent = markSent(st, ['alert:a1', 'exit:solana:2'], NOW);
+    expect(shouldSend(sent, 'alert:a1')).toBe(false);
+    expect(shouldSend(sent, 'exit:solana:2')).toBe(false);
+    // Même des semaines plus tard : le palier reste rappelé chaque jour par le brief, pas par une notification.
+    expect(shouldSend(sent, 'exit:solana:2')).toBe(false);
   });
 
-  it('les clés plus vieilles que 30 jours sont nettoyées, et sans changement l’objet reste le même', () => {
-    const st = markSent(emptyState(), ['a', 'b'], NOW - SENT_RETENTION_MS - 5);
+  it('les clés plus vieilles que 30 jours sont nettoyées, mais jamais les paliers ; sans changement l’objet reste le même', () => {
+    const st = markSent(emptyState(), ['a', 'b', 'exit:solana:2'], NOW - SENT_RETENTION_MS - 5);
     const pruned = pruneSent({ ...st, sent: { ...st.sent, c: NOW } }, NOW);
-    expect(Object.keys(pruned.sent)).toEqual(['c']);
+    expect(Object.keys(pruned.sent)).toEqual(['exit:solana:2', 'c']);
     const same = pruneSent(markSent(emptyState(), ['a'], NOW), NOW);
     expect(pruneSent(same, NOW)).toBe(same); // rien à nettoyer : pas de nouvelle écriture
   });

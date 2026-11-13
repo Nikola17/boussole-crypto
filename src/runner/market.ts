@@ -2,6 +2,8 @@
 // et indice Fear & Greed (alternative.me). Le client HTTP complet de l'application (file d'attente par hôte)
 // vit côté navigateur : ici, requête unique, frais, et une erreur explicite — jamais un prix inventé.
 
+import type { Candle } from '../lib/indicators';
+
 export interface CoinPrice {
   usd?: number;
   eur?: number;
@@ -23,6 +25,34 @@ async function getJson<T>(url: string, headers: Record<string, string>): Promise
     return (await res.json()) as T;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * Historique journalier du Bitcoin (Binance public, sans clé) pour la « température du marché ».
+ * 500 bougies : assez pour les moyennes 200 jours et 200 semaines ; null en cas d'échec (la température attendra).
+ */
+export async function fetchBtcDaily(): Promise<Candle[] | null> {
+  try {
+    const res = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=500', { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (!res.ok) return null;
+    const raw = (await res.json()) as [number, string, string, string, string, ...unknown[]][];
+    return raw.map((k) => ({ time: Math.round(k[0] / 1000), open: Number(k[1]), high: Number(k[2]), low: Number(k[3]), close: Number(k[4]), volume: Number(k[5]) })).filter((c) => Number.isFinite(c.close));
+  } catch {
+    return null;
+  }
+}
+
+/** Taux de financement du perpétuel BTC (Binance futures, public) : carburant de la température. */
+export async function fetchBtcFunding(): Promise<number | null> {
+  try {
+    const res = await fetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT', { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    const r = (await res.json()) as { lastFundingRate?: string };
+    const v = Number(r.lastFundingRate);
+    return Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
   }
 }
 

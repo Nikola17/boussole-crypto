@@ -21,8 +21,9 @@ import { fetchRemote, pushRemote } from '../lib/sync/github';
 import { applyEnv, validateConfig, type RunnerConfig } from './config';
 import { emptyState, parseState, type RunnerState } from './state';
 import { runCycle, type CycleDeps } from './cycle';
-import { fetchFearGreed, fetchPrices } from './market';
+import { fetchBtcDaily, fetchBtcFunding, fetchFearGreed, fetchPrices } from './market';
 import { recentChats, sendMessage } from './telegram';
+import type { Candle } from '../lib/indicators';
 
 const log = (msg: string): void => {
   const when = new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -77,12 +78,24 @@ function saveState(cfg: RunnerConfig, st: RunnerState): void {
 
 // ---------------------------------------------------------------- services réels
 
+// Historique BTC (500 bougies) : inutile de le redemander à chaque cycle de 5 minutes — rafraîchi toutes les 90 minutes.
+let btcDailyCache: { at: number; data: Candle[] | null } | null = null;
+async function cachedBtcDaily(): Promise<Candle[] | null> {
+  if (!btcDailyCache || Date.now() - btcDailyCache.at > 90 * 60_000) {
+    const data = await fetchBtcDaily();
+    if (data) btcDailyCache = { at: Date.now(), data };
+  }
+  return btcDailyCache?.data ?? null;
+}
+
 const depsOf = (cfg: RunnerConfig): CycleDeps => ({
   fetchRemote: () => fetchRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken),
   pushRemote: (text, sha) => pushRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken, text, sha),
   telegram: (text) => sendMessage(cfg.telegramToken, cfg.telegramChatId, text),
   prices: (ids) => fetchPrices(ids, cfg.coingeckoKey),
   fearGreed: () => fetchFearGreed(),
+  btcDaily: () => cachedBtcDaily(),
+  funding: () => fetchBtcFunding(),
 });
 
 // ---------------------------------------------------------------- modes

@@ -22,6 +22,8 @@ export interface BriefInputs {
   /** Fraîcheur des données synchronisées : quand le fichier distant a-t-il été écrit ? */
   syncSavedAt: string | null;
   syncDevice: string | null;
+  /** Température du marché calculée par le serveur (null : indisponible). */
+  temperature?: { value: number; zoneLabel: string } | null;
 }
 
 const HEAD_TOP = 3;
@@ -40,6 +42,7 @@ export function buildBrief(i: BriefInputs): string {
   const btc = i.prices.bitcoin;
   const market: string[] = [];
   if (i.fng) market.push(`Fear & Greed ${i.fng.value} (${i.fng.label})`);
+  if (i.temperature) market.push(`zone : ${i.temperature.zoneLabel} (${Math.round(i.temperature.value)}/100)`);
   if (btc?.usd != null) market.push(`BTC ${fmtPrice(btc.usd, 'USD')}${btc.change != null ? ` (${fmtPct(btc.change, 1, true)} / 24 h)` : ''}`);
   lines.push(market.length ? `Marché : ${market.join(' · ')}` : 'Marché : données indisponibles pour l’instant.');
 

@@ -2,6 +2,8 @@
 
 const KEY = 'boussole-notified';
 const KEEP_MS = 60 * 86400_000;
+/** Un palier de vente atteint n'est notifié qu'UNE fois : sa clé vit indéfiniment (il disparaît quand la vente est enregistrée). */
+export const EXIT_TTL_MS = 10 * 365 * 86400_000;
 
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -23,9 +25,9 @@ export function claimNotification(key: string, ttlMs: number, now: number = Date
     map = {};
   }
   const last = map[key];
-  if (typeof last === 'number' && now - last < ttlMs) return false;
+  if (typeof last === 'number' && (ttlMs >= EXIT_TTL_MS ? last > 0 : now - last < ttlMs)) return false;
   map[key] = now;
-  for (const k of Object.keys(map)) if (now - map[k] > KEEP_MS) delete map[k];
+  for (const k of Object.keys(map)) if (!k.startsWith('exit:') && now - map[k] > KEEP_MS) delete map[k];
   try {
     storage.setItem(KEY, JSON.stringify(map));
   } catch {

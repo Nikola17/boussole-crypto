@@ -24,11 +24,12 @@ function writeJson(key, value) {
   try { CapacitorKV.set(key, JSON.stringify(value)); } catch (e) { /* ignoré */ }
 }
 
-// Identifiant de notification stable dérivé d'une clé (plage réservée 3000-3999).
+// Identifiant de notification stable dérivé d'une clé (plage 20000-119999 : les rappels de l'app utilisent 1000-1999,
+// ses notifications immédiates 5000-8999 ; 100000 valeurs suppriment les collisions qui vidaient des notifications).
 function notifId(key) {
   var h = 0;
-  for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 1000;
-  return 3000 + h;
+  for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 100000;
+  return 20000 + h;
 }
 
 function fmt(n) {
@@ -101,6 +102,12 @@ addEventListener('checkAlerts', function (resolve) {
       var pending = []; // clés à marquer « envoyées » une fois la notification programmée
       var pendingAlertIds = [];
 
+      // Devise d'affichage de l'utilisateur : les montant s partent en € (ou en $ si c'est son choix), plus en dollars bruts.
+      var cur = (watch.currency === 'USD') ? 'USD' : 'EUR';
+      var rate = cur === 'EUR' && typeof watch.fxRate === 'number' && watch.fxRate > 0 ? watch.fxRate : 1;
+      var sym = cur === 'EUR' ? ' €' : ' $';
+      function money(usd) { return fmt(usd * rate) + sym; }
+
       (watch.alerts || []).forEach(function (a) {
         var p = prices[a.coinId] && prices[a.coinId].usd;
         if (typeof p !== 'number') return;
@@ -109,7 +116,7 @@ addEventListener('checkAlerts', function (resolve) {
         if (hit && !sent[key]) {
           pending.push(key);
           pendingAlertIds.push(a.id);
-          out.push({ id: notifId(key), title: 'Alerte ' + String(a.symbol).toUpperCase(), body: a.name + ' est passé ' + (a.condition === 'above' ? 'au-dessus' : 'en dessous') + ' de ' + fmt(a.priceUsd) + ' $ (cours : ' + fmt(p) + ' $).', scheduleAt: new Date(now + 1000) });
+          out.push({ id: notifId(key), title: 'Alerte ' + String(a.symbol).toUpperCase(), body: a.name + ' est passé ' + (a.condition === 'above' ? 'au-dessus' : 'en dessous') + ' de ' + money(a.priceUsd) + ' (cours : ' + money(p) + ').', scheduleAt: new Date(now + 1000) });
         }
       });
 
@@ -117,7 +124,8 @@ addEventListener('checkAlerts', function (resolve) {
         var p = prices[x.coinId] && prices[x.coinId].usd;
         if (typeof p !== 'number' || p < x.targetUsd) return;
         var key = 'exit:' + x.coinId + ':' + x.multiple;
-        if (sent[key] && now - sent[key] < 7 * DAY) return;
+        // Un palier atteint est notifié une seule fois : il reste affiché dans l'application tant que la vente n'est pas enregistrée.
+        if (sent[key]) return;
         pending.push(key);
         out.push({ id: notifId(key), title: 'Palier ×' + x.multiple + ' atteint sur ' + String(x.symbol).toUpperCase(), body: 'Vends ' + x.pct + ' % de ta position de départ : ce palier a été fixé à froid. Ouvre Boussole.', scheduleAt: new Date(now + 1000) });
       });
@@ -136,7 +144,8 @@ addEventListener('checkAlerts', function (resolve) {
         pendingAlertIds.forEach(function (id) { firedAlerts.push(id); });
       }
 
-      Object.keys(sent).forEach(function (k) { if (now - sent[k] > 30 * DAY) delete sent[k]; });
+      // Les paliers (« exit: ») ne sont jamais nettoyés : ils ne sonnent qu'une fois.
+      Object.keys(sent).forEach(function (k) { if (k.indexOf('exit:') !== 0 && now - sent[k] > 30 * DAY) delete sent[k]; });
       writeJson('sent', sent);
       writeJson('firedAlerts', firedAlerts);
       recordStatus({ ok: true, checked: list.length });
