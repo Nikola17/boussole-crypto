@@ -4,9 +4,12 @@
 import { describe, expect, it } from 'vitest';
 import type { PriceAlert, Transaction } from '../types';
 import type { Candle } from '../lib/indicators';
+import type { NewsItem } from './news';
+import { isoDay } from '../lib/format';
 import { seal, unseal } from '../lib/sync/crypto';
 import { CONFLICT } from '../lib/sync/github';
 import { runCycle, type CycleDeps, type CycleOptions } from './cycle';
+import { nyEpoch } from './brief';
 import { emptyState } from './state';
 import type { RunnerConfig } from './config';
 
@@ -14,7 +17,7 @@ const PASS = 'phrase de passe du runner';
 const CFG: RunnerConfig = {
   syncRepo: 'Nikola17/boussole-sync', syncPath: 'boussole-sync.enc', syncToken: 'tok', passphrase: PASS,
   telegramToken: 'tg', telegramChatId: '42', coingeckoKey: null, currency: 'EUR',
-  intervalMinutes: 5, briefHour: 8, briefEnabled: true, timeZone: 'Europe/Paris', stateDir: '', device: 'vps-test',
+  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', stateDir: '', device: 'vps-test',
 };
 
 const txSol: Transaction = { id: 't1', coinId: 'solana', symbol: 'sol', name: 'Solana', date: '2026-01-10', type: 'buy', quantity: 100, price: 2, currency: 'USD', fee: 0, fxEurPerUsd: 0.87, updatedAt: '2026-01-10T00:00:00Z' };
@@ -28,7 +31,7 @@ const FLAT = { solana: { usd: 2, eur: 1.72, change: 0.1 }, bitcoin: { usd: 200_0
 const H = (h: number, m = 0): Date => new Date(2026, 10, 11, h, m);
 
 /** Faux services autour du cycle : tout est enregistré, rien ne sort. */
-function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; telegramError?: string; noFile?: boolean; prices?: Record<string, { usd?: number; eur?: number; change?: number }>; fng?: { value: number; label: string } | null; btcDaily?: Candle[] | null } = {}) {
+function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; telegramError?: string; noFile?: boolean; prices?: Record<string, { usd?: number; eur?: number; change?: number }>; fng?: { value: number; label: string } | null; btcDaily?: Candle[] | null; news?: NewsItem[]; newsRatings?: { importance: number; resume: string }[]; countAi?: { n: number } } = {}) {
   const sent: string[] = [];
   const pushes: { text: string; sha: string | null }[] = [];
   let sha: string | null = 'sha-initial';
@@ -56,6 +59,12 @@ function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; t
     // Historique BTC absent par défaut : pas de température (les tests de zone le fournissent).
     btcDaily: async () => opts.btcDaily === undefined ? null : opts.btcDaily,
     funding: async () => 0.0001,
+    // Veille presse : muette par défaut (les tests dédiés la fournissent).
+    news: async () => opts.news ?? [],
+    aiRates: async (items) => {
+      if (opts.countAi) opts.countAi.n++;
+      return items.map((_, i) => opts.newsRatings?.[i] ?? { importance: 0, resume: '' });
+    },
   };
   return { deps, sent, pushes };
 }
@@ -223,10 +232,10 @@ describe('cycle du runner — brief quotidien', () => {
     const failing = makeDeps({ transactions: [txSol] }, { telegramError: 'Telegram a refusé sendMessage' });
     const first = await runCycle(CFG, emptyState(), dry(), { ...failing.deps, prices: async () => FLAT }, H(9, 0));
     expect(first.result.error).toContain('Telegram');
-    expect(first.state.lastBriefDay).toBeNull();
+    expect(first.state.lastBriefSlot.matin).toBeUndefined();
     const working = flatDeps();
     const second = await runCycle(CFG, first.state, dry(), working.deps, H(9, 5));
-    expect(second.state.lastBriefDay).toBe('2026-11-11');
+    expect(second.state.lastBriefSlot.matin).toBe('2026-11-11');
     expect(working.sent).toHaveLength(1);
   });
 
@@ -234,5 +243,109 @@ describe('cycle du runner — brief quotidien', () => {
     const { deps, sent } = flatDeps();
     await runCycle({ ...CFG, briefEnabled: false }, emptyState(), dry(), deps, H(23, 0));
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe('cycle du runner — veille presse (idées 13)', () => {
+  // briefEnabled: false — sinon le brief du matin partirait aussi selon l'heure locale de la machine de test.
+  const NEWS_CFG = { ...CFG, newsEnabled: true, mistralApiKey: 'cle-ia', briefEnabled: false };
+  const newsItem = (title: string, hoursAgo = 1): NewsItem => ({
+    coinId: 'solana', coinName: 'Solana', title, url: `https://news.google.com/r/${encodeURIComponent(title)}`,
+    source: 'Journal Crypto', publishedAt: Date.UTC(2026, 10, 11, 10, 0) - hoursAgo * 3600_000, summaryText: '',
+  });
+  // 11 novembre 2026, 10 h UTC : « maintenant » pour ces tests (avant les briefs US de 15 h 30 UTC).
+  const NOW = new Date(Date.UTC(2026, 10, 11, 10, 0));
+
+  it('une actu notée importante par l’IA part en alerte, avec son résumé, puis ne repart jamais', async () => {
+    const { deps, sent } = makeDeps({ transactions: [txSol] }, {
+      prices: FLAT, news: [newsItem('Hack de 200 M$ sur un pont Solana')],
+      newsRatings: [{ importance: 8, resume: 'Le pont a été exploité. Fonds à risque. Vérifie tes exposures.' }],
+    });
+    const first = await runCycle(NEWS_CFG, emptyState(), dry(), deps, NOW);
+    expect(first.result.sent).toBe(1);
+    expect(sent[0]).toContain('Presse — Solana');
+    expect(sent[0]).toContain('Hack de 200 M$');
+    expect(sent[0]).toContain('Le pont a été exploité');
+    const second = await runCycle(NEWS_CFG, first.state, dry(), deps, new Date(NOW.getTime() + 300_000));
+    expect(second.result.sent).toBe(0);
+  });
+
+  it('une actu jugée sans importance est marquée vue : l’IA n’est plus interrogée à son sujet', async () => {
+    const counted = { n: 0 };
+    const { deps, sent } = makeDeps({ transactions: [txSol] }, {
+      prices: FLAT, news: [newsItem('Trois raisons d’aimer Solana')], countAi: counted,
+      newsRatings: [{ importance: 2, resume: 'Opinion sans conséquence.' }],
+    });
+    const first = await runCycle(NEWS_CFG, emptyState(), dry(), deps, NOW);
+    expect(first.result.sent).toBe(0);
+    expect(counted.n).toBe(1);
+    await runCycle(NEWS_CFG, first.state, dry(), deps, new Date(NOW.getTime() + 300_000));
+    expect(counted.n).toBe(1); // déjà notée : plus aucun appel IA
+    expect(sent).toHaveLength(0);
+  });
+
+  it('sans clé IA, l’heuristique décide : un hack part, une opinion est vue sans alerte', async () => {
+    const noAi = { ...CFG, newsEnabled: true, mistralApiKey: null, briefEnabled: false };
+    const hack = makeDeps({ transactions: [txSol] }, { prices: FLAT, news: [newsItem('Solana hackee : 200 M$ envolés')] });
+    const h = await runCycle(noAi, emptyState(), dry(), hack.deps, NOW);
+    expect(h.result.sent).toBe(1);
+    expect(hack.sent[0]).toContain('Presse — Solana');
+    const calm = makeDeps({ transactions: [txSol] }, { prices: FLAT, news: [newsItem('Trois raisons d’aimer Solana')] });
+    const c = await runCycle(noAi, emptyState(), dry(), calm.deps, NOW);
+    expect(c.result.sent).toBe(0);
+  });
+
+  it('un échec de l’IA ne consomme rien : l’actu sera réévaluée au cycle suivant', async () => {
+    const st = { ...emptyState() };
+    const counted = { n: 0 };
+    const { deps, sent } = makeDeps({ transactions: [txSol] }, { prices: FLAT, news: [newsItem('Hack de 200 M$ sur un pont Solana')], countAi: counted });
+    const first = await runCycle(NEWS_CFG, st, dry(), deps, NOW); // ratings à 0 : réponse IA manquante
+    expect(first.result.sent).toBe(0);
+    expect(Object.keys(first.state.sent).filter((k) => k.startsWith('news:'))).toHaveLength(0);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('les briefs du matin citent les actus fraîches avec leur résumé', async () => {
+    const { deps, sent } = makeDeps({ transactions: [txSol] }, {
+      prices: FLAT, news: [newsItem('Hack de 200 M$ sur un pont Solana', 2)],
+      newsRatings: [{ importance: 8, resume: 'Pont exploité, fonds à risque. Vérifie tes expositions. Envisage un retrait temporaire.' }],
+    });
+    const r = await runCycle({ ...NEWS_CFG, briefEnabled: true }, emptyState(), dry({ forceBrief: true }), deps, NOW);
+    expect(r.result.sent).toBe(1); // l'alerte presse (le brief forcé part, mais ne compte pas dans « sent »)
+    expect(sent).toHaveLength(2);
+    expect(sent.some((t) => t.includes('Boussole — brief du') && t.includes('Actus :') && t.includes('Pont exploité'))).toBe(true);
+  });
+});
+
+describe('cycle du runner — briefs aux moments clés américains', () => {
+  it('le brief d’ouverture US part après 9 h 30 New York, une seule fois par jour', async () => {
+    const usCfg = { ...CFG, briefUsOpen: true, briefUsClose: false };
+    const day = new Date(2026, 10, 11, 12, 0); // n’importe quelle heure locale du jour : l’instant exact vient de New York
+    const openMs = nyEpoch(9, 30, day);
+    expect(openMs).not.toBeNull();
+    if (openMs == null) return;
+    const justBefore = new Date(openMs - 60_000);
+    const justAfter = new Date(openMs + 60_000);
+    const { deps, sent } = makeDeps({ transactions: [txSol] }, { prices: FLAT });
+    const before = await runCycle(usCfg, emptyState(), dry(), deps, justBefore);
+    expect(sent.filter((t) => t.includes('ouverture américaine'))).toHaveLength(0);
+    void before;
+    const after = await runCycle(usCfg, before.state, dry(), deps, justAfter);
+    expect(sent.filter((t) => t.includes('ouverture américaine'))).toHaveLength(1);
+    await runCycle(usCfg, after.state, dry(), deps, new Date(openMs + 120_000));
+    expect(sent.filter((t) => t.includes('ouverture américaine'))).toHaveLength(1); // pas deux fois
+  });
+
+  it('le brief de clôture US part après 16 h New York, et le matin ne redémarre pas les créneaux', async () => {
+    const usCfg = { ...CFG, briefUsOpen: false, briefUsClose: true };
+    const day = new Date(2026, 10, 11, 12, 0);
+    const closeMs = nyEpoch(16, 0, day);
+    expect(closeMs).not.toBeNull();
+    if (closeMs == null) return;
+    const { deps, sent } = makeDeps({ transactions: [txSol] }, { prices: FLAT });
+    const st = { ...emptyState(), lastBriefSlot: { matin: isoDay(day) } }; // le matin est déjà parti
+    const after = await runCycle(usCfg, st, dry(), deps, new Date(closeMs + 60_000));
+    expect(sent.filter((t) => t.includes('clôture américaine'))).toHaveLength(1);
+    expect(after.state.lastBriefSlot['us-close']).toBe(isoDay(day));
   });
 });

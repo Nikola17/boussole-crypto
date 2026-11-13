@@ -12,10 +12,14 @@ describe('état du runner', () => {
     const st = parseState(JSON.stringify({ sent: { 'exit:solana:2': 123 }, lastBriefDay: '2026-11-10', zoneLabel: 'Neutre', okAt: 7, attemptAt: 8, error: null }));
     expect(st.sent).toEqual({ 'exit:solana:2': 123 });
     expect(st.zoneLabel).toBe('Neutre');
+    // L'ancien champ « dernier brief du jour » devient le créneau du matin (le brief ne repart pas ce jour-là).
+    expect(st.lastBriefSlot).toEqual({ matin: '2026-11-10' });
+    expect(parseState(JSON.stringify({ lastBriefSlot: { 'us-open': '2026-11-10' } })).lastBriefSlot).toEqual({ 'us-open': '2026-11-10' });
     // Champs aberrants ignorés silencieusement (le runner ne doit jamais planter sur son propre état).
     const odd = parseState(JSON.stringify({ sent: { a: 'x', b: 5 }, lastBriefDay: 42, zoneLabel: 17 }));
     expect(odd.sent).toEqual({ b: 5 });
-    expect(odd.lastBriefDay).toBeNull();
+    expect(odd.lastBriefSlot).toEqual({});
+    expect(odd.zoneLabel).toBeNull();
     expect(odd.zoneLabel).toBeNull();
   });
 

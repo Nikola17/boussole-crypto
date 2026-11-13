@@ -10,6 +10,39 @@ import { isScheduledDay, nextOccurrences, periodKey } from '../lib/dca';
 import { buildPositions } from '../lib/portfolio';
 import { fmtDate, fmtPct, fmtPrice, isoDay } from '../lib/format';
 import type { CoinPrice } from './market';
+import type { RatedNews } from './news';
+import type { RunnerConfig } from './config';
+
+export type BriefSlotId = 'matin' | 'us-open' | 'us-close';
+
+/** Heure exacte (ms) d'un moment de la journée à New York, été comme hiver. */
+export function nyEpoch(hour: number, minute: number, now: Date): number | null {
+  let day: string;
+  try { day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now); } catch { return null; }
+  // Les heures de l'Atlantique Nord ne basculent pas le même jour : on vérifie l'essai été (-04:00) puis hiver (-05:00),
+  // en reformattant l'instant trouvé : seul le bon essai affiche exactement 9 h 30 (ou 16 h) à New York.
+  for (const off of ['-04:00', '-05:00']) {
+    const t = Date.parse(`${day}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00${off}`);
+    if (!Number.isFinite(t)) continue;
+    try {
+      const shown = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).format(new Date(t));
+      if (shown === `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`) return t;
+    } catch { return null; }
+  }
+  return null;
+}
+
+export interface BriefSlot { id: BriefSlotId; label: string; atMs: number | null }
+
+/** Les trois briefs de la journée, avec leur heure locale (serveur dans le fuseau de l'utilisateur). */
+export function slotsOfDay(cfg: Pick<RunnerConfig, 'briefHour' | 'briefUsOpen' | 'briefUsClose'>, now: Date): BriefSlot[] {
+  const out: BriefSlot[] = [{ id: 'matin', label: 'brief du matin', atMs: new Date(now.getFullYear(), now.getMonth(), now.getDate(), cfg.briefHour, 0, 0, 0).getTime() }];
+  const usOpen = cfg.briefUsOpen ? nyEpoch(9, 30, now) : null;
+  const usClose = cfg.briefUsClose ? nyEpoch(16, 0, now) : null;
+  if (usOpen != null) out.push({ id: 'us-open', label: 'ouverture des marchés américains', atMs: usOpen });
+  if (usClose != null) out.push({ id: 'us-close', label: 'clôture des marchés américains', atMs: usClose });
+  return out;
+}
 
 export interface BriefInputs {
   /** Maintenant, dans le fuseau du serveur (le service doit avoir la même TZ que toi, ex : TZ=Europe/Paris). */
@@ -24,6 +57,10 @@ export interface BriefInputs {
   syncDevice: string | null;
   /** Température du marché calculée par le serveur (null : indisponible). */
   temperature?: { value: number; zoneLabel: string } | null;
+  /** Créneau du brief : « matin » (complet), ou formes courtes aux moments clés américains. */
+  slot?: BriefSlotId;
+  /** Actus fraîches des cryptos suivies (triées, au plus 3 lignes retinues dans le brief). */
+  news?: RatedNews[];
 }
 
 const HEAD_TOP = 3;
@@ -35,8 +72,9 @@ export function buildBrief(i: BriefInputs): string {
   const watch = watchOf(i.bundle); // transactions, thèses, alertes, paliers vendus
   const today = isoDay(i.now);
   const cur = i.currency;
+  const short = i.slot === 'us-open' || i.slot === 'us-close';
 
-  lines.push(`Boussole — brief du ${fmtDate(i.now)}`);
+  lines.push(i.slot === 'us-open' ? `Boussole — ouverture américaine · ${fmtDate(i.now)}` : i.slot === 'us-close' ? `Boussole — clôture américaine · ${fmtDate(i.now)}` : `Boussole — brief du ${fmtDate(i.now)}`);
 
   // Marché : Fear & Greed et Bitcoin.
   const btc = i.prices.bitcoin;
@@ -97,8 +135,8 @@ export function buildBrief(i: BriefInputs): string {
     }
   }
   if (due.length) lines.push(`Aujourd’hui : ${due.join(' · ')}`);
-  if (upcoming.length) lines.push(`Prochaine échéance : ${upcoming.join(' · ')}`);
-  if (!due.length && !upcoming.length) lines.push('Aucune échéance DCA programmée.');
+  if (!short && upcoming.length) lines.push(`Prochaine échéance : ${upcoming.join(' · ')}`);
+  if (!short && !due.length && !upcoming.length) lines.push('Aucune échéance DCA programmée.');
 
   // Paliers de vente atteints mais pas vendus : rappelés tant que rien n'est fait.
   const usd = new Map<string, number>();
@@ -106,12 +144,22 @@ export function buildBrief(i: BriefInputs): string {
   const rungs = hitRungs(watch, usd);
   if (rungs.length) lines.push(`Paliers atteints non vendus : ${rungs.map((r) => `${r.symbol.toUpperCase()} ×${r.multiple} (vends ${r.pct} %)`).join(' · ')}`);
 
-  // Alertes armées : combien veillent encore ?
-  const armed = watch.alerts.filter((a) => a.active && !a.triggeredAt).length;
-  lines.push(`Alertes armées : ${armed}`);
+  // Alertes armées : combien veillent encore ? (le matin seulement)
+  if (!short) {
+    const armed = watch.alerts.filter((a) => a.active && !a.triggeredAt).length;
+    lines.push(`Alertes armées : ${armed}`);
+  }
+
+  // Actus fraîches des cryptos suivies : la presse du moment, résumée si l'IA est configurée.
+  const news = i.news ?? [];
+  const topNews = news.filter((n) => n.publishedAt > i.now.getTime() - 18 * 3600_000).slice(0, 3);
+  if (topNews.length) {
+    lines.push(`Actus : ${topNews.map((n) => `« ${n.title} »${n.source ? ` (${n.source})` : ''}`).join(' · ')}`);
+    for (const n of topNews) if (n.resume) lines.push(`${n.coinName} : ${n.resume.replace(/\s+/g, ' ').slice(0, 320)}`);
+  }
 
   // Fraîcheur du fichier de synchronisation : sans ça, le brief peut paraître “du jour” avec des données anciennes.
-  if (i.syncSavedAt) {
+  if (!short && i.syncSavedAt) {
     const when = new Date(i.syncSavedAt);
     if (!Number.isNaN(when.getTime())) lines.push(`Données de synchronisation : ${fmtDate(when, true)}${i.syncDevice ? ` (${i.syncDevice})` : ''}`);
   }

@@ -21,9 +21,18 @@ export interface RunnerConfig {
   currency: 'EUR' | 'USD';
   /** Intervalle entre deux contrôles, en minutes. */
   intervalMinutes: number;
-  /** Heure locale d'envoi du brief quotidien (0-23). */
+  /** Heure locale d'envoi du brief du matin (0-23). */
   briefHour: number;
   briefEnabled: boolean;
+  /** Briefs « moments clés » : ouverture des marchés américains (9 h 30, New York) et clôture (16 h). */
+  briefUsOpen: boolean;
+  briefUsClose: boolean;
+  /** Veille presse des cryptos suivies (positions + alertes) : alerte Telegram quand une actu importante sort. */
+  newsEnabled: boolean;
+  /** Clé API Mistral (facultative) : résume les actus importantes en 3 lignes et filtre le bruit. */
+  mistralApiKey: string | null;
+  /** Modèle Mistral pour la veille presse. */
+  mistralModel: string;
   /** Fuseau dans lequel lire l'heure du brief et les jours d'échéance (le serveur est souvent en UTC). */
   timeZone: string;
   /** Répertoire de l'état local du runner (aucun secret dedans). */
@@ -70,6 +79,10 @@ export function validateConfig(raw: unknown, opts: { allowMissingChatId?: boolea
   }
 
   if (typeof r.briefEnabled !== 'undefined' && typeof r.briefEnabled !== 'boolean') problems.push('briefEnabled doit être true ou false.');
+  const bool = (v: unknown): boolean => typeof v === 'boolean'; // absents → true par défaut
+  for (const k of ['briefUsOpen', 'briefUsClose', 'newsEnabled'] as const) {
+    if (typeof r[k] !== 'undefined' && typeof r[k] !== 'boolean') problems.push(`${k} doit être true ou false.`);
+  }
 
   // Les secrets obligatoires peuvent venir de l'environnement : ils sont nommés ici pour le message d'erreur.
   const syncToken = str(r.syncToken);
@@ -96,6 +109,11 @@ export function validateConfig(raw: unknown, opts: { allowMissingChatId?: boolea
       intervalMinutes: intervalMinutes as number,
       briefHour: briefHour as number,
       briefEnabled: typeof r.briefEnabled === 'boolean' ? r.briefEnabled : true,
+      briefUsOpen: r.briefUsOpen === undefined ? true : bool(r.briefUsOpen),
+      briefUsClose: r.briefUsClose === undefined ? true : bool(r.briefUsClose),
+      newsEnabled: r.newsEnabled === undefined ? true : bool(r.newsEnabled),
+      mistralApiKey: str(r.mistralApiKey) || null,
+      mistralModel: str(r.mistralModel) || 'mistral-small-latest',
       timeZone,
       stateDir: str(r.stateDir),
       device: str(r.device) || 'vps-boussole',
@@ -116,6 +134,7 @@ export function applyEnv(raw: Record<string, unknown>, env: Record<string, strin
   set('telegramToken', 'TELEGRAM_BOT_TOKEN');
   set('telegramChatId', 'TELEGRAM_CHAT_ID');
   set('coingeckoKey', 'COINGECKO_KEY');
+  set('mistralApiKey', 'MISTRAL_API_KEY');
   set('stateDir', 'BOUSSOLE_STATE_DIR');
   return out;
 }

@@ -23,6 +23,8 @@ import { emptyState, parseState, type RunnerState } from './state';
 import { runCycle, type CycleDeps } from './cycle';
 import { fetchBtcDaily, fetchBtcFunding, fetchFearGreed, fetchPrices } from './market';
 import { recentChats, sendMessage } from './telegram';
+import { fetchCoinNews, type NewsItem, type WatchedCoin } from './news';
+import { rateNews } from './ai';
 import type { Candle } from '../lib/indicators';
 
 const log = (msg: string): void => {
@@ -88,14 +90,39 @@ async function cachedBtcDaily(): Promise<Candle[] | null> {
   return btcDailyCache?.data ?? null;
 }
 
+// Fear & Greed : lu à chaque cycle pour la température de marché — rafraîchi au maximum toutes les 30 minutes.
+let fngCache: { at: number; data: { value: number; label: string } | null } | null = null;
+async function cachedFng(): Promise<{ value: number; label: string } | null> {
+  if (!fngCache || Date.now() - fngCache.at > 30 * 60_000) {
+    const data = await fetchFearGreed();
+    if (data) fngCache = { at: Date.now(), data };
+  }
+  return fngCache?.data ?? null;
+}
+
+// Veille presse : un flux Google News par crypto suivie, rafraîchi au maximum toutes les 45 minutes
+// (12 cryptos au plus : la veille ne doit pas transformer le runner en robot d'actualités).
+let newsCache: { at: number; coins: string; items: NewsItem[] } | null = null;
+async function cachedNews(coins: WatchedCoin[]): Promise<NewsItem[]> {
+  const sig = coins.map((c) => c.coinId).join(',');
+  if (!newsCache || Date.now() - newsCache.at > 45 * 60_000 || newsCache.coins !== sig) {
+    const results = await Promise.allSettled(coins.map((c) => fetchCoinNews(c, 18 * 3600_000)));
+    const items = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])).sort((a, b) => b.publishedAt - a.publishedAt).slice(0, 24);
+    if (items.length || !newsCache) newsCache = { at: Date.now(), coins: sig, items };
+  }
+  return newsCache?.items ?? [];
+}
+
 const depsOf = (cfg: RunnerConfig): CycleDeps => ({
   fetchRemote: () => fetchRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken),
   pushRemote: (text, sha) => pushRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken, text, sha),
   telegram: (text) => sendMessage(cfg.telegramToken, cfg.telegramChatId, text),
   prices: (ids) => fetchPrices(ids, cfg.coingeckoKey),
-  fearGreed: () => fetchFearGreed(),
+  fearGreed: () => cachedFng(),
   btcDaily: () => cachedBtcDaily(),
   funding: () => fetchBtcFunding(),
+  news: (coins) => cfg.newsEnabled ? cachedNews(coins) : Promise.resolve([]),
+  aiRates: (items) => cfg.mistralApiKey ? rateNews(cfg.mistralApiKey, cfg.mistralModel, items) : Promise.resolve(items.map(() => ({ importance: 0, resume: '' }))),
 });
 
 // ---------------------------------------------------------------- modes
@@ -132,7 +159,7 @@ async function modeMain(cfg: RunnerConfig, mode: 'loop' | 'once' | 'brief' | 'di
     await run();
     return;
   }
-  log(`Surveillance démarrée : contrôle toutes les ${cfg.intervalMinutes} min, brief ${cfg.briefEnabled ? `à ${cfg.briefHour} h` : 'désactivé'} ${cfg.timeZone}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffré de bout en bout).`);
+  log(`Surveillance démarrée : contrôle toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : 'matin désactivé'}${cfg.briefUsOpen ? ', ouverture US (9 h 30 New York)' : ''}${cfg.briefUsClose ? ', clôture US (16 h New York)' : ''}. Veille presse : ${cfg.newsEnabled ? `activée${cfg.mistralApiKey ? ' (résumés IA)' : ' (heuristique, sans clé IA)'}` : 'désactivée'}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffré de bout en bout).`);
   for (;;) {
     try {
       await run();

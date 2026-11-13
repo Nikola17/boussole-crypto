@@ -24,9 +24,18 @@ Il n'a besoin de **rien installer** : Node ≥ 20 suffit (le bundle
   Telegram, application fermée. Au premier passage, la zone est seulement mémorisée ;
 - tous les messages (alertes, paliers) partent dans la **devise de l'utilisateur**
   (EUR via le taux du jour, ou USD), plus en dollars bruts ;
-- une fois par jour (8 h par défaut, fuseau du service) : un **brief de données**
-  (marché, échéances DCA du jour, valeur du portefeuille au journal, paliers, alertes
-  armées, fraîcheur de la sync). Ce n'est pas le brief IA de l'application.
+- **trois briefs de données par jour**, aux moments qui comptent pour le marché :
+  le matin (8 h par défaut, fuseau du service : complet — marché et zone, échéances
+  DCA, portefeuille au journal, paliers, alertes armées, actus, fraîcheur de la sync),
+  puis l'**ouverture des marchés américains** (9 h 30, New York) et leur **clôture**
+  (16 h, New York) sous forme courte (marché, portefeuille, paliers, échéances du
+  jour, actus). Heures exactes calculées été comme hiver ; chaque créneau est
+  désactivable (`briefUsOpen`, `briefUsClose`). Ce n'est pas le brief IA de l'application ;
+- **veille presse** des cryptos suivies (positions du journal + alertes armées, sans
+  BTC/ETH ni stablecoins) : flux Google News par crypto, rafraîchi toutes les 45 min ;
+  une actu notée importante part en alerte Telegram, **résumée en 3 lignes par Mistral**
+  si une clé est configurée (`mistralApiKey`, sinon heuristique de mots-clés), au plus
+  3 par cycle et une seule fois par actu.
 
 ## Limites connues (voulu ainsi pour cette première version)
 
