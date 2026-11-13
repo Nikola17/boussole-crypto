@@ -21,6 +21,8 @@
   "mistralModel": "mistral-small-latest",
   "_smart": "alerte quand un wallet suivi achète (et surtout vend) un token de ta liste",
   "smartMoneyEnabled": true,
+  "_emerging": "digest des nouvelles paires Solana/Base en traction dans le brief du matin",
+  "emergingEnabled": true,
   "timeZone": "Europe/Paris",
   "stateDir": "",
   "device": "hermes-vps"

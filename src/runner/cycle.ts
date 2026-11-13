@@ -54,6 +54,8 @@ export interface CycleDeps {
   aiRates: (items: NewsItem[]) => Promise<{ importance: number; resume: string }[]>;
   /** Mouvements d'un wallet suivi depuis un instant donné (facultatif : désactivé, aucune clé, aucune erreur). */
   smartEvents?: (wallets: SmartWallet[], sinceMs: number, nowMs: number) => Promise<SmartEvent[]>;
+  /** Digest « pépites émergentes » du brief du matin (facultatif) : une ligne par candidate, déjà rédigée. */
+  emerging?: (wallets: SmartWallet[]) => Promise<string[]>;
 }
 
 export interface CycleOptions {
@@ -304,12 +306,18 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
     if (slot.id === 'matin' && !cfg.briefEnabled) continue;
     if (!(opts.forceBrief && slot.id === 'matin') && slot.atMs != null && nowMs < slot.atMs) continue;
     if (!(opts.forceBrief && slot.id === 'matin') && state.lastBriefSlot[slot.id] === dayKey) continue;
+    // Le digest émergent ne vit que dans le brief du matin : une passe par jour, jamais dans les formes courtes.
+    let emergingLines: string[] | undefined;
+    if (slot.id === 'matin' && cfg.emergingEnabled && deps.emerging) {
+      emergingLines = await deps.emerging(watch.smartWallets).catch(() => []);
+    }
     const brief = buildBrief({
       now, bundle, prices: priceRows, fng, currency: cfg.currency,
       syncSavedAt: bundle.savedAt ?? null, syncDevice: bundle.device ?? null,
       temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
       cycleMetrics: temperature ? { mvrv: temperature.mvrv, stableShare: temperature.stableShare, halvingDaysToNext: temperature.halvingDaysToNext } : null,
       slot: slot.id, news: ratedNews.slice(0, 6), smart: smartBriefLines(smartRecent, nowMs),
+      emerging: emergingLines,
     });
     try {
       await send(brief);

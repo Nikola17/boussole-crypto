@@ -18,7 +18,7 @@ const PASS = 'phrase de passe du runner';
 const CFG: RunnerConfig = {
   syncRepo: 'Nikola17/boussole-sync', syncPath: 'boussole-sync.enc', syncToken: 'tok', passphrase: PASS,
   telegramToken: 'tg', telegramChatId: '42', coingeckoKey: null, currency: 'EUR',
-  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, smartMoneyEnabled: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', stateDir: '', device: 'vps-test',
+  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, smartMoneyEnabled: false, emergingEnabled: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', stateDir: '', device: 'vps-test',
 };
 
 const txSol: Transaction = { id: 't1', coinId: 'solana', symbol: 'sol', name: 'Solana', date: '2026-01-10', type: 'buy', quantity: 100, price: 2, currency: 'USD', fee: 0, fxEurPerUsd: 0.87, updatedAt: '2026-01-10T00:00:00Z' };
@@ -33,7 +33,7 @@ const FLAT = { solana: { usd: 2, eur: 1.72, change: 0.1 }, bitcoin: { usd: 200_0
 const H = (h: number, m = 0): Date => new Date(2026, 10, 20, h, m);
 
 /** Faux services autour du cycle : tout est enregistré, rien ne sort. */
-function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; telegramError?: string; noFile?: boolean; prices?: Record<string, { usd?: number; eur?: number; change?: number }>; fng?: { value: number; label: string } | null; btcDaily?: Candle[] | null; news?: NewsItem[]; newsRatings?: { importance: number; resume: string }[]; countAi?: { n: number }; smartEvents?: SmartEvent[] } = {}) {
+function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; telegramError?: string; noFile?: boolean; prices?: Record<string, { usd?: number; eur?: number; change?: number }>; fng?: { value: number; label: string } | null; btcDaily?: Candle[] | null; news?: NewsItem[]; newsRatings?: { importance: number; resume: string }[]; countAi?: { n: number }; smartEvents?: SmartEvent[]; emerging?: string[] } = {}) {
   const sent: string[] = [];
   const pushes: { text: string; sha: string | null }[] = [];
   let sha: string | null = 'sha-initial';
@@ -72,6 +72,8 @@ function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; t
     },
     // Smart money : silence par défaut (les tests dédiés fournissent les mouvements).
     smartEvents: opts.smartEvents ? async () => opts.smartEvents! : undefined,
+    // Digest émergent : silence par défaut (le test dédié fournit les lignes).
+    emerging: opts.emerging ? async () => opts.emerging! : undefined,
   };
   return { deps, sent, pushes };
 }
@@ -427,5 +429,35 @@ describe('cycle du runner — smart money (wallets suivis)', () => {
     expect(second.result.sent).toBe(1); // l'alerte a bien fini par partir
     expect(second.state.sent['sm:w1:h1:MintA']).toBeTruthy();
     expect(second.state.smCursor['w1']).toBe(at);
+  });
+});
+
+describe('cycle du runner — digest des pépites émergentes', () => {
+  it('le brief du matin égrène les candidates scannées, avec les wallets suivis entrés', async () => {
+    const CFG_EM = { ...CFG, emergingEnabled: true };
+    const { deps, sent } = makeDeps(
+      { transactions: [txSol], smartWallets: [{ id: 'w1', label: 'Fonds Test', chain: 'solana' as const, address: 'WALT', kind: 'fund' as const, addedAt: '2026-11-01' }] },
+      { prices: FLAT, emerging: ['BONK (Solana, 1 j d’âge, vol 2.0 M $, 75 % d’achats (24 h), scan : plutôt sain) — wallet suivi : Fonds Test'] },
+    );
+    const { state } = await runCycle(CFG_EM, emptyState(), dry(), deps, H(8, 30));
+    const brief = sent.find((t) => t.includes('brief du'));
+    expect(brief).toBeTruthy();
+    expect(brief).toContain('Émergentes (Solana/Base, à scanner avant tout) : BONK');
+    expect(brief).toContain('wallet suivi : Fonds Test');
+    expect(brief!.split('Émergentes').length).toBe(2); // une seule section, pas de doublon
+    expect(state.lastBriefSlot['matin']).toBeTruthy();
+  });
+
+  it('sans candidate, le brief ne parle pas d’émergentes ; désactivé, le digest n’est même pas appelé', async () => {
+    const CFG_EM = { ...CFG, emergingEnabled: true };
+    const silence = makeDeps({ transactions: [txSol] }, { prices: FLAT, emerging: [] });
+    await runCycle(CFG_EM, emptyState(), dry(), silence.deps, H(8, 30));
+    expect(silence.sent.some((t) => t.includes('Émergentes'))).toBe(false); // pas de section vide
+    const off = makeDeps(
+      { transactions: [txSol] },
+      { prices: FLAT },
+    );
+    await runCycle(CFG, emptyState(), dry(), off.deps, H(8, 30));
+    expect(off.sent.some((t) => t.includes('Émergentes'))).toBe(false);
   });
 });

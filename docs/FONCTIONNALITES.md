@@ -163,6 +163,21 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Profil séparé du vrai journal** : le Wallet n'est jamais touché. Le papier se synchronise entre appareils (clés « paperTrades » et « paper ») et est inclus dans les sauvegardes.
 - **Le serveur suit aussi** : le brief Telegram ajoute la ligne « Papier (expérimentations) » avec sa valorisation ; les coins papier comptent dans l'évaluation du cycle.
 
+### v1.13.0 — Smart money (1/2) : suivi de wallets et sécurité enrichie (lot 14)
+
+- **Page « Smart money »** : suis des wallets publics connus pour leurs résultats (fonds, initié, KOL) sur Solana, Ethereum et Base — adresse publique seulement, aucune clé API nécessaire. La liste se synchronise entre appareils (clé « smartWallets ») et fait partie des sauvegardes.
+- **Lecture de leurs mouvements** : achats/ventes nets (RPC Solana public, Blockscout ETH/Base) — déplacements entre leurs propres comptes ignorés, allers-retours annulés, jamais de mouvement inventé sur une donnée manquante.
+- **Alertes Telegram via le serveur** : un wallet suivi qui ACHÈTE un token de ta liste (tokens DEX suivis, positions du journal, alertes armées) prévient ; sa VENTE est mise en avant — le signal « relis ta thèse de sortie ». Curseur de lecture par wallet, dédoublonnage par mouvement, un échec Telegram ne consomme rien, au plus 3 alertes par cycle.
+- **Brief du matin** : ligne « Wallets suivis » avec leurs mouvements des 24 dernières heures.
+- **Scan de sécurité enrichi** : antécédent de honeypot du créateur, part de l'offre détenue par le créateur et le propriétaire du contrat.
+
+### v1.14.0 — Pépites émergentes (2/2) : jeunes paires Solana/Base en traction (lot 15)
+
+- **Onglet « Émergentes » du détecteur de pépites** : nouvelles paires Solana/Base de quelques heures à 7 jours, en traction réelle — liquidité suffisante pour sortir (≥ 25 k $), volume réel (≥ 75 k $/24 h), achats dominants (≥ 15 % d'écart), journée positive, assez de transactions pour juger. Score de traction 0-100, critères visibles.
+- **Lien smart money** : le badge « wallets suivis en position » montre quels wallets suivis détiennent déjà la candidate — une piste, jamais un feu vert.
+- **Fiche habituelle au clic** : scan de sécurité (GoPlus/RugCheck enrichi de la 1.13.0), suivi du token, avis de l'IA.
+- **Digest du matin (Telegram)** : le serveur scanne les nouveaux pools, retient les candidates en traction, passe chacune au scan, note les wallets suivis entrés, envoie au plus 3 lignes (« des pistes à vérifier, jamais des conseils d'achat ») ; désactivable (emergingEnabled).
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

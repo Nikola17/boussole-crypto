@@ -88,7 +88,7 @@ function validateConfig(raw, opts = {}) {
   }
   if (typeof r.briefEnabled !== "undefined" && typeof r.briefEnabled !== "boolean") problems.push("briefEnabled doit \xEAtre true ou false.");
   const bool = (v) => typeof v === "boolean";
-  for (const k of ["briefUsOpen", "briefUsClose", "newsEnabled", "smartMoneyEnabled"]) {
+  for (const k of ["briefUsOpen", "briefUsClose", "newsEnabled", "smartMoneyEnabled", "emergingEnabled"]) {
     if (typeof r[k] !== "undefined" && typeof r[k] !== "boolean") problems.push(`${k} doit \xEAtre true ou false.`);
   }
   const syncToken = str(r.syncToken);
@@ -117,6 +117,7 @@ function validateConfig(raw, opts = {}) {
       briefUsClose: r.briefUsClose === void 0 ? true : bool(r.briefUsClose),
       newsEnabled: r.newsEnabled === void 0 ? true : bool(r.newsEnabled),
       smartMoneyEnabled: r.smartMoneyEnabled === void 0 ? true : bool(r.smartMoneyEnabled),
+      emergingEnabled: r.emergingEnabled === void 0 ? true : bool(r.emergingEnabled),
       mistralApiKey: str(r.mistralApiKey) || null,
       mistralModel: str(r.mistralModel) || "mistral-small-latest",
       timeZone,
@@ -216,8 +217,8 @@ function b64ToBytes(b64) {
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
-function randomBytes(n) {
-  const out = new Uint8Array(n);
+function randomBytes(n2) {
+  const out = new Uint8Array(n2);
   crypto.getRandomValues(out);
   return out;
 }
@@ -395,6 +396,54 @@ var STABLES = /* @__PURE__ */ new Set([
 var STABLE_IDS = /* @__PURE__ */ new Set(["tether", "usd-coin", "dai", "first-digital-usd", "ethena-usde", "usds", "paypal-usd", "euro-coin", "ripple-usd", "true-usd", "frax", "usd1-wlfi"]);
 function isStable(symbol, coinId) {
   return STABLES.has(symbol.toLowerCase()) || (coinId ? STABLE_IDS.has(coinId) : false);
+}
+var WRAPPED = /* @__PURE__ */ new Set([
+  "wbtc",
+  "weth",
+  "steth",
+  "wsteth",
+  "reth",
+  "cbeth",
+  "cbbtc",
+  "tbtc",
+  "weeth",
+  "ezeth",
+  "rseth",
+  "meth",
+  "wbeth",
+  "bnsol",
+  "jitosol",
+  "msol",
+  "jupsol",
+  "bsol",
+  "lbtc",
+  "solvbtc",
+  "wbnb",
+  "wsol",
+  "wavax",
+  "wmatic",
+  "btcb",
+  "sweth",
+  "oseth",
+  "stkaave",
+  "wtrx",
+  "wht",
+  "wftm",
+  "lseth",
+  "pufeth",
+  "rsweth",
+  "ethx",
+  "sfrxeth",
+  "frxeth",
+  "clbtc",
+  "enzobtc",
+  "unibtc",
+  "xsolvbtc"
+]);
+function isWrappedOrStaked(symbol, name = "", coinId = "") {
+  if (WRAPPED.has(symbol.toLowerCase())) return true;
+  const s = `${name} ${coinId}`.toLowerCase();
+  return /\bwrapped\b|\bbridged\b|\bstaked\b|restaked|liquid staking|\bwormhole\b|binance-peg|\bpeg\b/.test(s);
 }
 
 // src/lib/indicators.ts
@@ -1031,15 +1080,20 @@ function buildBrief(i) {
     lines.push(`Alertes arm\xE9es : ${armed}`);
   }
   const news = i.news ?? [];
-  const topNews = news.filter((n) => n.publishedAt > i.now.getTime() - 18 * 36e5).slice(0, 3);
+  const topNews = news.filter((n2) => n2.publishedAt > i.now.getTime() - 18 * 36e5).slice(0, 3);
   if (topNews.length) {
-    lines.push(`Actus : ${topNews.map((n) => `\xAB ${n.title} \xBB${n.source ? ` (${n.source})` : ""}`).join(" \xB7 ")}`);
-    for (const n of topNews) if (n.resume) lines.push(`${n.coinName} : ${n.resume.replace(/\s+/g, " ").slice(0, 320)}`);
+    lines.push(`Actus : ${topNews.map((n2) => `\xAB ${n2.title} \xBB${n2.source ? ` (${n2.source})` : ""}`).join(" \xB7 ")}`);
+    for (const n2 of topNews) if (n2.resume) lines.push(`${n2.coinName} : ${n2.resume.replace(/\s+/g, " ").slice(0, 320)}`);
   }
   const smart = i.smart ?? [];
   if (smart.length && !short) {
     lines.push(`Wallets suivis : ${smart[0]}`);
     for (const l of smart.slice(1)) lines.push(`  ${l}`);
+  }
+  const emerging = i.emerging ?? [];
+  if (emerging.length && !short) {
+    lines.push(`\xC9mergentes (Solana/Base, \xE0 scanner avant tout) : ${emerging[0]}`);
+    for (const l of emerging.slice(1)) lines.push(`  ${l}`);
   }
   if (!short && i.syncSavedAt) {
     const when = new Date(i.syncSavedAt);
@@ -1055,7 +1109,7 @@ function isHotNews(item) {
 }
 var ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "\u2019", lsquo: "\u2018", ldquo: "\u201C", rdquo: "\u201D", ndash: "\u2013", mdash: "\u2014", hellip: "\u2026" };
 function decode(s) {
-  return s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16))).replace(/&([a-z]+);/gi, (m, n) => ENTITIES[n.toLowerCase()] ?? m);
+  return s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&#(\d+);/g, (_, n2) => String.fromCodePoint(Number(n2))).replace(/&#x([0-9a-f]+);/gi, (_, n2) => String.fromCodePoint(parseInt(n2, 16))).replace(/&([a-z]+);/gi, (m, n2) => ENTITIES[n2.toLowerCase()] ?? m);
 }
 var clean = (s) => decode(decode(s).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
 function tag(block, name) {
@@ -1318,23 +1372,23 @@ ${ev.advice}` });
   if (cfg.newsEnabled) {
     const coins = newsCoinsOf(watch);
     const fresh = coins.length ? await deps.news(coins).catch(() => []) : [];
-    const candidates = fresh.filter((n) => nowMs - n.publishedAt < 15 * 36e5).filter((n) => state.sent[newsKey(n)] == null).slice(0, 8);
+    const candidates = fresh.filter((n2) => nowMs - n2.publishedAt < 15 * 36e5).filter((n2) => state.sent[newsKey(n2)] == null).slice(0, 8);
     const ratings = candidates.length ? await deps.aiRates(candidates).catch(() => candidates.map(() => ({ importance: 0, resume: "" }))) : [];
     const hasAi = !!cfg.mistralApiKey;
-    for (const [i, n] of candidates.entries()) {
+    for (const [i, n2] of candidates.entries()) {
       const r = ratings[i] ?? { importance: 0, resume: "" };
-      const key = newsKey(n);
-      const important = r.importance >= 6 || !hasAi && isHotNews(n);
+      const key = newsKey(n2);
+      const important = r.importance >= 6 || !hasAi && isHotNews(n2);
       if (important && newsAlerts.length < 3) {
-        newsAlerts.push({ key, text: newsMessage({ ...n, ...r }) });
+        newsAlerts.push({ key, text: newsMessage({ ...n2, ...r }) });
       } else {
-        if (hasAi ? r.importance > 0 && r.importance < 6 : !isHotNews(n)) seenNews.push(key);
+        if (hasAi ? r.importance > 0 && r.importance < 6 : !isHotNews(n2)) seenNews.push(key);
       }
     }
-    const ratedOf = new Map(candidates.map((n, i) => [n.url, ratings[i] ?? { importance: 0, resume: "" }]));
-    for (const n of fresh) {
-      const r = ratedOf.get(n.url) ?? { importance: 0, resume: "" };
-      ratedNews.push({ ...n, ...r });
+    const ratedOf = new Map(candidates.map((n2, i) => [n2.url, ratings[i] ?? { importance: 0, resume: "" }]));
+    for (const n2 of fresh) {
+      const r = ratedOf.get(n2.url) ?? { importance: 0, resume: "" };
+      ratedNews.push({ ...n2, ...r });
     }
     ratedNews.sort((a, b) => b.publishedAt - a.publishedAt);
     if (seenNews.length && !opts.dry) state = markSent(state, seenNews, nowMs);
@@ -1416,6 +1470,10 @@ ${ev.advice}` });
     if (slot.id === "matin" && !cfg.briefEnabled) continue;
     if (!(opts.forceBrief && slot.id === "matin") && slot.atMs != null && nowMs < slot.atMs) continue;
     if (!(opts.forceBrief && slot.id === "matin") && state.lastBriefSlot[slot.id] === dayKey) continue;
+    let emergingLines;
+    if (slot.id === "matin" && cfg.emergingEnabled && deps.emerging) {
+      emergingLines = await deps.emerging(watch.smartWallets).catch(() => []);
+    }
     const brief = buildBrief({
       now,
       bundle,
@@ -1428,7 +1486,8 @@ ${ev.advice}` });
       cycleMetrics: temperature ? { mvrv: temperature.mvrv, stableShare: temperature.stableShare, halvingDaysToNext: temperature.halvingDaysToNext } : null,
       slot: slot.id,
       news: ratedNews.slice(0, 6),
-      smart: smartBriefLines(smartRecent, nowMs)
+      smart: smartBriefLines(smartRecent, nowMs),
+      emerging: emergingLines
     });
     try {
       await send(brief);
@@ -1440,11 +1499,11 @@ ${ev.advice}` });
   state = recordStatus(state, result.error == null, result.error, nowMs);
   return { state, result };
 }
-function newsMessage(n, now = /* @__PURE__ */ new Date()) {
-  const age = Math.max(0, now.getTime() - n.publishedAt);
+function newsMessage(n2, now = /* @__PURE__ */ new Date()) {
+  const age = Math.max(0, now.getTime() - n2.publishedAt);
   const ago = age < 36e5 ? `il y a ${Math.max(1, Math.round(age / 6e4))} min` : age < 24 * 36e5 ? `il y a ${Math.round(age / 36e5)} h` : `il y a ${Math.round(age / 864e5)} jours`;
-  const lines = [`Presse \u2014 ${n.coinName}`, `\xAB ${n.title} \xBB${n.source ? ` (${n.source}, ${ago})` : ` (${ago})`}`];
-  if (n.resume) lines.push(n.resume.replace(/\s+/g, " ").trim().slice(0, 600));
+  const lines = [`Presse \u2014 ${n2.coinName}`, `\xAB ${n2.title} \xBB${n2.source ? ` (${n2.source}, ${ago})` : ` (${ago})`}`];
+  if (n2.resume) lines.push(n2.resume.replace(/\s+/g, " ").trim().slice(0, 600));
   return lines.join("\n");
 }
 async function marketTemperature(deps, fng) {
@@ -1810,11 +1869,286 @@ async function fetchAllWalletEvents(wallets, sinceMs, nowMs = Date.now()) {
   const all = await Promise.all(wallets.slice(0, 12).map((w) => fetchWalletEvents(w, sinceMs, nowMs)));
   return all.flat().sort((a, b) => b.atMs - a.atMs);
 }
+var SOL_TOKEN_PROGRAMS = ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"];
+async function walletHoldings(wallet, mints) {
+  const wanted = new Set(mints.map((m) => m.toLowerCase()));
+  const held = /* @__PURE__ */ new Set();
+  if (!wanted.size) return held;
+  if (wallet.chain === "solana") {
+    for (const program of SOL_TOKEN_PROGRAMS) {
+      try {
+        const r = await solRpc("getTokenAccountsByOwner", [wallet.address, { programId: program }, { encoding: "jsonParsed" }]);
+        for (const a of r?.value ?? []) {
+          const mint = a.account.data.parsed.info.mint.toLowerCase();
+          if (wanted.has(mint)) held.add(mint);
+        }
+      } catch {
+      }
+    }
+    return held;
+  }
+  const base = BLOCKSCOUT[wallet.chain];
+  if (!base) return held;
+  try {
+    const r = await getJson2(`${base}/api/v2/addresses/${wallet.address}/token-balances`, { headers: BS_HEADERS, timeoutMs: 2e4, retries: 1 });
+    for (const it of r.items ?? []) {
+      const a = it.token?.address?.toLowerCase();
+      if (a && wanted.has(a) && it.value && BigInt(it.value) > 0n) held.add(a);
+    }
+  } catch {
+  }
+  return held;
+}
+
+// src/api/dex.ts
+var NETWORKS = [
+  { key: "solana", label: "Solana", dexscreener: "solana", goplusChainId: null },
+  { key: "base", label: "Base", dexscreener: "base", goplusChainId: "8453" },
+  { key: "eth", label: "Ethereum", dexscreener: "ethereum", goplusChainId: "1" },
+  { key: "bsc", label: "BNB Chain", dexscreener: "bsc", goplusChainId: "56" },
+  { key: "arbitrum", label: "Arbitrum", dexscreener: "arbitrum", goplusChainId: "42161" }
+];
+function networkByKey(key) {
+  return NETWORKS.find((n2) => n2.key === key || n2.dexscreener === key);
+}
+var MAJORS = /* @__PURE__ */ new Set(["SOL", "WSOL", "WETH", "ETH", "USDC", "USDT", "WBNB", "BNB", "DAI", "CBBTC", "WBTC", "USDS", "USDE", "FDUSD", "USD1"]);
+var n = (v) => {
+  if (v == null || v === "") return null;
+  const x = Number(v);
+  return Number.isFinite(x) ? x : null;
+};
+function parsePools(json, source) {
+  const tokens = /* @__PURE__ */ new Map();
+  for (const t of json.included ?? []) tokens.set(t.id, t);
+  const out = [];
+  for (const p of json.data) {
+    const a = p.attributes;
+    const baseId = p.relationships?.base_token?.data?.id ?? "";
+    const tok = tokens.get(baseId);
+    const network = p.relationships?.network?.data?.id ?? baseId.split("_")[0];
+    const symbol = tok?.attributes.symbol ?? a.name.split(" / ")[0];
+    if (MAJORS.has(symbol.toUpperCase())) continue;
+    const h24 = a.transactions?.h24 ?? {};
+    const created = a.pool_created_at;
+    out.push({
+      id: p.id,
+      network,
+      poolAddress: a.address,
+      dex: p.relationships?.dex?.data?.id ?? "",
+      name: a.name,
+      tokenAddress: tok?.attributes.address ?? baseId.slice(network.length + 1),
+      tokenSymbol: symbol,
+      tokenName: tok?.attributes.name ?? symbol,
+      tokenImage: tok?.attributes.image_url && tok.attributes.image_url !== "missing.png" ? tok.attributes.image_url : void 0,
+      coingeckoId: tok?.attributes.coingecko_coin_id ?? null,
+      priceUsd: n(a.base_token_price_usd) ?? 0,
+      fdvUsd: n(a.fdv_usd),
+      mcapUsd: n(a.market_cap_usd),
+      liquidityUsd: n(a.reserve_in_usd) ?? 0,
+      volume24h: n(a.volume_usd?.h24) ?? 0,
+      change1h: n(a.price_change_percentage?.h1),
+      change6h: n(a.price_change_percentage?.h6),
+      change24h: n(a.price_change_percentage?.h24),
+      buys24h: h24.buys ?? 0,
+      sells24h: h24.sells ?? 0,
+      buyers24h: h24.buyers ?? null,
+      sellers24h: h24.sellers ?? null,
+      createdAt: created,
+      ageHours: created ? (Date.now() - new Date(created).getTime()) / 36e5 : NaN,
+      source
+    });
+  }
+  return out;
+}
+var GT = "https://api.geckoterminal.com/api/v2";
+async function getNewPools(network, page = 1) {
+  const json = await getJson2(`${GT}/networks/${network}/new_pools?include=base_token&page=${page}`);
+  return parsePools(json, "new");
+}
+
+// src/api/security.ts
+var on = (v) => v === "1";
+var LP_LOCKED_DANGER_PCT = 30;
+var LP_LOCKED_OK_PCT = 80;
+function finalize(flags, top10, holders, sources, opts = {}) {
+  let score = 100;
+  for (const f of flags) score -= f.severity === "danger" ? 35 : f.severity === "warn" ? 12 : 0;
+  score = Math.max(0, score);
+  const hasDanger = flags.some((f) => f.severity === "danger");
+  const hasWarn = flags.some((f) => f.severity === "warn");
+  let verdict;
+  if (hasDanger || score < 40) verdict = "Danger";
+  else if (opts.insufficient) verdict = "Donn\xE9es insuffisantes";
+  else if (hasWarn || opts.partial || score < 75) verdict = "Prudence";
+  else verdict = "Plut\xF4t sain";
+  return { score, verdict, flags, top10HoldersPct: top10, holders, sources };
+}
+var EVM_KEY_FIELDS = ["is_honeypot", "is_open_source", "buy_tax", "sell_tax", "is_mintable", "owner_change_balance", "hidden_owner", "cannot_sell_all"];
+var known = (v) => v !== void 0 && v !== null && v !== "";
+function evmReportFrom(response, address) {
+  const addr = address.toLowerCase();
+  const d = response?.result?.[addr];
+  if (!d) throw new Error("GoPlus ne conna\xEEt pas encore ce token (trop r\xE9cent ?).");
+  const flags = [];
+  const knownFields = EVM_KEY_FIELDS.filter((k) => known(d[k])).length;
+  const insufficient = response?.code !== 1 || !known(d.is_honeypot) || !known(d.is_open_source) || knownFields < 6;
+  if (insufficient) flags.push({ label: `Analyse incompl\xE8te : ${knownFields} contr\xF4les sur ${EVM_KEY_FIELDS.length} ont pu \xEAtre faits`, severity: "warn", detail: "GoPlus n\u2019a pas renvoy\xE9 assez d\u2019informations sur ce contrat. N\u2019en d\xE9duis rien de rassurant." });
+  if (on(d.is_honeypot)) flags.push({ label: "Honeypot : impossible de revendre", severity: "danger" });
+  if (on(d.cannot_sell_all)) flags.push({ label: "Impossible de tout revendre", severity: "danger" });
+  const buyTax = Number(d.buy_tax ?? 0) * 100;
+  const sellTax = Number(d.sell_tax ?? 0) * 100;
+  if (sellTax > 10 || buyTax > 10) flags.push({ label: `Taxes \xE9lev\xE9es (achat ${buyTax.toFixed(0)} %, vente ${sellTax.toFixed(0)} %)`, severity: sellTax > 25 ? "danger" : "warn" });
+  else if (sellTax > 0 || buyTax > 0) flags.push({ label: `Taxes : achat ${buyTax.toFixed(1)} %, vente ${sellTax.toFixed(1)} %`, severity: "warn" });
+  if (on(d.is_mintable)) flags.push({ label: "Le cr\xE9ateur peut cr\xE9er de nouveaux tokens", severity: "warn" });
+  if (on(d.owner_change_balance)) flags.push({ label: "Le propri\xE9taire peut modifier les soldes", severity: "danger" });
+  if (on(d.hidden_owner)) flags.push({ label: "Propri\xE9taire cach\xE9", severity: "danger" });
+  if (on(d.can_take_back_ownership)) flags.push({ label: "Le contr\xF4le du contrat peut \xEAtre repris", severity: "warn" });
+  if (on(d.transfer_pausable)) flags.push({ label: "Les transferts peuvent \xEAtre suspendus", severity: "warn" });
+  if (on(d.is_blacklisted)) flags.push({ label: "Liste noire d\u2019adresses possible", severity: "warn" });
+  if (on(d.slippage_modifiable)) flags.push({ label: "Taxes modifiables par le propri\xE9taire", severity: "warn" });
+  if (on(d.trading_cooldown)) flags.push({ label: "D\xE9lai impos\xE9 entre deux transactions", severity: "warn" });
+  if (on(d.is_proxy)) flags.push({ label: "Contrat proxy (code modifiable)", severity: "warn" });
+  if (on(d.honeypot_with_same_creator)) flags.push({ label: "Historique du cr\xE9ateur : il a d\xE9j\xE0 d\xE9ploy\xE9 un honeypot", severity: "danger", detail: "Le cr\xE9ateur de ce contrat a un ant\xE9c\xE9dent : un de ses tokens pr\xE9c\xE9dents emp\xEAchait de revendre." });
+  const creatorPct = Number(d.creator_percent ?? Number.NaN);
+  if (Number.isFinite(creatorPct)) {
+    if (creatorPct >= 15) flags.push({ label: `Le cr\xE9ateur d\xE9tient ${creatorPct.toFixed(1)} % de l'offre`, severity: creatorPct >= 25 ? "danger" : "warn", detail: "Il peut casser le prix en vendant d\u2019un seul coup." });
+  }
+  const ownerPct = Number(d.owner_percent ?? Number.NaN);
+  if (Number.isFinite(ownerPct)) {
+    if (ownerPct >= 15) flags.push({ label: `Le propri\xE9taire du contrat d\xE9tient ${ownerPct.toFixed(1)} % de l'offre`, severity: ownerPct >= 25 ? "danger" : "warn" });
+    else if (ownerPct > 0) flags.push({ label: `Le propri\xE9taire du contrat d\xE9tient ${ownerPct.toFixed(1)} % de l'offre`, severity: "ok" });
+  }
+  if (d.is_open_source === "0") flags.push({ label: "Code source non v\xE9rifi\xE9", severity: "danger" });
+  const holders = d.holders ?? [];
+  const top10 = holders.slice(0, 10).filter((h) => !h.is_locked && !(h.tag ?? "").toLowerCase().includes("burn")).reduce((s, h) => s + Number(h.percent || 0) * 100, 0);
+  if (top10 > 50) flags.push({ label: `Top 10 d\xE9tenteurs : ${top10.toFixed(0)} % de l\u2019offre`, severity: "danger" });
+  else if (top10 > 30) flags.push({ label: `Top 10 d\xE9tenteurs : ${top10.toFixed(0)} % de l\u2019offre`, severity: "warn" });
+  const lp = d.lp_holders ?? [];
+  if (lp.length) {
+    const lockedPct = lp.filter((h) => h.is_locked || /burn|dead|null/i.test(h.tag ?? "")).reduce((s, h) => s + Number(h.percent || 0) * 100, 0);
+    if (lockedPct < LP_LOCKED_DANGER_PCT) flags.push({ label: `Liquidit\xE9 verrouill\xE9e/br\xFBl\xE9e : ${lockedPct.toFixed(0)} % seulement`, severity: "danger", detail: "Le cr\xE9ateur peut retirer presque toute la liquidit\xE9 d\u2019un coup." });
+    else if (lockedPct < 50) flags.push({ label: `Liquidit\xE9 verrouill\xE9e/br\xFBl\xE9e : ${lockedPct.toFixed(0)} % seulement`, severity: "warn" });
+    else flags.push({ label: `Liquidit\xE9 verrouill\xE9e/br\xFBl\xE9e : ${lockedPct.toFixed(0)} %`, severity: "ok" });
+  }
+  if (!insufficient && !flags.some((f) => f.severity !== "ok")) flags.push({ label: "Aucun pi\xE8ge classique d\xE9tect\xE9", severity: "ok" });
+  return finalize(flags, holders.length ? top10 : null, d.holder_count ? Number(d.holder_count) : null, ["GoPlus Security"], { insufficient });
+}
+async function scanEvm(chainId, address) {
+  const addr = address.toLowerCase();
+  const r = await getJson2(
+    `https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${addr}`
+  );
+  return evmReportFrom(r, addr);
+}
+function solanaReportFrom(gp, rug) {
+  const flags = [];
+  const sources = [];
+  let top10 = null;
+  if (gp) {
+    sources.push("GoPlus Security");
+    if (on(gp.mintable?.status)) flags.push({ label: "Autorit\xE9 de mint active : offre illimit\xE9e possible", severity: "danger" });
+    if (on(gp.freezable?.status)) flags.push({ label: "Autorit\xE9 de gel active : tes tokens peuvent \xEAtre bloqu\xE9s", severity: "danger" });
+    if (on(gp.balance_mutable_authority?.status)) flags.push({ label: "Les soldes peuvent \xEAtre modifi\xE9s", severity: "danger" });
+    if (on(gp.closable?.status)) flags.push({ label: "Le compte du token peut \xEAtre ferm\xE9", severity: "warn" });
+    if (on(gp.metadata_mutable?.status)) flags.push({ label: "M\xE9tadonn\xE9es modifiables", severity: "warn" });
+    if (on(gp.non_transferable)) flags.push({ label: "Token non transf\xE9rable", severity: "danger" });
+    const holders = gp.holders ?? [];
+    if (holders.length) {
+      top10 = holders.slice(0, 10).filter((h) => !h.is_locked).reduce((s, h) => s + Number(h.percent || 0) * 100, 0);
+      if (top10 > 50) flags.push({ label: `Top 10 d\xE9tenteurs : ${top10.toFixed(0)} %`, severity: "danger" });
+      else if (top10 > 30) flags.push({ label: `Top 10 d\xE9tenteurs : ${top10.toFixed(0)} %`, severity: "warn" });
+    }
+  }
+  if (rug) {
+    sources.push("RugCheck");
+    for (const risk of rug.risks ?? []) {
+      const sev = risk.level === "danger" ? "danger" : "warn";
+      if (!flags.some((f) => f.label.toLowerCase().includes(risk.name.toLowerCase().slice(0, 8)))) {
+        flags.push({ label: risk.name, severity: sev, detail: risk.description });
+      }
+    }
+    if (rug.lpLockedPct != null) {
+      const p = rug.lpLockedPct;
+      flags.push({
+        label: `Liquidit\xE9 verrouill\xE9e : ${p.toFixed(0)} %`,
+        severity: p >= LP_LOCKED_OK_PCT ? "ok" : p >= LP_LOCKED_DANGER_PCT ? "warn" : "danger",
+        detail: p < LP_LOCKED_DANGER_PCT ? "Le cr\xE9ateur peut retirer presque toute la liquidit\xE9 d\u2019un coup." : void 0
+      });
+    }
+  }
+  if (!sources.length) throw new Error("Scan indisponible pour ce token pour le moment.");
+  const partial = sources.length < 2;
+  if (partial) flags.push({ label: `Une seule source a r\xE9pondu (${sources[0]}) : analyse incompl\xE8te`, severity: "warn" });
+  if (!partial && !flags.some((f) => f.severity !== "ok")) flags.push({ label: "Aucun pi\xE8ge classique d\xE9tect\xE9", severity: "ok" });
+  return finalize(flags, top10, null, sources, { partial });
+}
+async function scanSolana(mint) {
+  let gp = null;
+  let rug = null;
+  try {
+    const r = await getJson2(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${mint}`, { retries: 1 });
+    gp = r.result?.[mint] ?? Object.values(r.result ?? {})[0] ?? null;
+  } catch {
+  }
+  try {
+    rug = await getJson2(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, { retries: 1 });
+  } catch {
+  }
+  return solanaReportFrom(gp, rug);
+}
+
+// src/lib/emerging.ts
+var EMERGING_RULES = {
+  /** Plus de 7 jours : ce n'est plus une émergente, c'est une position du DEX ordinaire. */
+  maxAgeHours: 7 * 24,
+  /** Moins de 25 k $ de liquidité : impossible de sortir sans casser le prix. */
+  minLiquidityUsd: 25e3,
+  /** Moins de 75 k $ échangés en 24 h : personne n'y est, ou pas naturellement. */
+  minVolumeUsd: 75e3,
+  /** Les achats doivent dominer les ventes de 15 % au moins. */
+  buyPressure: 1.15
+};
+var within = (v, min, max) => Math.max(0, Math.min(100, (v - min) / (max - min) * 100));
+function emergingCandidates(pools, max = 8) {
+  const out = [];
+  for (const p of pools) {
+    if (p.network !== "solana" && p.network !== "base") continue;
+    if (isStable(p.tokenSymbol) || isWrappedOrStaked(p.tokenSymbol, p.tokenName)) continue;
+    if (p.ageHours > EMERGING_RULES.maxAgeHours) continue;
+    if (p.liquidityUsd < EMERGING_RULES.minLiquidityUsd) continue;
+    if (p.volume24h < EMERGING_RULES.minVolumeUsd) continue;
+    const total = p.buys24h + p.sells24h;
+    if (total < 40) continue;
+    const buyShare = p.buys24h / total;
+    if (p.buys24h < p.sells24h * EMERGING_RULES.buyPressure) continue;
+    if ((p.change24h ?? 0) < 5) continue;
+    const reasons = [];
+    reasons.push(`${p.ageHours < 24 ? `${Math.round(p.ageHours)} h` : `${Math.round(p.ageHours / 24)} j`} d'\xE2ge`);
+    reasons.push(`${Math.round(buyShare * 100)} % d'achats (24 h)`);
+    if (p.change24h != null && p.change24h > 30 && p.change24h < 400) reasons.push(`+${Math.round(p.change24h)} % sur 24 h`);
+    const activity = within(p.volume24h / Math.max(1, p.liquidityUsd), 0.5, 4);
+    const pressure = (buyShare - 0.5) / 0.5 * 100;
+    const freshness = within(EMERGING_RULES.maxAgeHours - p.ageHours, 0, EMERGING_RULES.maxAgeHours - 24);
+    const traction = Math.round(0.45 * activity + 0.35 * Math.max(0, Math.min(100, pressure)) + 0.2 * freshness);
+    out.push({ pool: p, traction, reasons });
+  }
+  return out.sort((a, b) => b.traction - a.traction || b.pool.volume24h - a.pool.volume24h).slice(0, max);
+}
+function emergingLine(c, extra) {
+  const p = c.pool;
+  const net = p.network === "solana" ? "Solana" : "Base";
+  const vol = p.volume24h >= 1e6 ? `${(p.volume24h / 1e6).toFixed(1)} M $` : `${Math.round(p.volume24h / 1e3)} k $`;
+  const parts = [`${p.tokenSymbol.toUpperCase()} (${net}, ${c.reasons[0]}, vol ${vol}, ${c.reasons[1]}`];
+  if (extra?.security) parts[0] += `, ${extra.security}`;
+  let out = parts[0] + ")";
+  if (extra?.wallets?.length) out += ` \u2014 wallet suivi : ${extra.wallets.join(", ")}`;
+  return out;
+}
 
 // src/runner/ai.ts
 var TIMEOUT_MS3 = 25e3;
 function newsPrompt(items) {
-  const lines = items.map((i, n) => `${n + 1}. [${i.coinName}] ${i.title} (${i.source}) \u2014 ${i.summaryText}`).join("\n");
+  const lines = items.map((i, n2) => `${n2 + 1}. [${i.coinName}] ${i.title} (${i.source}) \u2014 ${i.summaryText}`).join("\n");
   return [
     "Tu es analyste crypto pour un investisseur particulier fran\xE7ais. Chaque entr\xE9e ci-dessous est une actualit\xE9 r\xE9elle.",
     "Pour CHAQUE entr\xE9e, note son importance pour un d\xE9tenteur de cette crypto :",
@@ -1828,21 +2162,21 @@ function newsPrompt(items) {
     lines
   ].join("\n");
 }
-function parseNewsRatings(text, n) {
+function parseNewsRatings(text, n2) {
   const block = text.match(/```(?:json)?\s*([\s\S]*?)```/i) ?? [null, text];
   const candidate = block[1] ?? "";
   const arr = candidate.slice(candidate.indexOf("["), candidate.lastIndexOf("]") + 1);
   try {
     const raw = JSON.parse(arr);
     const out = [];
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < n2; i++) {
       const r = raw.find((x) => Number(x.n) === i + 1) ?? raw[i];
       const importance = Number(r?.importance);
       out.push({ importance: Number.isFinite(importance) ? Math.max(0, Math.min(10, importance)) : 0, resume: typeof r?.resume === "string" ? r.resume.trim() : "" });
     }
     return out;
   } catch {
-    return Array.from({ length: n }, () => ({ importance: 0, resume: "" }));
+    return Array.from({ length: n2 }, () => ({ importance: 0, resume: "" }));
   }
 }
 async function rateNews(apiKey, model, items) {
@@ -1942,6 +2276,31 @@ async function cachedNews(coins) {
   }
   return newsCache?.items ?? [];
 }
+async function emergingDigest(wallets) {
+  const settled = await Promise.allSettled([getNewPools("solana"), getNewPools("base")]);
+  const pools = settled.flatMap((r) => r.status === "fulfilled" ? r.value : []);
+  if (!pools.length) return [];
+  const lines = [];
+  for (const c of emergingCandidates(pools, 3)) {
+    let security;
+    try {
+      const net = networkByKey(c.pool.network);
+      const r = net?.goplusChainId ? await scanEvm(net.goplusChainId, c.pool.tokenAddress) : await scanSolana(c.pool.tokenAddress);
+      security = `scan : ${r.verdict.toLowerCase()}`;
+    } catch {
+      security = void 0;
+    }
+    const followed = [];
+    for (const w of wallets.slice(0, 8)) {
+      try {
+        if ((await walletHoldings(w, [c.pool.tokenAddress])).size > 0) followed.push(w.label);
+      } catch {
+      }
+    }
+    lines.push(emergingLine(c, { security, wallets: followed }));
+  }
+  return lines;
+}
 var depsOf = (cfg) => ({
   fetchRemote: () => fetchRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken),
   pushRemote: (text, sha) => pushRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken, text, sha),
@@ -1954,7 +2313,8 @@ var depsOf = (cfg) => ({
   stableShare: async () => (await cachedSlowMetrics(cfg)).stableShare,
   news: (coins) => cfg.newsEnabled ? cachedNews(coins) : Promise.resolve([]),
   aiRates: (items) => cfg.mistralApiKey ? rateNews(cfg.mistralApiKey, cfg.mistralModel, items) : Promise.resolve(items.map(() => ({ importance: 0, resume: "" }))),
-  smartEvents: (wallets, sinceMs, nowMs) => cfg.smartMoneyEnabled ? fetchAllWalletEvents(wallets, sinceMs, nowMs) : Promise.resolve([])
+  smartEvents: (wallets, sinceMs, nowMs) => cfg.smartMoneyEnabled ? fetchAllWalletEvents(wallets, sinceMs, nowMs) : Promise.resolve([]),
+  emerging: (wallets) => cfg.emergingEnabled ? emergingDigest(wallets) : Promise.resolve([])
 });
 async function modeCheck(cfg) {
   const { result } = await runCycle(cfg, loadState(cfg), { dry: true, forceBrief: true, onDry: (text) => log(`[\xE0 blanc] ${text.split("\n").join(" \u2014 ")}`) }, depsOf(cfg));
@@ -1984,7 +2344,7 @@ async function modeMain(cfg, mode) {
     await run();
     return;
   }
-  log(`Surveillance d\xE9marr\xE9e : contr\xF4le toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : "matin d\xE9sactiv\xE9"}${cfg.briefUsOpen ? ", ouverture US (9 h 30 New York)" : ""}${cfg.briefUsClose ? ", cl\xF4ture US (16 h New York)" : ""}. Veille presse : ${cfg.newsEnabled ? `activ\xE9e${cfg.mistralApiKey ? " (r\xE9sum\xE9s IA)" : " (heuristique, sans cl\xE9 IA)"}` : "d\xE9sactiv\xE9e"}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffr\xE9 de bout en bout).`);
+  log(`Surveillance d\xE9marr\xE9e : contr\xF4le toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : "matin d\xE9sactiv\xE9"}${cfg.briefUsOpen ? ", ouverture US (9 h 30 New York)" : ""}${cfg.briefUsClose ? ", cl\xF4ture US (16 h New York)" : ""}. Veille presse : ${cfg.newsEnabled ? `activ\xE9e${cfg.mistralApiKey ? " (r\xE9sum\xE9s IA)" : " (heuristique, sans cl\xE9 IA)"}` : "d\xE9sactiv\xE9e"}. Smart money : ${cfg.smartMoneyEnabled ? "activ\xE9" : "d\xE9sactiv\xE9"}${cfg.emergingEnabled ? ", digest \xE9mergentes dans le brief du matin" : ""}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffr\xE9 de bout en bout).`);
   for (; ; ) {
     try {
       await run();

@@ -24,7 +24,11 @@ import { runCycle, type CycleDeps } from './cycle';
 import { fetchBtcDaily, fetchBtcFunding, fetchFearGreed, fetchMvrv, fetchPrices, fetchStablecoinShare } from './market';
 import { recentChats, sendMessage } from './telegram';
 import { fetchCoinNews, type NewsItem, type WatchedCoin } from './news';
-import { fetchAllWalletEvents } from '../api/smartmoney';
+import { fetchAllWalletEvents, walletHoldings } from '../api/smartmoney';
+import { getNewPools, networkByKey, type DexPool } from '../api/dex';
+import { scanEvm, scanSolana } from '../api/security';
+import { emergingCandidates, emergingLine } from '../lib/emerging';
+import type { SmartWallet } from '../types';
 import { rateNews } from './ai';
 import type { Candle } from '../lib/indicators';
 
@@ -124,6 +128,33 @@ async function cachedNews(coins: WatchedCoin[]): Promise<NewsItem[]> {
   return newsCache?.items ?? [];
 }
 
+// Pépites émergentes : le digest du matin — jeunes paires Solana/Base en traction, chacune passée au scan
+// de sécurité, avec les wallets suivis qui y sont entrés. Au plus 3 lignes, des pistes jamais des conseils.
+async function emergingDigest(wallets: SmartWallet[]): Promise<string[]> {
+  const settled = await Promise.allSettled([getNewPools('solana'), getNewPools('base')]);
+  const pools: DexPool[] = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+  if (!pools.length) return [];
+  const lines: string[] = [];
+  for (const c of emergingCandidates(pools, 3)) {
+    let security: string | undefined;
+    try {
+      const net = networkByKey(c.pool.network);
+      const r = net?.goplusChainId ? await scanEvm(net.goplusChainId, c.pool.tokenAddress) : await scanSolana(c.pool.tokenAddress);
+      security = `scan : ${r.verdict.toLowerCase()}`;
+    } catch {
+      security = undefined; // un scan indisponible ne masque jamais la piste : il sera relancé à la demande
+    }
+    const followed: string[] = [];
+    for (const w of wallets.slice(0, 8)) {
+      try {
+        if ((await walletHoldings(w, [c.pool.tokenAddress])).size > 0) followed.push(w.label);
+      } catch { /* un wallet illisible n'empêche pas les autres */ }
+    }
+    lines.push(emergingLine(c, { security, wallets: followed }));
+  }
+  return lines;
+}
+
 const depsOf = (cfg: RunnerConfig): CycleDeps => ({
   fetchRemote: () => fetchRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken),
   pushRemote: (text, sha) => pushRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken, text, sha),
@@ -137,6 +168,7 @@ const depsOf = (cfg: RunnerConfig): CycleDeps => ({
   news: (coins) => cfg.newsEnabled ? cachedNews(coins) : Promise.resolve([]),
   aiRates: (items) => cfg.mistralApiKey ? rateNews(cfg.mistralApiKey, cfg.mistralModel, items) : Promise.resolve(items.map(() => ({ importance: 0, resume: '' }))),
   smartEvents: (wallets, sinceMs, nowMs) => cfg.smartMoneyEnabled ? fetchAllWalletEvents(wallets, sinceMs, nowMs) : Promise.resolve([]),
+  emerging: (wallets) => cfg.emergingEnabled ? emergingDigest(wallets) : Promise.resolve([]),
 });
 
 // ---------------------------------------------------------------- modes
@@ -173,7 +205,7 @@ async function modeMain(cfg: RunnerConfig, mode: 'loop' | 'once' | 'brief' | 'di
     await run();
     return;
   }
-  log(`Surveillance démarrée : contrôle toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : 'matin désactivé'}${cfg.briefUsOpen ? ', ouverture US (9 h 30 New York)' : ''}${cfg.briefUsClose ? ', clôture US (16 h New York)' : ''}. Veille presse : ${cfg.newsEnabled ? `activée${cfg.mistralApiKey ? ' (résumés IA)' : ' (heuristique, sans clé IA)'}` : 'désactivée'}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffré de bout en bout).`);
+  log(`Surveillance démarrée : contrôle toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : 'matin désactivé'}${cfg.briefUsOpen ? ', ouverture US (9 h 30 New York)' : ''}${cfg.briefUsClose ? ', clôture US (16 h New York)' : ''}. Veille presse : ${cfg.newsEnabled ? `activée${cfg.mistralApiKey ? ' (résumés IA)' : ' (heuristique, sans clé IA)'}` : 'désactivée'}. Smart money : ${cfg.smartMoneyEnabled ? 'activé' : 'désactivé'}${cfg.emergingEnabled ? ', digest émergentes dans le brief du matin' : ''}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffré de bout en bout).`);
   for (;;) {
     try {
       await run();

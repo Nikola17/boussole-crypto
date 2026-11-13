@@ -12,6 +12,8 @@ import {
 import { isStable, isWrappedOrStaked } from '../lib/portfolio';
 import { NETWORKS, getTokenPairs, networkByKey, poolLinks, type DexPair, type DexPool } from '../api/dex';
 import { scanEvm, scanSolana, type SecurityReport } from '../api/security';
+import { walletHoldings } from '../api/smartmoney';
+import { emergingCandidates } from '../lib/emerging';
 import { getMarkets } from '../api/coingecko';
 import { fmtAge, fmtCompact, fmtNum, fmtPct, fmtPrice } from '../lib/format';
 import { openExternal } from '../lib/platform';
@@ -24,7 +26,7 @@ import { AiProgress, NeedKey, ReportView, useAiConfig, useAiRunner } from '../co
 import { useAiContext } from '../ai/context';
 import { runGem } from '../ai/tasks';
 
-type Tab = 'smallcaps' | 'dex' | 'defi' | 'narratives' | 'suivis';
+type Tab = 'smallcaps' | 'emerging' | 'dex' | 'defi' | 'narratives' | 'suivis';
 
 function Flags({ flags }: { flags: GemFlag[] }) {
   return (
@@ -53,6 +55,7 @@ export default function Gems() {
         onChange={(v) => setQuery({ tab: v, cat: null })}
         options={[
           { value: 'smallcaps', label: 'Petites capis' },
+          { value: 'emerging', label: 'Émergentes' },
           { value: 'dex', label: 'On-chain (DEX)' },
           { value: 'defi', label: 'DeFi sous-évaluée' },
           { value: 'narratives', label: 'Narratives' },
@@ -60,6 +63,7 @@ export default function Gems() {
         ]}
       />
       {tab === 'smallcaps' && <SmallCaps />}
+      {tab === 'emerging' && <EmergingGems />}
       {tab === 'dex' && <DexGems />}
       {tab === 'defi' && <DefiGems />}
       {tab === 'narratives' && <NarrativesTab />}
@@ -140,6 +144,76 @@ function SmallCaps() {
         ))}
       </div>
       {!rows.length && !small.isLoading && <p className="text-sm text-muted">Aucune crypto ne correspond aux filtres.</p>}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ Émergentes (Solana/Base)
+
+function EmergingGems() {
+  const wallets = useStore((s) => s.smartWallets);
+  const [selected, setSelected] = useState<DexPool | null>(null);
+  const pools = useDexPools(['solana', 'base'], true, true);
+  const candidates = useMemo(() => emergingCandidates(pools.data ?? []), [pools.data]);
+  const mints = useMemo(() => candidates.slice(0, 8).map((c) => c.pool.tokenAddress), [candidates]);
+
+  // « Un wallet suivi y est entré ? » — la seule caution qui compte pour une ligne à quelques heures de vie.
+  const walletSig = wallets.map((w) => w.id).join(',') + '|' + mints.join(',');
+  const holders = useQuery({
+    queryKey: ['sm-holders', walletSig],
+    queryFn: async () => {
+      const map = new Map<string, string[]>();
+      for (const w of wallets.slice(0, 12)) {
+        const held = await walletHoldings(w, mints).catch(() => new Set<string>());
+        for (const m of held) map.set(m, [...(map.get(m) ?? []), w.label]);
+      }
+      return map;
+    },
+    enabled: wallets.length > 0 && mints.length > 0,
+    staleTime: 10 * 60_000,
+    refetchInterval: 30 * 60_000,
+  });
+
+  return (
+    <div className="space-y-4">
+      <Banner tone="warn" title="Les plus jeunes, donc les plus risquées">
+        Des paires de quelques heures à 7 jours, avec assez de liquidité pour sortir, assez de volume pour être
+        réelles et une pression acheteuse nette. C'est le terrain des x50 comme des arnaques : le scan de sécurité
+        (dans la fiche) est obligatoire avant même d'y penser, et un wallet suivi en position est une piste, pas un feu vert.
+      </Banner>
+      {pools.isLoading && <Spinner label="Récupération des nouveaux pools Solana/Base…" />}
+      {pools.error && <ErrorNote error={pools.error} onRetry={() => pools.refetch()} />}
+      <Card padded={false}>
+        <Table head={['Token', 'Réseau', 'Âge', 'Traction', 'Volume 24 h', 'Liquidité', '24 h', 'Achats', 'Wallets suivis en position']}>
+          {candidates.map((c) => {
+            const p = c.pool;
+            const total = p.buys24h + p.sells24h;
+            const names = holders.data?.get(p.tokenAddress) ?? [];
+            const s = scorePool(p);
+            return (
+              <tr key={p.id} className="cursor-pointer hover:bg-surface-2" onClick={() => setSelected(p)}>
+                <Td left>
+                  <div className="flex items-center gap-2">
+                    <CoinIcon src={p.tokenImage} symbol={p.tokenSymbol} size={22} />
+                    <span className="max-w-[160px] truncate font-medium text-ink">{p.tokenSymbol}</span>
+                    <span className="max-w-[120px] truncate text-xs text-muted">{p.tokenName}</span>
+                  </div>
+                </Td>
+                <Td className="text-ink-2">{networkByKey(p.network)?.label ?? p.network}</Td>
+                <Td className="text-ink-2">{fmtAge(p.ageHours)}</Td>
+                <Td><span className="font-semibold text-ink">{c.traction}</span><span className="text-xs text-muted"> · risque {s.risk}/100</span></Td>
+                <Td>{fmtCompact(p.volume24h, 'USD')}</Td>
+                <Td>{fmtCompact(p.liquidityUsd, 'USD')}</Td>
+                <Td><Delta value={p.change24h} /></Td>
+                <Td className="text-ink-2">{Math.round((p.buys24h / Math.max(1, total)) * 100)} %</Td>
+                <Td>{names.length ? <Badge tone="accent">{names.join(', ')}</Badge> : <span className="text-xs text-muted">—</span>}</Td>
+              </tr>
+            );
+          })}
+        </Table>
+        {!candidates.length && !pools.isLoading && <p className="p-5 text-sm text-muted">Aucune paire émergente ne passe les critères pour le moment (c'est souvent une bonne nouvelle).</p>}
+      </Card>
+      <PoolModal pool={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }
