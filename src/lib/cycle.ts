@@ -28,12 +28,44 @@ export interface CycleResult {
   mayer: number;
   ratio200w: number;
   piCycle: number;
+  /** Position dans le cycle de halving : contexte affiché (déjà couvert par Mayer, MM200 sem, Pi). */
+  halving: HalvingContext;
 }
 
 export interface CycleInputs {
   btcDaily: Candle[];
   fng?: number;
   fundingRate?: number; // taux de financement 8 h (fraction, ex. 0.0001 = 0,01 %)
+  mvrv?: number; // ratio MVRV Bitcoin (capitalisation / capital réalisé)
+  stableShare?: number; // part des stablecoins dans la capitalisation crypto totale (en %)
+}
+
+// Halvings passés (certains) et prochain (estimé) : le repère de long terme du cycle.
+const HALVINGS = ['2012-11-28', '2016-07-09', '2020-05-11', '2024-04-20', '2028-04-15'];
+
+export interface HalvingContext {
+  /** Date ISO du dernier halving révolu. */
+  last: string;
+  /** Date ISO (estimée) du prochain halving. */
+  next: string;
+  daysSince: number;
+  daysToNext: number;
+}
+
+/** Position dans le cycle de halving, du dernier révolu au prochain estimé. */
+export function halvingContext(now: Date = new Date()): HalvingContext {
+  const t = now.getTime();
+  let last = HALVINGS[0];
+  let next = HALVINGS[1] ?? HALVINGS[0];
+  for (let i = 0; i < HALVINGS.length - 1; i++) {
+    if (Date.parse(HALVINGS[i]) <= t) { last = HALVINGS[i]; next = HALVINGS[i + 1]; }
+  }
+  return {
+    last,
+    next,
+    daysSince: Math.max(0, Math.floor((t - Date.parse(last)) / 86400_000)),
+    daysToNext: Math.max(0, Math.ceil((Date.parse(next) - t) / 86400_000)),
+  };
 }
 
 /** Interpolation linéaire par morceaux, bornée à [0, 100]. */
@@ -56,7 +88,7 @@ export function zoneFor(t: number): CycleZone {
   return { key: 'euphorie', label: 'Euphorie', action: 'Prends des profits progressivement, stoppe les achats d’altcoins, remonte ta part de stablecoins.', dcaMultiplier: 0.25, tone: 'down' };
 }
 
-export function computeCycle({ btcDaily, fng, fundingRate }: CycleInputs): CycleResult | null {
+export function computeCycle({ btcDaily, fng, fundingRate, mvrv, stableShare }: CycleInputs): CycleResult | null {
   if (btcDaily.length < 200) return null;
   const closes = btcDaily.map((c) => c.close);
   const price = closes[closes.length - 1];
@@ -112,6 +144,22 @@ export function computeCycle({ btcDaily, fng, fundingRate }: CycleInputs): Cycle
     });
   }
 
+  if (mvrv != null && Number.isFinite(mvrv)) {
+    comps.push({
+      key: 'mvrv', label: 'MVRV (BTC)', value: `${mvrv.toFixed(2).replace('.', ',')}×`, weight: 10,
+      heat: piecewise(mvrv, [[0.8, 0], [1.0, 25], [1.5, 50], [2.0, 72], [2.5, 85], [3.0, 95], [4.0, 100]]),
+      explain: 'Capitalisation divisée par capital réalisé (ce que valent les pièces au prix où elles ont bougé pour la dernière fois). Sous 1 : le marché détient globalement en perte — zone d’accumulation. Au-dessus de 3 : chaque cycle s’y est arrêté (2013, 2017, 2021). Source gratuite retardée de ~7 jours.',
+    });
+  }
+
+  if (stableShare != null && Number.isFinite(stableShare)) {
+    comps.push({
+      key: 'stables', label: 'Puissance stablecoins', value: `${stableShare.toFixed(1).replace('.', ',')} % de la crypto`, weight: 5,
+      heat: piecewise(stableShare, [[3, 100], [5, 70], [7, 40], [9, 20], [12, 10]]),
+      explain: 'Part des stablecoins dans la capitalisation totale : la poudre sèche installée en attendant d’acheter. Une part élevée = du carburant disponible ; une part faible = le capital est déjà investi (et récupérer du cash coûte cher).',
+    });
+  }
+
   if (fundingRate != null && Number.isFinite(fundingRate)) {
     const f = fundingRate * 100; // en %
     comps.push({
@@ -124,7 +172,7 @@ export function computeCycle({ btcDaily, fng, fundingRate }: CycleInputs): Cycle
   const wsum = comps.reduce((s, c) => s + (Number.isFinite(c.heat) ? c.weight : 0), 0);
   const temperature = wsum > 0 ? comps.reduce((s, c) => s + (Number.isFinite(c.heat) ? c.heat * c.weight : 0), 0) / wsum : 50;
 
-  return { temperature, zone: zoneFor(temperature), components: comps, mayer, ratio200w, piCycle };
+  return { temperature, zone: zoneFor(temperature), components: comps, mayer, ratio200w, piCycle, halving: halvingContext() };
 }
 
 /** Indice « saison des altcoins » : part du top 50 (hors stables) qui bat le BTC sur 30 jours. */

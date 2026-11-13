@@ -10,6 +10,7 @@ import { useExitPlan } from './useExitPlan';
 import { notify } from '../lib/platform';
 import { claimNotification, EXIT_TTL_MS, weekKey } from '../lib/notified';
 import { fmtMoney, isoDay } from '../lib/format';
+import { nextMacroEvents } from '../lib/macro';
 
 const DAY = 86400_000;
 
@@ -32,6 +33,11 @@ export function useSmartAlerts() {
     }
     if (exit.euphoria.active && exit.coins.some((c) => c.core)) fire(`euphoria:${weekKey()}`, 7 * DAY, 'Marché en euphorie', exit.euphoria.label);
     if (bd.due && bd.basket && bd.periodKey) fire(`basket:${bd.periodKey}`, 3 * DAY, 'Panier DCA : échéance du jour', `${bd.basket.amountUsd} USDC à répartir. Ouvre Boussole pour l’ordre du jour.`);
+
+    // Calendrier macro/crypto : un événement qui arrive aujourd'hui ou demain est annoncé une fois, avec la conduite à tenir.
+    for (const ev of nextMacroEvents(new Date(), 3, 1)) {
+      fire(`macro:${ev.id}`, 3 * DAY, `${ev.daysTo === 0 ? 'Aujourd’hui' : 'Demain'} : ${ev.label}`, ev.advice);
+    }
 
     const zone = cycle.data?.zone;
     if (zone) {

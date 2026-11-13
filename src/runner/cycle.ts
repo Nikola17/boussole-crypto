@@ -15,6 +15,7 @@ import { alertKey, alertMessage, consumeAlerts, hitAlerts, hitRungs, rungKey, ru
 import { buildBrief, slotsOfDay } from './brief';
 import type { CoinPrice } from './market';
 import { isHotNews, newsKey, type NewsItem, type RatedNews, type WatchedCoin } from './news';
+import { nextMacroEvents } from '../lib/macro';
 
 const DAY_MS = 24 * 3600_000;
 /** Une même zone de marché ne re-sonne pas plus d'une fois par semaine (les allers-retours rapides restent silencieux). */
@@ -41,6 +42,10 @@ export interface CycleDeps {
   btcDaily: () => Promise<Candle[] | null>;
   /** Taux de financement du perpétuel BTC (null : indisponible). */
   funding: () => Promise<number | null>;
+  /** Ratio MVRV Bitcoin (null : indisponible — la composante reste absente, jamais inventée). */
+  mvrv: () => Promise<number | null>;
+  /** Part des stablecoins dans la capitalisation totale, en % (null : indisponible). */
+  stableShare: () => Promise<number | null>;
   /** Actus fraîches des cryptos suivies ([] : indisponible ou veille désactivée). */
   news: (coins: WatchedCoin[]) => Promise<NewsItem[]>;
   /** Notes d'importance et résumés IA des actus (sans clé : valeurs à zéro). */
@@ -158,6 +163,15 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
     }
   }
 
+  // 1 bis ter. Calendrier macro/crypto : un événement qui arrive aujourd'hui ou demain est annoncé une fois,
+  //      avec la conduite à tenir (Fed, CPI, échéance de dérivés — le halving, lui, est un repère de long terme).
+  for (const ev of nextMacroEvents(now, 3, 2)) {
+    const key = `macro:${ev.id}`;
+    if (state.sent[key] == null) {
+      queue.push({ key, text: `${ev.daysTo === 0 ? 'Aujourd’hui' : 'Demain'} : ${ev.label}\n${ev.advice}` });
+    }
+  }
+
   // 1 ter. Veille presse : les actus fraîches des cryptos suivies sont notées (IA si configurée, sinon heuristique
   //      de mots-clés). Seules les importantes partent en alerte ; les non-importantes sont marquées vues pour
   //      ne pas être réévaluées sans fin. Un échec de l'IA ne marque rien : réévaluation au cycle suivant.
@@ -240,6 +254,7 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
       now, bundle, prices: priceRows, fng, currency: cfg.currency,
       syncSavedAt: bundle.savedAt ?? null, syncDevice: bundle.device ?? null,
       temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
+      cycleMetrics: temperature ? { mvrv: temperature.mvrv, stableShare: temperature.stableShare, halvingDaysToNext: temperature.halvingDaysToNext } : null,
       slot: slot.id, news: ratedNews.slice(0, 6),
     });
     try {
@@ -267,10 +282,14 @@ export function newsMessage(n: RatedNews, now = new Date()): string {
  * Température du marché, calculée avec les mêmes indicateurs que l'application (Fear & Greed, multiple de Mayer,
  * moyenne 200 semaines, RSI hebdomadaire, Pi Cycle, taux de financement). Indisponible (null) : pas d'alerte ce cycle-ci.
  */
-export async function marketTemperature(deps: Pick<CycleDeps, 'btcDaily' | 'funding'>, fng: { value: number } | null): Promise<{ temperature: number; zone: { key: string; label: string; action: string } } | null> {
+export async function marketTemperature(deps: Pick<CycleDeps, 'btcDaily' | 'funding' | 'mvrv' | 'stableShare'>, fng: { value: number } | null): Promise<{ temperature: number; zone: { key: string; label: string; action: string }; mvrv: number | null; stableShare: number | null; halvingDaysToNext: number | null } | null> {
   const btcDaily = await deps.btcDaily().catch(() => null);
   if (!btcDaily) return null;
   const funding = await deps.funding().catch(() => null);
-  const r = computeCycle({ btcDaily, fng: fng?.value, fundingRate: funding ?? undefined });
-  return r ? { temperature: r.temperature, zone: { key: r.zone.key, label: r.zone.label, action: r.zone.action } } : null;
+  const [mvrv, stableShare] = await Promise.all([
+    deps.mvrv().catch(() => null),
+    deps.stableShare().catch(() => null),
+  ]);
+  const r = computeCycle({ btcDaily, fng: fng?.value, fundingRate: funding ?? undefined, mvrv: mvrv ?? undefined, stableShare: stableShare ?? undefined });
+  return r ? { temperature: r.temperature, zone: { key: r.zone.key, label: r.zone.label, action: r.zone.action }, mvrv, stableShare, halvingDaysToNext: r.halving.daysToNext } : null;
 }

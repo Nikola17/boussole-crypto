@@ -72,6 +72,25 @@ export function getGlobal(): Promise<CgGlobal> {
   return getJson<CgGlobal>(url('/global'));
 }
 
+/**
+ * Part des stablecoins dans la capitalisation crypto totale (en %) : la « poudre sèche » installée.
+ * Null si l'une des deux lectures échoue — jamais un chiffre inventé.
+ */
+export async function getStablecoinShare(): Promise<number | null> {
+  try {
+    const [stables, global] = await Promise.all([
+      getJson<{ market_cap: number }[]>(url('/coins/markets', { vs_currency: 'usd', category: 'stablecoins', order: 'market_cap_desc', per_page: 100, page: 1 })),
+      getGlobal(),
+    ]);
+    const cap = stables.reduce((sum, c) => sum + (Number(c.market_cap) || 0), 0);
+    const total = global.data.total_market_cap.usd;
+    if (!(cap > 0) || !(total > 0) || cap > total) return null;
+    return (cap / total) * 100;
+  } catch {
+    return null;
+  }
+}
+
 export interface CgTrending {
   coins: {
     item: {

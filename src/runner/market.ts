@@ -90,3 +90,40 @@ export async function fetchFearGreed(): Promise<{ value: number; label: string }
     return null; // le brief n'a pas besoin du Fear & Greed pour exister
   }
 }
+
+/** MVRV Bitcoin (ratio capitalisation / capital réalisé) via bitcoin-data.com — gratuit, ~7 jours de retard. */
+export async function fetchMvrv(): Promise<number | null> {
+  try {
+    const res = await fetch('https://bitcoin-data.com/v1/mvrv/zscore', { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) return null;
+    const r = (await res.json()) as { mvrv?: string | number };
+    const v = Number(r.mvrv);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Part des stablecoins dans la capitalisation crypto totale (en %) : la poudre sèche installée.
+ * Deux requêtes CoinGecko (catégorie stablecoins + global), mémoïsées par l'appelant si besoin ; null si l'une échoue.
+ */
+export async function fetchStablecoinShare(coingeckoKey: string | null): Promise<number | null> {
+  try {
+    const headers: Record<string, string> = {};
+    if (coingeckoKey) headers['x-cg-demo-api-key'] = coingeckoKey;
+    const [stableRes, globalRes] = await Promise.all([
+      fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category=stablecoins&order=market_cap_desc&per_page=100&page=1`, { headers: { ...headers, Accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) }),
+      fetch(`https://api.coingecko.com/api/v3/global`, { headers: { ...headers, Accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) }),
+    ]);
+    if (!stableRes.ok || !globalRes.ok) return null;
+    const stables = (await stableRes.json()) as { market_cap?: number }[];
+    const global = (await globalRes.json()) as { data?: { total_market_cap?: Record<string, number> } };
+    const cap = stables.reduce((sum, c) => sum + (Number(c.market_cap) || 0), 0);
+    const total = global.data?.total_market_cap?.usd ?? 0;
+    if (!(cap > 0) || !(total > 0) || cap > total) return null;
+    return (cap / total) * 100;
+  } catch {
+    return null;
+  }
+}

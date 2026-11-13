@@ -6,6 +6,7 @@ import * as cg from '../api/coingecko';
 import { binanceSymbolFor, getAllPrices, getBtcFunding, getDailyHistory, getKlines, type Interval } from '../api/binance';
 import { getFearGreed } from '../api/feargreed';
 import { getFees, getProtocols } from '../api/defillama';
+import { getMvrv } from '../api/onchain';
 import { getNewPools, getTrendingPools, type DexPool } from '../api/dex';
 import { poolStrict } from '../api/http';
 import { altSeasonIndex, computeCycle } from '../lib/cycle';
@@ -93,15 +94,27 @@ export function useFunding() {
   return useQuery({ queryKey: ['funding'], queryFn: getBtcFunding, staleTime: 30 * MIN, refetchInterval: 60 * MIN, retry: 0 });
 }
 
+/** MVRV Bitcoin (source gratuite, ~7 jours de retard) : composante de cycle lente, lue une fois par jour suffit. */
+export function useMvrv() {
+  return useQuery({ queryKey: ['mvrv'], queryFn: () => getMvrv(), staleTime: 12 * 60 * MIN, refetchInterval: 24 * 60 * MIN, retry: 0 });
+}
+
+/** Part des stablecoins dans la capitalisation totale (la poudre sèche installée) : lente par nature. */
+export function useStableShare() {
+  return useQuery({ queryKey: ['stable-share'], queryFn: () => cg.getStablecoinShare(), staleTime: 60 * MIN, refetchInterval: 6 * 60 * MIN, retry: 0 });
+}
+
 export function useCycle() {
   const btc = useBtcHistory();
   const fng = useFearGreed(60);
   const funding = useFunding();
+  const mvrv = useMvrv();
+  const stable = useStableShare();
   const data = useMemo(() => {
     if (!btc.data) return null;
     const lastFng = fng.data?.[fng.data.length - 1]?.value;
-    return computeCycle({ btcDaily: btc.data, fng: lastFng, fundingRate: funding.data ?? undefined });
-  }, [btc.data, fng.data, funding.data]);
+    return computeCycle({ btcDaily: btc.data, fng: lastFng, fundingRate: funding.data ?? undefined, mvrv: mvrv.data?.mvrv, stableShare: stable.data ?? undefined });
+  }, [btc.data, fng.data, funding.data, mvrv.data, stable.data]);
   return { data, isLoading: btc.isLoading, error: btc.error };
 }
 
