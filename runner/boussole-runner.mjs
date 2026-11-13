@@ -88,7 +88,7 @@ function validateConfig(raw, opts = {}) {
   }
   if (typeof r.briefEnabled !== "undefined" && typeof r.briefEnabled !== "boolean") problems.push("briefEnabled doit \xEAtre true ou false.");
   const bool = (v) => typeof v === "boolean";
-  for (const k of ["briefUsOpen", "briefUsClose", "newsEnabled"]) {
+  for (const k of ["briefUsOpen", "briefUsClose", "newsEnabled", "smartMoneyEnabled"]) {
     if (typeof r[k] !== "undefined" && typeof r[k] !== "boolean") problems.push(`${k} doit \xEAtre true ou false.`);
   }
   const syncToken = str(r.syncToken);
@@ -116,6 +116,7 @@ function validateConfig(raw, opts = {}) {
       briefUsOpen: r.briefUsOpen === void 0 ? true : bool(r.briefUsOpen),
       briefUsClose: r.briefUsClose === void 0 ? true : bool(r.briefUsClose),
       newsEnabled: r.newsEnabled === void 0 ? true : bool(r.newsEnabled),
+      smartMoneyEnabled: r.smartMoneyEnabled === void 0 ? true : bool(r.smartMoneyEnabled),
       mistralApiKey: str(r.mistralApiKey) || null,
       mistralModel: str(r.mistralModel) || "mistral-small-latest",
       timeZone,
@@ -145,7 +146,7 @@ function applyEnv(raw, env = process.env) {
 var DAY_MS = 24 * 36e5;
 var SENT_RETENTION_MS = 30 * DAY_MS;
 function emptyState() {
-  return { sent: {}, lastBriefSlot: {}, zoneLabel: null, okAt: null, attemptAt: null, error: null };
+  return { sent: {}, lastBriefSlot: {}, zoneLabel: null, smCursor: {}, okAt: null, attemptAt: null, error: null };
 }
 function parseState(json) {
   if (!json) return emptyState();
@@ -153,10 +154,14 @@ function parseState(json) {
     const r = JSON.parse(json);
     const sent = r.sent && typeof r.sent === "object" && !Array.isArray(r.sent) ? r.sent : {};
     const slots = r.lastBriefSlot && typeof r.lastBriefSlot === "object" && !Array.isArray(r.lastBriefSlot) ? r.lastBriefSlot : {};
-    const out = { sent: {}, lastBriefSlot: {}, zoneLabel: typeof r.zoneLabel === "string" ? r.zoneLabel : null, okAt: typeof r.okAt === "number" ? r.okAt : null, attemptAt: typeof r.attemptAt === "number" ? r.attemptAt : null, error: typeof r.error === "string" ? r.error : null };
+    const out = { sent: {}, lastBriefSlot: {}, zoneLabel: typeof r.zoneLabel === "string" ? r.zoneLabel : null, smCursor: {}, okAt: typeof r.okAt === "number" ? r.okAt : null, attemptAt: typeof r.attemptAt === "number" ? r.attemptAt : null, error: typeof r.error === "string" ? r.error : null };
     if (typeof r.lastBriefDay === "string" && typeof slots.matin === "undefined") out.lastBriefSlot.matin = r.lastBriefDay;
     for (const [k, v] of Object.entries(slots)) if (typeof v === "string") out.lastBriefSlot[k] = v;
     for (const [k, v] of Object.entries(sent)) if (typeof v === "number" && Number.isFinite(v)) out.sent[k] = v;
+    const cursorRaw = r.smCursor;
+    if (cursorRaw && typeof cursorRaw === "object" && !Array.isArray(cursorRaw)) {
+      for (const [k, v] of Object.entries(cursorRaw)) if (typeof v === "number" && Number.isFinite(v)) out.smCursor[k] = v;
+    }
     return out;
   } catch {
     return emptyState();
@@ -626,7 +631,7 @@ function watchOf(bundle) {
   const exitDone = stamps.exitDone && typeof stamps.exitDone === "object" && !Array.isArray(stamps.exitDone) ? stamps.exitDone : {};
   const paperRaw = stamps.paper;
   const paper = paperRaw && typeof paperRaw === "object" && !Array.isArray(paperRaw) ? paperRaw : null;
-  return { alerts: list2("alerts"), transactions: list2("transactions"), theses: list2("theses"), exitDone, paperTrades: list2("paperTrades"), paper };
+  return { alerts: list2("alerts"), transactions: list2("transactions"), theses: list2("theses"), exitDone, paperTrades: list2("paperTrades"), paper, smartWallets: list2("smartWallets"), watchedTokens: list2("watchedTokens") };
 }
 var alertKey = (id) => `alert:${id}`;
 var rungKey = (coinId, multiple) => `exit:${coinId}:${multiple}`;
@@ -1031,6 +1036,11 @@ function buildBrief(i) {
     lines.push(`Actus : ${topNews.map((n) => `\xAB ${n.title} \xBB${n.source ? ` (${n.source})` : ""}`).join(" \xB7 ")}`);
     for (const n of topNews) if (n.resume) lines.push(`${n.coinName} : ${n.resume.replace(/\s+/g, " ").slice(0, 320)}`);
   }
+  const smart = i.smart ?? [];
+  if (smart.length && !short) {
+    lines.push(`Wallets suivis : ${smart[0]}`);
+    for (const l of smart.slice(1)) lines.push(`  ${l}`);
+  }
   if (!short && i.syncSavedAt) {
     const when = new Date(i.syncSavedAt);
     if (!Number.isNaN(when.getTime())) lines.push(`Donn\xE9es de synchronisation : ${fmtDate(when, true)}${i.syncDevice ? ` (${i.syncDevice})` : ""}`);
@@ -1089,6 +1099,125 @@ async function fetchCoinNews(coin, maxAgeMs, limit = 8) {
   } catch {
     return [];
   }
+}
+
+// src/lib/smartmoney.ts
+var eventKey = (e) => `sm:${e.walletId}:${e.txHash}:${e.mint}`;
+function balancesByMint(rows, wallet, other) {
+  const out = /* @__PURE__ */ new Map();
+  for (const r of rows) {
+    const mint = r.mint;
+    if (!mint) continue;
+    const owner = r.owner ?? other.find((o) => o.accountIndex === r.accountIndex)?.owner ?? null;
+    if (owner !== wallet) continue;
+    out.set(mint, (out.get(mint) ?? 0) + (r.uiTokenAmount?.uiAmount ?? 0));
+  }
+  return out;
+}
+function solanaDeltas(tx, wallet) {
+  const pre = balancesByMint(tx.meta?.preTokenBalances ?? [], wallet, tx.meta?.postTokenBalances ?? []);
+  const post2 = balancesByMint(tx.meta?.postTokenBalances ?? [], wallet, tx.meta?.preTokenBalances ?? []);
+  const atMs = (tx.blockTime ?? 0) * 1e3;
+  const hash = tx.signature ?? "";
+  const out = [];
+  for (const [mint, after] of post2) {
+    const before = pre.get(mint) ?? 0;
+    const delta = after - before;
+    if (Math.abs(delta) < 1e-9) continue;
+    out.push({ mint, delta, atMs, hash });
+  }
+  return out;
+}
+var evmQty = (raw, decimals) => {
+  if (!raw || !/^-?\d+$/.test(raw)) return null;
+  const scale = decimals != null && decimals >= 0 && decimals <= 36 ? Math.pow(10, decimals) : null;
+  const v = scale != null ? Number(raw) / scale : null;
+  return v != null && Number.isFinite(v) ? v : null;
+};
+function evmDeltas(items, wallet) {
+  const me = wallet.address.toLowerCase();
+  const acc = /* @__PURE__ */ new Map();
+  for (const it of items) {
+    const tok = it.token;
+    if (!tok?.address || tok.type && tok.type !== "ERC-20") continue;
+    const qty = evmQty(it.total?.value, tok.decimals ?? null);
+    if (qty == null || qty <= 0) continue;
+    const addr = tok.address.toLowerCase();
+    const from = (it.from?.hash ?? "").toLowerCase();
+    const to = (it.to?.hash ?? "").toLowerCase();
+    if (from !== me && to !== me) continue;
+    const delta = to === me ? qty : -qty;
+    const atMs = it.timestamp ? Date.parse(it.timestamp) : 0;
+    const hash = it.tx_hash ?? "";
+    const prev = acc.get(addr);
+    if (prev) {
+      if (prev.hash === hash) {
+        prev.delta += delta;
+        continue;
+      }
+    }
+    acc.set(addr, { mint: addr, delta, symbol: tok.symbol ?? null, name: tok.name ?? null, atMs, hash });
+  }
+  return [...acc.values()].filter((d) => Math.abs(d.delta) > 1e-12);
+}
+var CHAIN_ALIASES = { eth: "ethereum", ethereum: "ethereum", solana: "solana", base: "base", bsc: "bsc", arbitrum: "arbitrum" };
+var normChain = (c) => c ? CHAIN_ALIASES[c.toLowerCase()] ?? c.toLowerCase() : null;
+function tokenMatches(ev, refs) {
+  const evChain = normChain(ev.chain);
+  const mint = ev.mint.toLowerCase();
+  const sym = (ev.symbol ?? "").toUpperCase();
+  for (const r of refs) {
+    if (r.address && normChain(r.chain) === evChain && r.address.toLowerCase() === mint) return true;
+    if (sym && r.symbol.toUpperCase() === sym) return true;
+  }
+  return false;
+}
+function relevantEvents(events, refs) {
+  return events.filter((e) => tokenMatches(e, refs));
+}
+function refsOf(w) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  const push = (r) => {
+    const k = `${r.chain ?? ""}:${r.address ?? r.symbol}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(r);
+  };
+  for (const t of w.watched) push({ chain: t.chainId, address: t.address, symbol: t.symbol });
+  for (const p of w.positions) push({ symbol: p.symbol });
+  for (const a of w.alerts) if (a.active && !a.triggeredAt) push({ symbol: a.symbol });
+  return out;
+}
+var qtyLabel = (e) => {
+  const q = e.uiAmount;
+  const digits = q >= 1e3 ? 0 : q >= 1 ? 2 : 6;
+  return `${q.toFixed(digits)} ${e.symbol ?? ""}`.trim();
+};
+function smartMessage(e, nowMs = Date.now()) {
+  const ago = e.atMs > 0 ? Math.max(0, Math.round((nowMs - e.atMs) / 6e4)) : null;
+  const when = ago != null ? ago < 60 ? `il y a ${ago} min` : ago < 2880 ? `il y a ${Math.round(ago / 60)} h` : `il y a ${Math.max(1, Math.round(ago / 1440))} j` : "";
+  const tok = e.symbol ? `${e.symbol}${e.name ? ` (${e.name})` : ""}` : `${e.mint.slice(0, 4)}\u2026`;
+  if (e.side === "sell") {
+    return [
+      `Smart money \u2014 ${e.walletLabel} VEND ${tok}`,
+      `${qtyLabel(e)}${when ? `, ${when}` : ""}. Un wallet que tu suis pour ses r\xE9sultats se d\xE9charge de ce token.`,
+      `C'est le signal pour relire ta th\xE8se de sortie : garde, all\xE8ge, ou sors \u2014 mais d\xE9cide \xE0 froid.`
+    ].join("\n");
+  }
+  return [
+    `Smart money \u2014 ${e.walletLabel} ach\xE8te ${tok}`,
+    `${qtyLabel(e)}${when ? `, ${when}` : ""}. Ce wallet y entre : v\xE9rifie le projet avant toute id\xE9e d'imitation (achat fractionn\xE9, jamais tout d'un coup).`
+  ].join("\n");
+}
+function smartBriefLines(events, nowMs = Date.now(), max = 4) {
+  const recent = events.filter((e) => nowMs - e.atMs < 24 * 36e5);
+  recent.sort((a, b) => b.atMs - a.atMs || (a.side === "sell" ? -1 : 1));
+  const lines = [];
+  for (const e of recent.slice(0, max)) {
+    lines.push(`${e.side === "sell" ? "A vendu" : "A achet\xE9"} ${qtyLabel(e)} \u2014 ${e.walletLabel}`);
+  }
+  return lines;
 }
 
 // src/runner/cycle.ts
@@ -1211,6 +1340,33 @@ ${ev.advice}` });
     if (seenNews.length && !opts.dry) state = markSent(state, seenNews, nowMs);
   }
   queue.push(...newsAlerts);
+  const smartRecent = [];
+  const smartAlerts = [];
+  const alertedKeys = /* @__PURE__ */ new Map();
+  const smartCursorNext = {};
+  if (cfg.smartMoneyEnabled && watch.smartWallets.length && deps.smartEvents) {
+    const sinceOf = (id) => state.smCursor[id] ?? nowMs - 2 * 36e5;
+    const sinceMs = Math.min(...watch.smartWallets.slice(0, 12).map((w) => sinceOf(w.id)));
+    const evts = await deps.smartEvents(watch.smartWallets.slice(0, 12), sinceMs, nowMs).catch(() => []);
+    smartRecent.push(...evts);
+    const refs = refsOf({
+      watched: watch.watchedTokens,
+      positions: [...buildPositions(watch.transactions).values()],
+      alerts: watch.alerts
+    });
+    const relevant = new Set(relevantEvents(evts, refs));
+    for (const e of evts) {
+      const key = eventKey(e);
+      const isAlert = relevant.has(e) && shouldSend(state, key);
+      if (isAlert && smartAlerts.length < 3) {
+        smartAlerts.push({ key, text: smartMessage(e, nowMs) });
+        alertedKeys.set(key, { walletId: e.walletId, atMs: e.atMs });
+      } else {
+        smartCursorNext[e.walletId] = Math.max(smartCursorNext[e.walletId] ?? 0, e.atMs);
+      }
+    }
+  }
+  queue.push(...smartAlerts);
   const consumedIds = [];
   for (const m of queue) {
     if (opts.dry) {
@@ -1222,6 +1378,10 @@ ${ev.advice}` });
       state = markSent(state, [m.key], nowMs);
       result.sent++;
       if (m.alertId) consumedIds.push(m.alertId);
+      if (alertedKeys.has(m.key)) {
+        const a = alertedKeys.get(m.key);
+        state = { ...state, smCursor: { ...state.smCursor, [a.walletId]: Math.max(state.smCursor[a.walletId] ?? 0, a.atMs) } };
+      }
       if (m.key.startsWith("zone:") && temperature && temperature.zone.label !== state.zoneLabel) {
         state = { ...state, zoneLabel: temperature.zone.label };
       }
@@ -1229,6 +1389,17 @@ ${ev.advice}` });
       result.error = e instanceof Error ? e.message : String(e);
       break;
     }
+  }
+  if (Object.keys(smartCursorNext).length && !opts.dry) {
+    const smCursor = { ...state.smCursor };
+    let moved = false;
+    for (const [id, at] of Object.entries(smartCursorNext)) {
+      if (at > (smCursor[id] ?? 0)) {
+        smCursor[id] = at;
+        moved = true;
+      }
+    }
+    if (moved) state = { ...state, smCursor };
   }
   if (consumedIds.length && !opts.dry) {
     try {
@@ -1256,7 +1427,8 @@ ${ev.advice}` });
       temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
       cycleMetrics: temperature ? { mvrv: temperature.mvrv, stableShare: temperature.stableShare, halvingDaysToNext: temperature.halvingDaysToNext } : null,
       slot: slot.id,
-      news: ratedNews.slice(0, 6)
+      news: ratedNews.slice(0, 6),
+      smart: smartBriefLines(smartRecent, nowMs)
     });
     try {
       await send(brief);
@@ -1411,6 +1583,234 @@ async function recentChats(token) {
   return [...seen.values()].sort((a, b) => b.date - a.date);
 }
 
+// src/api/http.ts
+var HttpError = class extends Error {
+  status;
+  host;
+  constructor(status, host, message) {
+    super(message);
+    this.status = status;
+    this.host = host;
+  }
+};
+var MIN_INTERVAL_MS = {
+  "api.coingecko.com": 4500,
+  "api.geckoterminal.com": 2100,
+  "api.dexscreener.com": 250,
+  "api.gopluslabs.io": 1200,
+  "api.rugcheck.xyz": 700,
+  "lite-api.jup.ag": 300,
+  "mempool.space": 300,
+  "yields.llama.fi": 150,
+  "api.crypto.com": 300
+};
+var coingeckoHasKey = false;
+var lastCall = /* @__PURE__ */ new Map();
+var chains = /* @__PURE__ */ new Map();
+var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function intervalFor(host) {
+  if (host === "api.coingecko.com" && coingeckoHasKey) return 2100;
+  return MIN_INTERVAL_MS[host] ?? 0;
+}
+async function throttle(host) {
+  const interval = intervalFor(host);
+  if (!interval) return;
+  const prev = chains.get(host) ?? Promise.resolve();
+  const mine = prev.then(async () => {
+    const wait = (lastCall.get(host) ?? 0) + interval - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastCall.set(host, Date.now());
+  });
+  chains.set(host, mine.catch(() => void 0));
+  await mine;
+}
+function friendly(status, host) {
+  if (status === 429) {
+    if (host.includes("coingecko")) return "CoinGecko limite le nombre de requ\xEAtes. Patiente une minute ou ajoute une cl\xE9 \xAB Demo \xBB gratuite dans R\xE9glages.";
+    return `Trop de requ\xEAtes vers ${host}. R\xE9essaie dans un instant.`;
+  }
+  if (status === 401 || status === 403) return `Acc\xE8s refus\xE9 par ${host}.`;
+  if (status === 404) return `Donn\xE9e introuvable sur ${host}.`;
+  if (status >= 500) return `${host} est momentan\xE9ment indisponible.`;
+  return `Erreur ${status} sur ${host}.`;
+}
+function retryPlan(status, retryAfter, attempt, maxRetries) {
+  if (attempt >= maxRetries) return { retry: false, waitMs: 0 };
+  if (status === 429) {
+    if (attempt >= 1) return { retry: false, waitMs: 0 };
+    const ra = Number(retryAfter);
+    return { retry: true, waitMs: Number.isFinite(ra) && ra > 0 ? Math.min(ra * 1e3, 8e3) : 5e3 };
+  }
+  if (status === null) return { retry: true, waitMs: 800 * 2 ** attempt };
+  if (status >= 500) return { retry: true, waitMs: 1200 * 2 ** attempt };
+  return { retry: false, waitMs: 0 };
+}
+async function request(url, opts = {}) {
+  const host = new URL(url).host;
+  const retries = opts.retries ?? 2;
+  let lastErr = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    await throttle(host);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 25e3);
+    const onAbort = () => ctrl.abort();
+    opts.signal?.addEventListener("abort", onAbort);
+    try {
+      const res = await fetch(url, {
+        method: opts.method ?? "GET",
+        headers: { Accept: "application/json", ...opts.headers ?? {} },
+        body: opts.body,
+        signal: ctrl.signal
+      });
+      if (res.status === 429 || res.status >= 500) {
+        const plan = retryPlan(res.status, res.headers.get("retry-after"), attempt, retries);
+        if (plan.retry) {
+          await sleep(plan.waitMs);
+          continue;
+        }
+      }
+      if (!res.ok) throw new HttpError(res.status, host, friendly(res.status, host));
+      return res;
+    } catch (e) {
+      lastErr = e;
+      if (e instanceof HttpError) throw e;
+      if (opts.signal?.aborted) throw e;
+      const plan = retryPlan(null, null, attempt, retries);
+      if (plan.retry) {
+        await sleep(plan.waitMs);
+        continue;
+      }
+    } finally {
+      clearTimeout(timer);
+      opts.signal?.removeEventListener("abort", onAbort);
+    }
+  }
+  if (lastErr instanceof Error && lastErr.name === "AbortError") throw new Error(`D\xE9lai d\xE9pass\xE9 en contactant ${host}.`);
+  throw lastErr instanceof Error ? lastErr : new Error(`Impossible de joindre ${host}.`);
+}
+async function getJson2(url, opts = {}) {
+  const res = await request(url, opts);
+  return await res.json();
+}
+async function postJson(url, body, opts = {}) {
+  const res = await request(url, {
+    ...opts,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...opts.headers ?? {} },
+    body: JSON.stringify(body)
+  });
+  return await res.json();
+}
+
+// src/api/smartmoney.ts
+var SOL_RPCS = ["https://solana-rpc.publicnode.com", "https://api.mainnet-beta.solana.com"];
+var BS_HEADERS = { "User-Agent": "BoussoleCrypto/1.0 (+https://github.com/Nikola17/boussole-crypto)" };
+var BLOCKSCOUT = { eth: "https://eth.blockscout.com", base: "https://base.blockscout.com" };
+async function solRpc(method, params) {
+  let lastErr;
+  for (const rpc of SOL_RPCS) {
+    try {
+      const r = await postJson(rpc, { jsonrpc: "2.0", id: 1, method, params }, { timeoutMs: 2e4, retries: 1 });
+      if (r.error) throw new Error(r.error.message);
+      return r.result;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("RPC Solana indisponible");
+}
+var MAX_TX = 6;
+async function solanaMintInfos(mints) {
+  const out = /* @__PURE__ */ new Map();
+  if (!mints.length) return out;
+  try {
+    const r = await solRpc("getMultipleAccounts", [mints.slice(0, 100), { encoding: "jsonParsed" }]);
+    for (const [i, acc] of (r?.value ?? []).entries()) {
+      const info = acc?.data?.parsed?.info;
+      if (info?.symbol) out.set(mints[i], { symbol: info.symbol, name: info.name ?? null });
+    }
+  } catch {
+  }
+  return out;
+}
+async function solanaEvents(wallet, sinceMs, nowMs) {
+  const sigs = await solRpc("getSignaturesForAddress", [wallet.address, { limit: 20 }]);
+  const fresh = sigs.filter((s) => !s.err && s.blockTime != null && s.blockTime * 1e3 > sinceMs && s.blockTime * 1e3 <= nowMs).slice(0, MAX_TX);
+  if (!fresh.length) return [];
+  const deltas = [];
+  for (const s of fresh) {
+    const tx = await solRpc("getTransaction", [s.signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }]).catch(() => null);
+    if (!tx) continue;
+    tx.signature = s.signature;
+    tx.blockTime = s.blockTime ?? null;
+    deltas.push(...solanaDeltas(tx, wallet.address));
+  }
+  if (!deltas.length) return [];
+  const infos = await solanaMintInfos([...new Set(deltas.map((d) => d.mint))]);
+  return deltas.map((d) => {
+    const info = infos.get(d.mint) ?? { symbol: null, name: null };
+    return {
+      walletId: wallet.id,
+      walletLabel: wallet.label,
+      chain: "solana",
+      side: d.delta > 0 ? "buy" : "sell",
+      mint: d.mint,
+      symbol: info.symbol,
+      name: info.name,
+      uiAmount: Math.abs(d.delta),
+      txHash: d.hash,
+      atMs: d.atMs
+    };
+  }).sort((a, b) => b.atMs - a.atMs);
+}
+async function blockscoutTransfers(chain, address, maxPages = 2) {
+  const base = BLOCKSCOUT[chain];
+  const rows = [];
+  let params = {};
+  for (let page = 0; page < maxPages && params; page++) {
+    const url = new URL(`${base}/api/v2/addresses/${address}/token-transfers`);
+    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+    const r = await getJson2(url.toString(), { headers: BS_HEADERS, timeoutMs: 2e4, retries: 1 });
+    const items = r.items ?? [];
+    if (!items.length) break;
+    rows.push(...items);
+    params = r.next_page_params ? Object.fromEntries(Object.entries(r.next_page_params).map(([k, v]) => [k, String(v)])) : null;
+    const oldest = items[items.length - 1]?.timestamp ? Date.parse(items[items.length - 1].timestamp) : Number.NaN;
+    if (!Number.isNaN(oldest)) params = oldest < Date.now() - 14 * 24 * 36e5 ? null : params;
+  }
+  return rows;
+}
+async function evmEvents(wallet, sinceMs) {
+  if (wallet.chain !== "eth" && wallet.chain !== "base") return [];
+  const rows = await blockscoutTransfers(wallet.chain, wallet.address);
+  const recent = rows.filter((it) => it.timestamp && Date.parse(it.timestamp) >= sinceMs);
+  if (!recent.length && !rows.length) return [];
+  return evmDeltas(recent, wallet).map((d) => ({
+    walletId: wallet.id,
+    walletLabel: wallet.label,
+    chain: wallet.chain,
+    side: d.delta > 0 ? "buy" : "sell",
+    mint: d.mint,
+    symbol: d.symbol,
+    name: d.name,
+    uiAmount: Math.abs(d.delta),
+    txHash: d.hash,
+    atMs: d.atMs
+  })).sort((a, b) => b.atMs - a.atMs);
+}
+async function fetchWalletEvents(wallet, sinceMs, nowMs = Date.now()) {
+  try {
+    if (wallet.chain === "solana") return await solanaEvents(wallet, sinceMs, nowMs);
+    return await evmEvents(wallet, sinceMs);
+  } catch {
+    return [];
+  }
+}
+async function fetchAllWalletEvents(wallets, sinceMs, nowMs = Date.now()) {
+  const all = await Promise.all(wallets.slice(0, 12).map((w) => fetchWalletEvents(w, sinceMs, nowMs)));
+  return all.flat().sort((a, b) => b.atMs - a.atMs);
+}
+
 // src/runner/ai.ts
 var TIMEOUT_MS3 = 25e3;
 function newsPrompt(items) {
@@ -1468,7 +1868,7 @@ var log = (msg) => {
   process.stdout.write(`${when} ${msg}
 `);
 };
-var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 function parseArgs(argv) {
   let configPath = "";
   let mode = "loop";
@@ -1553,7 +1953,8 @@ var depsOf = (cfg) => ({
   mvrv: async () => (await cachedSlowMetrics(cfg)).mvrv,
   stableShare: async () => (await cachedSlowMetrics(cfg)).stableShare,
   news: (coins) => cfg.newsEnabled ? cachedNews(coins) : Promise.resolve([]),
-  aiRates: (items) => cfg.mistralApiKey ? rateNews(cfg.mistralApiKey, cfg.mistralModel, items) : Promise.resolve(items.map(() => ({ importance: 0, resume: "" })))
+  aiRates: (items) => cfg.mistralApiKey ? rateNews(cfg.mistralApiKey, cfg.mistralModel, items) : Promise.resolve(items.map(() => ({ importance: 0, resume: "" }))),
+  smartEvents: (wallets, sinceMs, nowMs) => cfg.smartMoneyEnabled ? fetchAllWalletEvents(wallets, sinceMs, nowMs) : Promise.resolve([])
 });
 async function modeCheck(cfg) {
   const { result } = await runCycle(cfg, loadState(cfg), { dry: true, forceBrief: true, onDry: (text) => log(`[\xE0 blanc] ${text.split("\n").join(" \u2014 ")}`) }, depsOf(cfg));
@@ -1590,7 +1991,7 @@ async function modeMain(cfg, mode) {
     } catch (e) {
       log(`\xC9chec du cycle : ${e instanceof Error ? e.message : String(e)}`);
     }
-    await sleep(cfg.intervalMinutes * 6e4);
+    await sleep2(cfg.intervalMinutes * 6e4);
   }
 }
 async function main() {

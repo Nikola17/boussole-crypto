@@ -29,6 +29,8 @@ export interface RunnerConfig {
   briefUsClose: boolean;
   /** Veille presse des cryptos suivies (positions + alertes) : alerte Telegram quand une actu importante sort. */
   newsEnabled: boolean;
+  /** Smart money : alerte quand un wallet suivi achète (et surtout vend) un token de ta liste. */
+  smartMoneyEnabled: boolean;
   /** Clé API Mistral (facultative) : résume les actus importantes en 3 lignes et filtre le bruit. */
   mistralApiKey: string | null;
   /** Modèle Mistral pour la veille presse. */
@@ -80,7 +82,7 @@ export function validateConfig(raw: unknown, opts: { allowMissingChatId?: boolea
 
   if (typeof r.briefEnabled !== 'undefined' && typeof r.briefEnabled !== 'boolean') problems.push('briefEnabled doit être true ou false.');
   const bool = (v: unknown): boolean => typeof v === 'boolean'; // absents → true par défaut
-  for (const k of ['briefUsOpen', 'briefUsClose', 'newsEnabled'] as const) {
+  for (const k of ['briefUsOpen', 'briefUsClose', 'newsEnabled', 'smartMoneyEnabled'] as const) {
     if (typeof r[k] !== 'undefined' && typeof r[k] !== 'boolean') problems.push(`${k} doit être true ou false.`);
   }
 
@@ -112,6 +114,7 @@ export function validateConfig(raw: unknown, opts: { allowMissingChatId?: boolea
       briefUsOpen: r.briefUsOpen === undefined ? true : bool(r.briefUsOpen),
       briefUsClose: r.briefUsClose === undefined ? true : bool(r.briefUsClose),
       newsEnabled: r.newsEnabled === undefined ? true : bool(r.newsEnabled),
+      smartMoneyEnabled: r.smartMoneyEnabled === undefined ? true : bool(r.smartMoneyEnabled),
       mistralApiKey: str(r.mistralApiKey) || null,
       mistralModel: str(r.mistralModel) || 'mistral-small-latest',
       timeZone,

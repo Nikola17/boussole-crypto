@@ -65,6 +65,8 @@ export interface BriefInputs {
   slot?: BriefSlotId;
   /** Actus fraîches des cryptos suivies (triées, au plus 3 lignes retinues dans le brief). */
   news?: RatedNews[];
+  /** Smart money : lignes des mouvements des wallets suivis depuis 24 h (ventes en tête). */
+  smart?: string[];
 }
 
 const HEAD_TOP = 3;
@@ -187,6 +189,13 @@ export function buildBrief(i: BriefInputs): string {
     lines.push(`Actus : ${topNews.map((n) => `« ${n.title} »${n.source ? ` (${n.source})` : ''}`).join(' · ')}`);
     for (const n of topNews) if (n.resume) lines.push(`${n.coinName} : ${n.resume.replace(/\s+/g, ' ').slice(0, 320)}`);
   }
+
+  // Smart money : ce que les wallets suivis ont fait depuis 24 h. La vente est l'information qui compte.
+  const smart = i.smart ?? [];
+  if (smart.length && !short) {
+    lines.push(`Wallets suivis : ${smart[0]}`);
+    for (const l of smart.slice(1)) lines.push(`  ${l}`);
+  }   
 
   // Fraîcheur du fichier de synchronisation : sans ça, le brief peut paraître “du jour” avec des données anciennes.
   if (!short && i.syncSavedAt) {

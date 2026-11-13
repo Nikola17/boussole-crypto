@@ -355,6 +355,23 @@ export interface WatchedToken {
   priceAtAdd?: number;
 }
 
+// ---------------------------------------------------------------- Smart money : wallets publics suivis
+
+export interface SmartWallet {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
+  id: string;
+  /** Nom libre (« Fonds X », « KOL Y ») : c'est ce qui s'affiche dans les alertes. */
+  label: string;
+  /** Chaîne lue : Solana (RPC public) ou Ethereum/Base (Blockscout). Aucune clé API nécessaire. */
+  chain: 'solana' | 'base' | 'eth';
+  /** Adresse publique du wallet — jamais un secret, c'est une donnée de blockchain. */
+  address: string;
+  /** Pourquoi tu le suis : fonds, initié, KOL, autre. */
+  kind: 'fund' | 'insider' | 'kol' | 'other';
+  addedAt: string;
+}
+
 // ---------------------------------------------------------------- Panier DCA (plusieurs cryptos par échéance, en USDC)
 
 export interface BasketCoin extends CoinRef {

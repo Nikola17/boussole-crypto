@@ -19,6 +19,8 @@
   "_ia": "clé Mistral facultative : note l'importance et résume les actus en 3 lignes (sinon heuristique de mots-clés)",
   "mistralApiKey": "",
   "mistralModel": "mistral-small-latest",
+  "_smart": "alerte quand un wallet suivi achète (et surtout vend) un token de ta liste",
+  "smartMoneyEnabled": true,
   "timeZone": "Europe/Paris",
   "stateDir": "",
   "device": "hermes-vps"

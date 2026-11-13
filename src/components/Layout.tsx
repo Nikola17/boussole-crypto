@@ -2,7 +2,7 @@
 
 import { clsx } from 'clsx';
 import {
-  Bot, Coins, Compass, FlaskConical, Gift, GraduationCap, LayoutDashboard, LineChart, Menu, Repeat, Settings, Wallet, X,
+  Bot, Coins, Compass, FlaskConical, Gift, GraduationCap, LayoutDashboard, LineChart, Menu, Repeat, Settings, Users, Wallet, X,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useHashPath } from '../router';
@@ -16,6 +16,7 @@ export const NAV = [
   { to: '/dca', label: 'DCA', icon: Repeat, mobile: true },
   { to: '/portefeuille', label: 'Wallet', icon: Wallet, mobile: true },
   { to: '/papier', label: 'Papier', icon: FlaskConical },
+  { to: '/smart', label: 'Smart money', icon: Users },
   { to: '/ia', label: 'Copilote IA', icon: Bot, mobile: true },
   { to: '/airdrops', label: 'Airdrops', icon: Gift },
   { to: '/defi', label: 'Rendement & DeFi', icon: Coins },

@@ -24,6 +24,7 @@ import { runCycle, type CycleDeps } from './cycle';
 import { fetchBtcDaily, fetchBtcFunding, fetchFearGreed, fetchMvrv, fetchPrices, fetchStablecoinShare } from './market';
 import { recentChats, sendMessage } from './telegram';
 import { fetchCoinNews, type NewsItem, type WatchedCoin } from './news';
+import { fetchAllWalletEvents } from '../api/smartmoney';
 import { rateNews } from './ai';
 import type { Candle } from '../lib/indicators';
 
@@ -135,6 +136,7 @@ const depsOf = (cfg: RunnerConfig): CycleDeps => ({
   stableShare: async () => (await cachedSlowMetrics(cfg)).stableShare,
   news: (coins) => cfg.newsEnabled ? cachedNews(coins) : Promise.resolve([]),
   aiRates: (items) => cfg.mistralApiKey ? rateNews(cfg.mistralApiKey, cfg.mistralModel, items) : Promise.resolve(items.map(() => ({ importance: 0, resume: '' }))),
+  smartEvents: (wallets, sinceMs, nowMs) => cfg.smartMoneyEnabled ? fetchAllWalletEvents(wallets, sinceMs, nowMs) : Promise.resolve([]),
 });
 
 // ---------------------------------------------------------------- modes
