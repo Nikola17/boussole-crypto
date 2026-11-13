@@ -5,8 +5,8 @@
 export interface RunnerState {
   /** Clé de dédoublonnage → dernier envoi réussi (ms). Ex : « alert:a1 », « exit:solana:2 », « news:ab12cd34 ». */
   sent: Record<string, number>;
-  /** Jour (AAAA-MM-JJ) du dernier brief quotidien envoyé. */
-  lastBriefDay: string | null;
+  /** Jour (AAAA-MM-JJ) du dernier brief envoyé, par créneau : « matin », « us-open », « us-close ». */
+  lastBriefSlot: Record<string, string>;
   /** Dernière zone de marché constatée (peur extrême, accumulation, neutre, chaleur, euphorie) : un changement déclenche une alerte. */
   zoneLabel: string | null;
   /** Dernier contrôle réussi (ms) ; null si aucun. */
@@ -23,16 +23,20 @@ const DAY_MS = 24 * 3600_000;
 export const SENT_RETENTION_MS = 30 * DAY_MS;
 
 export function emptyState(): RunnerState {
-  return { sent: {}, lastBriefDay: null, zoneLabel: null, okAt: null, attemptAt: null, error: null };
+  return { sent: {}, lastBriefSlot: {}, zoneLabel: null, okAt: null, attemptAt: null, error: null };
 }
 
 /** Lit un état depuis un texte JSON (fichier corrompu ou absent : on repart de zéro, rien n'est perdu côté application). */
 export function parseState(json: string | null | undefined): RunnerState {
   if (!json) return emptyState();
   try {
-    const r = JSON.parse(json) as Partial<RunnerState>;
+    const r = JSON.parse(json) as Record<string, unknown>;
     const sent = (r.sent && typeof r.sent === 'object' && !Array.isArray(r.sent)) ? r.sent : {};
-    const out: RunnerState = { sent: {}, lastBriefDay: typeof r.lastBriefDay === 'string' ? r.lastBriefDay : null, zoneLabel: typeof r.zoneLabel === 'string' ? r.zoneLabel : null, okAt: typeof r.okAt === 'number' ? r.okAt : null, attemptAt: typeof r.attemptAt === 'number' ? r.attemptAt : null, error: typeof r.error === 'string' ? r.error : null };
+    const slots = (r.lastBriefSlot && typeof r.lastBriefSlot === 'object' && !Array.isArray(r.lastBriefSlot)) ? r.lastBriefSlot : {};
+    const out: RunnerState = { sent: {}, lastBriefSlot: {}, zoneLabel: typeof r.zoneLabel === 'string' ? r.zoneLabel : null, okAt: typeof r.okAt === 'number' ? r.okAt : null, attemptAt: typeof r.attemptAt === 'number' ? r.attemptAt : null, error: typeof r.error === 'string' ? r.error : null };
+    // Ancien champ « dernier brief du jour » : le brief du matin déjà parti pour ce jour-là n'est pas renvoyé.
+    if (typeof r.lastBriefDay === 'string' && typeof (slots as Record<string, unknown>).matin === 'undefined') out.lastBriefSlot.matin = r.lastBriefDay;
+    for (const [k, v] of Object.entries(slots)) if (typeof v === 'string') out.lastBriefSlot[k] = v;
     for (const [k, v] of Object.entries(sent)) if (typeof v === 'number' && Number.isFinite(v)) out.sent[k] = v;
     return out;
   } catch {

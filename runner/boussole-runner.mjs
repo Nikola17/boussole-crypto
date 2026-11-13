@@ -17,9 +17,9 @@ function api(url, token, init) {
   });
 }
 function repoUrl(repo, path) {
-  const clean = repo.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "");
-  if (!/^[\w.-]+\/[\w.-]+$/.test(clean)) throw new Error("D\xE9p\xF4t mal form\xE9 : attends \xAB utilisateur/d\xE9p\xF4t \xBB (ex : Nikola17/boussole-sync).");
-  return `https://api.github.com/repos/${clean}/contents/${path}`;
+  const clean2 = repo.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "");
+  if (!/^[\w.-]+\/[\w.-]+$/.test(clean2)) throw new Error("D\xE9p\xF4t mal form\xE9 : attends \xAB utilisateur/d\xE9p\xF4t \xBB (ex : Nikola17/boussole-sync).");
+  return `https://api.github.com/repos/${clean2}/contents/${path}`;
 }
 function bytesToB64(buf) {
   let bin = "";
@@ -87,6 +87,10 @@ function validateConfig(raw, opts = {}) {
     if (!intervalMinutes) problems.push("intervalMinutes doit \xEAtre un nombre entre 1 et 120.");
   }
   if (typeof r.briefEnabled !== "undefined" && typeof r.briefEnabled !== "boolean") problems.push("briefEnabled doit \xEAtre true ou false.");
+  const bool = (v) => typeof v === "boolean";
+  for (const k of ["briefUsOpen", "briefUsClose", "newsEnabled"]) {
+    if (typeof r[k] !== "undefined" && typeof r[k] !== "boolean") problems.push(`${k} doit \xEAtre true ou false.`);
+  }
   const syncToken = str(r.syncToken);
   const passphrase = str(r.passphrase);
   const telegramToken = str(r.telegramToken);
@@ -109,6 +113,11 @@ function validateConfig(raw, opts = {}) {
       intervalMinutes,
       briefHour,
       briefEnabled: typeof r.briefEnabled === "boolean" ? r.briefEnabled : true,
+      briefUsOpen: r.briefUsOpen === void 0 ? true : bool(r.briefUsOpen),
+      briefUsClose: r.briefUsClose === void 0 ? true : bool(r.briefUsClose),
+      newsEnabled: r.newsEnabled === void 0 ? true : bool(r.newsEnabled),
+      mistralApiKey: str(r.mistralApiKey) || null,
+      mistralModel: str(r.mistralModel) || "mistral-small-latest",
       timeZone,
       stateDir: str(r.stateDir),
       device: str(r.device) || "vps-boussole"
@@ -127,6 +136,7 @@ function applyEnv(raw, env = process.env) {
   set("telegramToken", "TELEGRAM_BOT_TOKEN");
   set("telegramChatId", "TELEGRAM_CHAT_ID");
   set("coingeckoKey", "COINGECKO_KEY");
+  set("mistralApiKey", "MISTRAL_API_KEY");
   set("stateDir", "BOUSSOLE_STATE_DIR");
   return out;
 }
@@ -135,14 +145,17 @@ function applyEnv(raw, env = process.env) {
 var DAY_MS = 24 * 36e5;
 var SENT_RETENTION_MS = 30 * DAY_MS;
 function emptyState() {
-  return { sent: {}, lastBriefDay: null, zoneLabel: null, okAt: null, attemptAt: null, error: null };
+  return { sent: {}, lastBriefSlot: {}, zoneLabel: null, okAt: null, attemptAt: null, error: null };
 }
 function parseState(json) {
   if (!json) return emptyState();
   try {
     const r = JSON.parse(json);
     const sent = r.sent && typeof r.sent === "object" && !Array.isArray(r.sent) ? r.sent : {};
-    const out = { sent: {}, lastBriefDay: typeof r.lastBriefDay === "string" ? r.lastBriefDay : null, zoneLabel: typeof r.zoneLabel === "string" ? r.zoneLabel : null, okAt: typeof r.okAt === "number" ? r.okAt : null, attemptAt: typeof r.attemptAt === "number" ? r.attemptAt : null, error: typeof r.error === "string" ? r.error : null };
+    const slots = r.lastBriefSlot && typeof r.lastBriefSlot === "object" && !Array.isArray(r.lastBriefSlot) ? r.lastBriefSlot : {};
+    const out = { sent: {}, lastBriefSlot: {}, zoneLabel: typeof r.zoneLabel === "string" ? r.zoneLabel : null, okAt: typeof r.okAt === "number" ? r.okAt : null, attemptAt: typeof r.attemptAt === "number" ? r.attemptAt : null, error: typeof r.error === "string" ? r.error : null };
+    if (typeof r.lastBriefDay === "string" && typeof slots.matin === "undefined") out.lastBriefSlot.matin = r.lastBriefDay;
+    for (const [k, v] of Object.entries(slots)) if (typeof v === "string") out.lastBriefSlot[k] = v;
     for (const [k, v] of Object.entries(sent)) if (typeof v === "number" && Number.isFinite(v)) out.sent[k] = v;
     return out;
   } catch {
@@ -343,6 +356,40 @@ function buildPositions(txs) {
     }
   }
   return map;
+}
+var STABLES = /* @__PURE__ */ new Set([
+  "usdt",
+  "usdc",
+  "dai",
+  "fdusd",
+  "tusd",
+  "usde",
+  "usds",
+  "pyusd",
+  "usdd",
+  "frax",
+  "lusd",
+  "gusd",
+  "usdp",
+  "eurc",
+  "eurs",
+  "rlusd",
+  "usd1",
+  "busd",
+  "usdb",
+  "usdy",
+  "usdtb",
+  "gho",
+  "crvusd",
+  "dola",
+  "eure",
+  "susde",
+  "usdg",
+  "usdf"
+]);
+var STABLE_IDS = /* @__PURE__ */ new Set(["tether", "usd-coin", "dai", "first-digital-usd", "ethena-usde", "usds", "paypal-usd", "euro-coin", "ripple-usd", "true-usd", "frax", "usd1-wlfi"]);
+function isStable(symbol, coinId) {
+  return STABLES.has(symbol.toLowerCase()) || (coinId ? STABLE_IDS.has(coinId) : false);
 }
 
 // src/lib/indicators.ts
@@ -680,6 +727,33 @@ function nextBasketOccurrences(b, from, count = 4) {
 }
 
 // src/runner/brief.ts
+function nyEpoch(hour, minute, now) {
+  let day;
+  try {
+    day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  } catch {
+    return null;
+  }
+  for (const off of ["-04:00", "-05:00"]) {
+    const t = Date.parse(`${day}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00${off}`);
+    if (!Number.isFinite(t)) continue;
+    try {
+      const shown = new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "numeric", minute: "numeric", hourCycle: "h23" }).format(new Date(t));
+      if (shown === `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`) return t;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+function slotsOfDay(cfg, now) {
+  const out = [{ id: "matin", label: "brief du matin", atMs: new Date(now.getFullYear(), now.getMonth(), now.getDate(), cfg.briefHour, 0, 0, 0).getTime() }];
+  const usOpen = cfg.briefUsOpen ? nyEpoch(9, 30, now) : null;
+  const usClose = cfg.briefUsClose ? nyEpoch(16, 0, now) : null;
+  if (usOpen != null) out.push({ id: "us-open", label: "ouverture des march\xE9s am\xE9ricains", atMs: usOpen });
+  if (usClose != null) out.push({ id: "us-close", label: "cl\xF4ture des march\xE9s am\xE9ricains", atMs: usClose });
+  return out;
+}
 var HEAD_TOP = 3;
 var list = (v) => Array.isArray(v) ? v : [];
 function buildBrief(i) {
@@ -687,7 +761,8 @@ function buildBrief(i) {
   const watch = watchOf(i.bundle);
   const today = isoDay(i.now);
   const cur = i.currency;
-  lines.push(`Boussole \u2014 brief du ${fmtDate(i.now)}`);
+  const short = i.slot === "us-open" || i.slot === "us-close";
+  lines.push(i.slot === "us-open" ? `Boussole \u2014 ouverture am\xE9ricaine \xB7 ${fmtDate(i.now)}` : i.slot === "us-close" ? `Boussole \u2014 cl\xF4ture am\xE9ricaine \xB7 ${fmtDate(i.now)}` : `Boussole \u2014 brief du ${fmtDate(i.now)}`);
   const btc = i.prices.bitcoin;
   const market = [];
   if (i.fng) market.push(`Fear & Greed ${i.fng.value} (${i.fng.label})`);
@@ -744,19 +819,80 @@ function buildBrief(i) {
     }
   }
   if (due.length) lines.push(`Aujourd\u2019hui : ${due.join(" \xB7 ")}`);
-  if (upcoming.length) lines.push(`Prochaine \xE9ch\xE9ance : ${upcoming.join(" \xB7 ")}`);
-  if (!due.length && !upcoming.length) lines.push("Aucune \xE9ch\xE9ance DCA programm\xE9e.");
+  if (!short && upcoming.length) lines.push(`Prochaine \xE9ch\xE9ance : ${upcoming.join(" \xB7 ")}`);
+  if (!short && !due.length && !upcoming.length) lines.push("Aucune \xE9ch\xE9ance DCA programm\xE9e.");
   const usd = /* @__PURE__ */ new Map();
   for (const [id, p] of Object.entries(i.prices)) if (typeof p?.usd === "number" && p.usd > 0) usd.set(id, p.usd);
   const rungs = hitRungs(watch, usd);
   if (rungs.length) lines.push(`Paliers atteints non vendus : ${rungs.map((r) => `${r.symbol.toUpperCase()} \xD7${r.multiple} (vends ${r.pct} %)`).join(" \xB7 ")}`);
-  const armed = watch.alerts.filter((a) => a.active && !a.triggeredAt).length;
-  lines.push(`Alertes arm\xE9es : ${armed}`);
-  if (i.syncSavedAt) {
+  if (!short) {
+    const armed = watch.alerts.filter((a) => a.active && !a.triggeredAt).length;
+    lines.push(`Alertes arm\xE9es : ${armed}`);
+  }
+  const news = i.news ?? [];
+  const topNews = news.filter((n) => n.publishedAt > i.now.getTime() - 18 * 36e5).slice(0, 3);
+  if (topNews.length) {
+    lines.push(`Actus : ${topNews.map((n) => `\xAB ${n.title} \xBB${n.source ? ` (${n.source})` : ""}`).join(" \xB7 ")}`);
+    for (const n of topNews) if (n.resume) lines.push(`${n.coinName} : ${n.resume.replace(/\s+/g, " ").slice(0, 320)}`);
+  }
+  if (!short && i.syncSavedAt) {
     const when = new Date(i.syncSavedAt);
     if (!Number.isNaN(when.getTime())) lines.push(`Donn\xE9es de synchronisation : ${fmtDate(when, true)}${i.syncDevice ? ` (${i.syncDevice})` : ""}`);
   }
   return lines.join("\n");
+}
+
+// src/runner/news.ts
+var HOT_WORDS = /(hack|pirat|hijack|exploit|breach|vol[eé]|stolen|liquidat|rug|scam|arnaque|sec\b|poursuite|lawsuit|interdiction|suspension|faillite|bankrupt|partenariat|partnership|listing|etf|approv|upgrade|mainnet|halving|acquisition|rach[ae]t|adoption|institutionnel|reserve|strategic)/i;
+function isHotNews(item) {
+  return HOT_WORDS.test(`${item.title} ${item.summaryText}`);
+}
+var ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "\u2019", lsquo: "\u2018", ldquo: "\u201C", rdquo: "\u201D", ndash: "\u2013", mdash: "\u2014", hellip: "\u2026" };
+function decode(s) {
+  return s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16))).replace(/&([a-z]+);/gi, (m, n) => ENTITIES[n.toLowerCase()] ?? m);
+}
+var clean = (s) => decode(decode(s).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+function tag(block, name) {
+  const m = block.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, "i"));
+  return m ? m[1] : "";
+}
+function parseRss(xml, coin) {
+  const out = [];
+  for (const m of xml.matchAll(/<item[\s>][\s\S]*?<\/item>/gi)) {
+    const block = m[0];
+    const raw = clean(tag(block, "title"));
+    const dash = raw.lastIndexOf(" - ");
+    const title = (dash > 0 ? raw.slice(0, dash) : raw).trim();
+    const fallbackSource = dash > 0 ? raw.slice(dash + 3).trim() : "";
+    const url = decode(tag(block, "link")).trim() || decode(tag(block, "guid")).trim();
+    const sourceTag = block.match(/<source[^>]*>([\s\S]*?)<\/source>/i);
+    const source = sourceTag ? clean(sourceTag[1]) : fallbackSource;
+    const time = Date.parse(decode(tag(block, "pubDate")).trim());
+    if (!title || !/^https?:\/\//i.test(url) || !Number.isFinite(time)) continue;
+    out.push({ coinId: coin.coinId, coinName: coin.name, title, url, source, publishedAt: time, summaryText: clean(tag(block, "description")).slice(0, 280) });
+  }
+  return out;
+}
+function newsKey(item) {
+  let h = 2166136261;
+  for (let i = 0; i < item.url.length; i++) {
+    h ^= item.url.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return `news:${h.toString(16)}`;
+}
+var TIMEOUT_MS = 15e3;
+async function fetchCoinNews(coin, maxAgeMs, limit = 8) {
+  try {
+    const q = encodeURIComponent(`${coin.name} crypto`);
+    const url = `https://news.google.com/rss/search?q=${q}&hl=fr&gl=FR&ceid=FR:fr`;
+    const res = await fetch(url, { headers: { Accept: "application/rss+xml, application/xml, text/xml" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (!res.ok) return [];
+    const items = parseRss(await res.text(), coin).filter((i) => i.publishedAt > 0 && i.publishedAt <= Date.now() + 36e5).filter((i) => Date.now() - i.publishedAt < maxAgeMs).sort((a, b) => b.publishedAt - a.publishedAt);
+    return items.slice(0, limit);
+  } catch {
+    return [];
+  }
 }
 
 // src/runner/cycle.ts
@@ -780,6 +916,17 @@ function coinsOf(bundle, watch) {
     for (const c of [...b.core ?? [], ...b.discovery ?? []]) ref(c);
   }
   return [...ids];
+}
+function newsCoinsOf(watch) {
+  const seen = /* @__PURE__ */ new Map();
+  const add = (coinId, symbol, name) => {
+    if (!coinId || seen.has(coinId)) return;
+    if (coinId === "bitcoin" || coinId === "ethereum" || isStable(symbol, coinId)) return;
+    seen.set(coinId, { coinId, name });
+  };
+  for (const p of buildPositions(watch.transactions).values()) add(p.coinId, p.symbol, p.name);
+  for (const a of watch.alerts) if (a.active && !a.triggeredAt) add(a.coinId, a.symbol, a.name);
+  return [...seen.values()].slice(0, 12);
 }
 function asBundle(v) {
   if (!v || typeof v !== "object" || !v.data || !Array.isArray(v.deletions)) {
@@ -832,6 +979,34 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
       if (last == null || nowMs - last >= ZONE_REPEAT_MS) queue.push({ key, text: zoneMessage(temperature.zone, temperature.temperature, state.zoneLabel) });
     }
   }
+  const ratedNews = [];
+  const newsAlerts = [];
+  const seenNews = [];
+  if (cfg.newsEnabled) {
+    const coins = newsCoinsOf(watch);
+    const fresh = coins.length ? await deps.news(coins).catch(() => []) : [];
+    const candidates = fresh.filter((n) => nowMs - n.publishedAt < 15 * 36e5).filter((n) => state.sent[newsKey(n)] == null).slice(0, 8);
+    const ratings = candidates.length ? await deps.aiRates(candidates).catch(() => candidates.map(() => ({ importance: 0, resume: "" }))) : [];
+    const hasAi = !!cfg.mistralApiKey;
+    for (const [i, n] of candidates.entries()) {
+      const r = ratings[i] ?? { importance: 0, resume: "" };
+      const key = newsKey(n);
+      const important = r.importance >= 6 || !hasAi && isHotNews(n);
+      if (important && newsAlerts.length < 3) {
+        newsAlerts.push({ key, text: newsMessage({ ...n, ...r }) });
+      } else {
+        if (hasAi ? r.importance > 0 && r.importance < 6 : !isHotNews(n)) seenNews.push(key);
+      }
+    }
+    const ratedOf = new Map(candidates.map((n, i) => [n.url, ratings[i] ?? { importance: 0, resume: "" }]));
+    for (const n of fresh) {
+      const r = ratedOf.get(n.url) ?? { importance: 0, resume: "" };
+      ratedNews.push({ ...n, ...r });
+    }
+    ratedNews.sort((a, b) => b.publishedAt - a.publishedAt);
+    if (seenNews.length && !opts.dry) state = markSent(state, seenNews, nowMs);
+  }
+  queue.push(...newsAlerts);
   const consumedIds = [];
   for (const m of queue) {
     if (opts.dry) {
@@ -862,18 +1037,38 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
       result.error = result.error ?? (msg === CONFLICT ? "l\u2019autre appareil vient d\u2019\xE9crire la synchronisation : la consommation passera au prochain cycle" : msg);
     }
   }
-  const dueBrief = opts.forceBrief || cfg.briefEnabled && now.getHours() >= cfg.briefHour && state.lastBriefDay !== dayKey;
-  if (dueBrief) {
-    const brief = buildBrief({ now, bundle, prices: priceRows, fng, currency: cfg.currency, syncSavedAt: bundle.savedAt ?? null, syncDevice: bundle.device ?? null, temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null });
+  for (const slot of slotsOfDay(cfg, now)) {
+    if (slot.id === "matin" && !cfg.briefEnabled) continue;
+    if (!(opts.forceBrief && slot.id === "matin") && slot.atMs != null && nowMs < slot.atMs) continue;
+    if (!(opts.forceBrief && slot.id === "matin") && state.lastBriefSlot[slot.id] === dayKey) continue;
+    const brief = buildBrief({
+      now,
+      bundle,
+      prices: priceRows,
+      fng,
+      currency: cfg.currency,
+      syncSavedAt: bundle.savedAt ?? null,
+      syncDevice: bundle.device ?? null,
+      temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
+      slot: slot.id,
+      news: ratedNews.slice(0, 6)
+    });
     try {
       await send(brief);
-      if (!opts.dry) state = { ...state, lastBriefDay: dayKey };
+      if (!opts.dry) state = { ...state, lastBriefSlot: { ...state.lastBriefSlot, [slot.id]: dayKey } };
     } catch (e) {
       result.error = result.error ?? (e instanceof Error ? e.message : String(e));
     }
   }
   state = recordStatus(state, result.error == null, result.error, nowMs);
   return { state, result };
+}
+function newsMessage(n, now = /* @__PURE__ */ new Date()) {
+  const age = Math.max(0, now.getTime() - n.publishedAt);
+  const ago = age < 36e5 ? `il y a ${Math.max(1, Math.round(age / 6e4))} min` : age < 24 * 36e5 ? `il y a ${Math.round(age / 36e5)} h` : `il y a ${Math.round(age / 864e5)} jours`;
+  const lines = [`Presse \u2014 ${n.coinName}`, `\xAB ${n.title} \xBB${n.source ? ` (${n.source}, ${ago})` : ` (${ago})`}`];
+  if (n.resume) lines.push(n.resume.replace(/\s+/g, " ").trim().slice(0, 600));
+  return lines.join("\n");
 }
 async function marketTemperature(deps, fng) {
   const btcDaily = await deps.btcDaily().catch(() => null);
@@ -884,10 +1079,10 @@ async function marketTemperature(deps, fng) {
 }
 
 // src/runner/market.ts
-var TIMEOUT_MS = 2e4;
+var TIMEOUT_MS2 = 2e4;
 async function getJson(url, headers) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS2);
   try {
     const res = await fetch(url, { headers: { Accept: "application/json", ...headers }, signal: ctrl.signal });
     if (!res.ok) {
@@ -901,7 +1096,7 @@ async function getJson(url, headers) {
 }
 async function fetchBtcDaily() {
   try {
-    const res = await fetch("https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=500", { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const res = await fetch("https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=500", { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS2) });
     if (!res.ok) return null;
     const raw = await res.json();
     return raw.map((k) => ({ time: Math.round(k[0] / 1e3), open: Number(k[1]), high: Number(k[2]), low: Number(k[3]), close: Number(k[4]), volume: Number(k[5]) })).filter((c) => Number.isFinite(c.close));
@@ -977,6 +1172,57 @@ async function recentChats(token) {
   return [...seen.values()].sort((a, b) => b.date - a.date);
 }
 
+// src/runner/ai.ts
+var TIMEOUT_MS3 = 25e3;
+function newsPrompt(items) {
+  const lines = items.map((i, n) => `${n + 1}. [${i.coinName}] ${i.title} (${i.source}) \u2014 ${i.summaryText}`).join("\n");
+  return [
+    "Tu es analyste crypto pour un investisseur particulier fran\xE7ais. Chaque entr\xE9e ci-dessous est une actualit\xE9 r\xE9elle.",
+    "Pour CHAQUE entr\xE9e, note son importance pour un d\xE9tenteur de cette crypto :",
+    "- 1-3 : bruit, promo, opinion sans cons\xE9quence ;",
+    "- 4-5 : information utile mais sans effets directs attendus ;",
+    "- 6-7 : \xE0 conna\xEEtre (partenariat, Graham r\xE9glementaire, produit, adoption) ;",
+    "- 8-10 : peut bouger le prix ou la s\xE9curit\xE9 (hack, proc\xE8s, interdiction, listing majeur, ETF\u2026).",
+    "R\xE9ponds UNIQUEMENT un tableau JSON (bloc ```json), une entr\xE9e par actu dans l\u2019ordre :",
+    '[{"n": 1, "importance": 6, "resume": "R\xE9sum\xE9 en 3 phrases courtes en fran\xE7ais : ce qui s\u2019est pass\xE9, pourquoi c\u2019est important, ce que le d\xE9tenteur peut faire."}]',
+    "",
+    lines
+  ].join("\n");
+}
+function parseNewsRatings(text, n) {
+  const block = text.match(/```(?:json)?\s*([\s\S]*?)```/i) ?? [null, text];
+  const candidate = block[1] ?? "";
+  const arr = candidate.slice(candidate.indexOf("["), candidate.lastIndexOf("]") + 1);
+  try {
+    const raw = JSON.parse(arr);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const r = raw.find((x) => Number(x.n) === i + 1) ?? raw[i];
+      const importance = Number(r?.importance);
+      out.push({ importance: Number.isFinite(importance) ? Math.max(0, Math.min(10, importance)) : 0, resume: typeof r?.resume === "string" ? r.resume.trim() : "" });
+    }
+    return out;
+  } catch {
+    return Array.from({ length: n }, () => ({ importance: 0, resume: "" }));
+  }
+}
+async function rateNews(apiKey, model, items) {
+  try {
+    const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages: [{ role: "user", content: newsPrompt(items.slice(0, 8)) }], temperature: 0.2 }),
+      signal: AbortSignal.timeout(TIMEOUT_MS3)
+    });
+    if (!res.ok) return Array.from({ length: items.length }, () => ({ importance: 0, resume: "" }));
+    const j = await res.json();
+    const text = j.choices?.[0]?.message?.content ?? "";
+    return parseNewsRatings(text, items.length);
+  } catch {
+    return Array.from({ length: items.length }, () => ({ importance: 0, resume: "" }));
+  }
+}
+
 // src/runner/main.ts
 var log = (msg) => {
   const when = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19);
@@ -1031,14 +1277,34 @@ async function cachedBtcDaily() {
   }
   return btcDailyCache?.data ?? null;
 }
+var fngCache = null;
+async function cachedFng() {
+  if (!fngCache || Date.now() - fngCache.at > 30 * 6e4) {
+    const data = await fetchFearGreed();
+    if (data) fngCache = { at: Date.now(), data };
+  }
+  return fngCache?.data ?? null;
+}
+var newsCache = null;
+async function cachedNews(coins) {
+  const sig = coins.map((c) => c.coinId).join(",");
+  if (!newsCache || Date.now() - newsCache.at > 45 * 6e4 || newsCache.coins !== sig) {
+    const results = await Promise.allSettled(coins.map((c) => fetchCoinNews(c, 18 * 36e5)));
+    const items = results.flatMap((r) => r.status === "fulfilled" ? r.value : []).sort((a, b) => b.publishedAt - a.publishedAt).slice(0, 24);
+    if (items.length || !newsCache) newsCache = { at: Date.now(), coins: sig, items };
+  }
+  return newsCache?.items ?? [];
+}
 var depsOf = (cfg) => ({
   fetchRemote: () => fetchRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken),
   pushRemote: (text, sha) => pushRemote(cfg.syncRepo, cfg.syncPath, cfg.syncToken, text, sha),
   telegram: (text) => sendMessage(cfg.telegramToken, cfg.telegramChatId, text),
   prices: (ids) => fetchPrices(ids, cfg.coingeckoKey),
-  fearGreed: () => fetchFearGreed(),
+  fearGreed: () => cachedFng(),
   btcDaily: () => cachedBtcDaily(),
-  funding: () => fetchBtcFunding()
+  funding: () => fetchBtcFunding(),
+  news: (coins) => cfg.newsEnabled ? cachedNews(coins) : Promise.resolve([]),
+  aiRates: (items) => cfg.mistralApiKey ? rateNews(cfg.mistralApiKey, cfg.mistralModel, items) : Promise.resolve(items.map(() => ({ importance: 0, resume: "" })))
 });
 async function modeCheck(cfg) {
   const { result } = await runCycle(cfg, loadState(cfg), { dry: true, forceBrief: true, onDry: (text) => log(`[\xE0 blanc] ${text.split("\n").join(" \u2014 ")}`) }, depsOf(cfg));
@@ -1068,7 +1334,7 @@ async function modeMain(cfg, mode) {
     await run();
     return;
   }
-  log(`Surveillance d\xE9marr\xE9e : contr\xF4le toutes les ${cfg.intervalMinutes} min, brief ${cfg.briefEnabled ? `\xE0 ${cfg.briefHour} h` : "d\xE9sactiv\xE9"} ${cfg.timeZone}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffr\xE9 de bout en bout).`);
+  log(`Surveillance d\xE9marr\xE9e : contr\xF4le toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : "matin d\xE9sactiv\xE9"}${cfg.briefUsOpen ? ", ouverture US (9 h 30 New York)" : ""}${cfg.briefUsClose ? ", cl\xF4ture US (16 h New York)" : ""}. Veille presse : ${cfg.newsEnabled ? `activ\xE9e${cfg.mistralApiKey ? " (r\xE9sum\xE9s IA)" : " (heuristique, sans cl\xE9 IA)"}` : "d\xE9sactiv\xE9e"}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffr\xE9 de bout en bout).`);
   for (; ; ) {
     try {
       await run();

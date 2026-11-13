@@ -6,14 +6,15 @@ import { seal, unseal } from '../lib/sync/crypto';
 import { CONFLICT } from '../lib/sync/github';
 import type { SyncBundle } from '../lib/sync/merge';
 import { isoDay } from '../lib/format';
-import { buildPositions } from '../lib/portfolio';
+import { buildPositions, isStable } from '../lib/portfolio';
 import { computeCycle } from '../lib/cycle';
 import type { Candle } from '../lib/indicators';
 import type { RunnerConfig } from './config';
 import { type RunnerState, markSent, pruneSent, recordStatus, shouldSend } from './state';
 import { alertKey, alertMessage, consumeAlerts, hitAlerts, hitRungs, rungKey, rungMessage, watchOf, zoneMessage, type MessageCurrency } from './evaluate';
-import { buildBrief } from './brief';
+import { buildBrief, slotsOfDay } from './brief';
 import type { CoinPrice } from './market';
+import { isHotNews, newsKey, type NewsItem, type RatedNews, type WatchedCoin } from './news';
 
 const DAY_MS = 24 * 3600_000;
 /** Une même zone de marché ne re-sonne pas plus d'une fois par semaine (les allers-retours rapides restent silencieux). */
@@ -40,6 +41,10 @@ export interface CycleDeps {
   btcDaily: () => Promise<Candle[] | null>;
   /** Taux de financement du perpétuel BTC (null : indisponible). */
   funding: () => Promise<number | null>;
+  /** Actus fraîches des cryptos suivies ([] : indisponible ou veille désactivée). */
+  news: (coins: WatchedCoin[]) => Promise<NewsItem[]>;
+  /** Notes d'importance et résumés IA des actus (sans clé : valeurs à zéro). */
+  aiRates: (items: NewsItem[]) => Promise<{ importance: number; resume: string }[]>;
 }
 
 export interface CycleOptions {
@@ -77,6 +82,19 @@ export function coinsOf(bundle: SyncBundle, watch: ReturnType<typeof watchOf>): 
     for (const c of [...(b.core ?? []), ...(b.discovery ?? [])]) ref(c);
   }
   return [...ids];
+}
+
+/** Cryptos à suivre en presse : positions et alertes, sans le cœur (couvert par le brief), ni les stablecoins. */
+export function newsCoinsOf(watch: ReturnType<typeof watchOf>): WatchedCoin[] {
+  const seen = new Map<string, WatchedCoin>();
+  const add = (coinId: string | undefined, symbol: string, name: string) => {
+    if (!coinId || seen.has(coinId)) return;
+    if (coinId === 'bitcoin' || coinId === 'ethereum' || isStable(symbol, coinId)) return;
+    seen.set(coinId, { coinId, name });
+  };
+  for (const p of buildPositions(watch.transactions).values()) add(p.coinId, p.symbol, p.name);
+  for (const a of watch.alerts) if (a.active && !a.triggeredAt) add(a.coinId, a.symbol, a.name);
+  return [...seen.values()].slice(0, 12);
 }
 
 /** Vérifie qu'un objet déchiffré a bien la tête d'un faisceau Boussole ; sinon erreur claire. */
@@ -140,6 +158,45 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
     }
   }
 
+  // 1 ter. Veille presse : les actus fraîches des cryptos suivies sont notées (IA si configurée, sinon heuristique
+  //      de mots-clés). Seules les importantes partent en alerte ; les non-importantes sont marquées vues pour
+  //      ne pas être réévaluées sans fin. Un échec de l'IA ne marque rien : réévaluation au cycle suivant.
+  const ratedNews: RatedNews[] = [];
+  const newsAlerts: { key: string; text: string }[] = [];
+  const seenNews: string[] = [];
+  if (cfg.newsEnabled) {
+    const coins = newsCoinsOf(watch);
+    const fresh = coins.length ? await deps.news(coins).catch(() => [] as NewsItem[]) : [];
+    const candidates = fresh
+      .filter((n) => nowMs - n.publishedAt < 15 * 3600_000) // une actu a 15 h pour devenir une alerte
+      .filter((n) => state.sent[newsKey(n)] == null)
+      .slice(0, 8);
+    const ratings = candidates.length ? await deps.aiRates(candidates).catch(() => candidates.map(() => ({ importance: 0, resume: '' }))) : [];
+    const hasAi = !!cfg.mistralApiKey;
+    for (const [i, n] of candidates.entries()) {
+      const r = ratings[i] ?? { importance: 0, resume: '' };
+      const key = newsKey(n);
+      const important = r.importance >= 6 || (!hasAi && isHotNews(n));
+      if (important && newsAlerts.length < 3) {
+        newsAlerts.push({ key, text: newsMessage({ ...n, ...r }) });
+      } else {
+        // Notée sans importance (décision IA, ou heuristique sans IA) : vue, pour ne pas tourner en rond.
+        // Une réponse IA manquante (importance 0) n'est jamais marquée : on réessaiera au cycle suivant.
+        // Une actu importante au-delà de la limite de 3 par cycle n'est pas marquée non plus : elle attendra le suivant.
+        if (hasAi ? (r.importance > 0 && r.importance < 6) : !isHotNews(n)) seenNews.push(key);
+      }
+    }
+    // Les actus des briefs du jour : les mêmes, notées, même si elles ne partent pas en alerte.
+    const ratedOf = new Map(candidates.map((n, i) => [n.url, ratings[i] ?? { importance: 0, resume: '' }]));
+    for (const n of fresh) {
+      const r = ratedOf.get(n.url) ?? { importance: 0, resume: '' };
+      ratedNews.push({ ...n, ...r });
+    }
+    ratedNews.sort((a, b) => b.publishedAt - a.publishedAt);
+    if (seenNews.length && !opts.dry) state = markSent(state, seenNews, nowMs);
+  }
+  queue.push(...newsAlerts);
+
   // 2. Envoi : une alerte n'est marquée envoyée qu'APRÈS un envoi réussi ; le premier échec arrête (on réessaie au cycle suivant).
   const consumedIds: string[] = [];
   for (const m of queue) {
@@ -173,13 +230,21 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
     }
   }
 
-  // 4. Brief quotidien : une fois par jour, après l'heure choisie, tant qu'il n'est pas parti.
-  const dueBrief = opts.forceBrief || (cfg.briefEnabled && now.getHours() >= cfg.briefHour && state.lastBriefDay !== dayKey);
-  if (dueBrief) {
-    const brief = buildBrief({ now, bundle, prices: priceRows, fng, currency: cfg.currency, syncSavedAt: bundle.savedAt ?? null, syncDevice: bundle.device ?? null, temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null });
+  // 5. Briefs du jour : matin (complet), puis ouverture et clôture des marchés américains (formes courtes avec actus).
+  //    Chaque créneau part une fois par jour, après son heure, tant qu'il n'est pas parti (--brief force le matin).
+  for (const slot of slotsOfDay(cfg, now)) {
+    if (slot.id === 'matin' && !cfg.briefEnabled) continue;
+    if (!(opts.forceBrief && slot.id === 'matin') && slot.atMs != null && nowMs < slot.atMs) continue;
+    if (!(opts.forceBrief && slot.id === 'matin') && state.lastBriefSlot[slot.id] === dayKey) continue;
+    const brief = buildBrief({
+      now, bundle, prices: priceRows, fng, currency: cfg.currency,
+      syncSavedAt: bundle.savedAt ?? null, syncDevice: bundle.device ?? null,
+      temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
+      slot: slot.id, news: ratedNews.slice(0, 6),
+    });
     try {
       await send(brief);
-      if (!opts.dry) state = { ...state, lastBriefDay: dayKey };
+      if (!opts.dry) state = { ...state, lastBriefSlot: { ...state.lastBriefSlot, [slot.id]: dayKey } };
     } catch (e) {
       result.error = result.error ?? (e instanceof Error ? e.message : String(e));
     }
@@ -187,6 +252,15 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
 
   state = recordStatus(state, result.error == null, result.error, nowMs);
   return { state, result };
+}
+
+/** Message Telegram d'une actu importante : titre, source, ancienneté, résumé IA le cas échéant. */
+export function newsMessage(n: RatedNews, now = new Date()): string {
+  const age = Math.max(0, now.getTime() - n.publishedAt);
+  const ago = age < 3600_000 ? `il y a ${Math.max(1, Math.round(age / 60_000))} min` : age < 24 * 3600_000 ? `il y a ${Math.round(age / 3600_000)} h` : `il y a ${Math.round(age / 86400_000)} jours`;
+  const lines = [`Presse — ${n.coinName}`, `« ${n.title} »${n.source ? ` (${n.source}, ${ago})` : ` (${ago})`}`];
+  if (n.resume) lines.push(n.resume.replace(/\s+/g, ' ').trim().slice(0, 600));
+  return lines.join('\n');
 }
 
 /**
