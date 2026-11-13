@@ -48,16 +48,20 @@ describe('brief du runner', () => {
   it('marché, portefeuille du journal et variations 24 h ; une ligne sans prix connu est dite telle quelle', () => {
     const brief = buildBrief({ now: wednesday, bundle: bundleOf({ transactions: [solTx, btcTx, { ...solTx, id: 't3', coinId: 'jeton-x', symbol: 'xxxyz', name: 'Jeton X', quantity: 500 }] }), prices, fng: { value: 72, label: 'Avidité' }, currency: 'EUR', syncSavedAt: null, syncDevice: null });
     const lines = brief.split('\n');
-    expect(lines).toHaveLength(7);
+    // 11 novembre : le CPI du lendemain figure dans l'horizon (une ligne) et sa conduite à tenir (une autre).
+    expect(lines).toHaveLength(9);
     expect(lines[1]).toContain('Fear & Greed 72 (Avidité)');
     expect(lines[1]).toContain('BTC');
-    expect(lines[2]).toContain('Portefeuille (journal)');
-    expect(lines[2]).toContain('1 ligne sans prix connu'); // jeton-x : pas de prix → jamais 0 €
-    expect(lines[3]).toContain('BTC');
-    expect(lines[3]).toContain('SOL');
+    expect(lines[2]).toContain('À l’horizon :');
+    expect(lines[2]).toContain('Inflation US (CPI) demain');
+    expect(lines[3]).toContain('Inflation US (CPI) — ');
+    expect(lines[4]).toContain('Portefeuille (journal)');
+    expect(lines[4]).toContain('1 ligne sans prix connu'); // jeton-x : pas de prix → jamais 0 €
+    expect(lines[5]).toContain('BTC');
+    expect(lines[5]).toContain('SOL');
     // Valeur : 1 BTC à 172 000 € + 100 SOL à 3,44 € = 172 344 € (BTC ≈ 100 %, arrondi, SOL 0 %)
-    expect(lines[2]).toContain('172');
-    expect(lines[3]).toContain('BTC 100 %');
+    expect(lines[4]).toContain('172');
+    expect(lines[5]).toContain('BTC 100 %');
   });
 
   it('paliers atteints non vendus et alertes armées ; fraîcheur de la synchronisation', () => {

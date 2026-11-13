@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { atr, bollinger, ema, lastCross, macd, maxDrawdown, rsi, sma, toWeekly, type Candle } from './indicators';
 import { analyze } from './signals';
-import { computeCycle, piecewise, zoneFor, altSeasonIndex } from './cycle';
+import { computeCycle, halvingContext, piecewise, zoneFor, altSeasonIndex } from './cycle';
 import { backtestDca, fngMultiplier, isScheduledDay, mayerMultiplier, nextOccurrences, periodKey, lastOccurrence } from './dca';
 import { buildPositions, bucketOf, rebalance, stressTest, concentration } from './portfolio';
 import { computeFrenchTax, simulateSale } from './tax';
@@ -119,6 +119,30 @@ describe('cycle', () => {
     expect(r.temperature).toBeGreaterThanOrEqual(0);
     expect(r.temperature).toBeLessThanOrEqual(100);
     expect(r.components.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('les nouvelles composantes (MVRV, stablecoins) entrent dans la température, chacune expliquée', () => {
+    const closes = Array.from({ length: 1500 }, (_, i) => 10000 * (1 + 0.5 * Math.sin(i / 200)) * 1.0005 ** i);
+    const base = computeCycle({ btcDaily: makeCandles(closes), fng: 50 })!;
+    const extreme = computeCycle({ btcDaily: makeCandles(closes), fng: 50, mvrv: 3.5, stableShare: 3 })!;
+    // MVRV bulle + stablecoins déjà investis : la température monte nettement.
+    expect(extreme.temperature).toBeGreaterThan(base.temperature + 5);
+    const cold = computeCycle({ btcDaily: makeCandles(closes), fng: 50, mvrv: 0.9, stableShare: 11 })!;
+    expect(cold.temperature).toBeLessThan(base.temperature - 5);
+    const mvrvComp = extreme.components.find((c) => c.key === 'mvrv');
+    expect(mvrvComp?.weight).toBe(10);
+    expect(mvrvComp?.explain.toLowerCase()).toContain('capital');
+    expect(extreme.components.find((c) => c.key === 'stables')?.explain.toLowerCase()).toContain('stablecoins');
+  });
+
+  it('la position de halving avance avec la date', () => {
+    const after2024 = halvingContext(new Date(2025, 0, 1));
+    expect(after2024.last).toBe('2024-04-20');
+    expect(after2024.next).toBe('2028-04-15');
+    expect(after2024.daysSince).toBeGreaterThan(250);
+    expect(after2024.daysToNext).toBeGreaterThan(1000);
+    const r = computeCycle({ btcDaily: makeCandles(Array.from({ length: 400 }, () => 50000)), fng: 50 });
+    expect(r?.halving.daysToNext).toBeGreaterThan(0);
   });
 
   it('indice de saison des altcoins', () => {

@@ -28,7 +28,8 @@ const UP = { solana: { usd: 4, eur: 3.44, change: 6.2 }, bitcoin: { usd: 200_000
 const FLAT = { solana: { usd: 2, eur: 1.72, change: 0.1 }, bitcoin: { usd: 200_000, eur: 172_000, change: -1 } };
 
 // Mercredi 11 novembre 2026. Toutes les heures sont explicites : un runner ne doit rien à l'heure réelle.
-const H = (h: number, m = 0): Date => new Date(2026, 10, 11, h, m);
+// 20 novembre 2026 : aucun événement macro à moins de 2 jours (la file d'alerte des autres tests reste vierge).
+const H = (h: number, m = 0): Date => new Date(2026, 10, 20, h, m);
 
 /** Faux services autour du cycle : tout est enregistré, rien ne sort. */
 function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; telegramError?: string; noFile?: boolean; prices?: Record<string, { usd?: number; eur?: number; change?: number }>; fng?: { value: number; label: string } | null; btcDaily?: Candle[] | null; news?: NewsItem[]; newsRatings?: { importance: number; resume: string }[]; countAi?: { n: number } } = {}) {
@@ -59,6 +60,9 @@ function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; t
     // Historique BTC absent par défaut : pas de température (les tests de zone le fournissent).
     btcDaily: async () => opts.btcDaily === undefined ? null : opts.btcDaily,
     funding: async () => 0.0001,
+    // Métriques de cycle lentes : muettes par défaut (température sans MVRV ni stablecoins).
+    mvrv: async () => null,
+    stableShare: async () => null,
     // Veille presse : muette par défaut (les tests dédiés la fournissent).
     news: async () => opts.news ?? [],
     aiRates: async (items) => {
@@ -111,7 +115,7 @@ describe('cycle du runner — alertes et paliers', () => {
   });
 
   it('ni le palier ni l’alerte ne sont jamais répétés une fois envoyés (plus de rappel hebdomadaire)', async () => {
-    const at = Date.now();
+    const at = H(6, 30).getTime(); // ancré au « maintenant » du test : l'élagage des clés se juge en temps fictif
     const done = await runCycle(CFG, {
       ...emptyState(),
       sent: { 'alert:a1': at, 'exit:solana:2': at },
@@ -235,7 +239,7 @@ describe('cycle du runner — brief quotidien', () => {
     expect(first.state.lastBriefSlot.matin).toBeUndefined();
     const working = flatDeps();
     const second = await runCycle(CFG, first.state, dry(), working.deps, H(9, 5));
-    expect(second.state.lastBriefSlot.matin).toBe('2026-11-11');
+    expect(second.state.lastBriefSlot.matin).toBe('2026-11-20');
     expect(working.sent).toHaveLength(1);
   });
 
@@ -251,10 +255,10 @@ describe('cycle du runner — veille presse (idées 13)', () => {
   const NEWS_CFG = { ...CFG, newsEnabled: true, mistralApiKey: 'cle-ia', briefEnabled: false };
   const newsItem = (title: string, hoursAgo = 1): NewsItem => ({
     coinId: 'solana', coinName: 'Solana', title, url: `https://news.google.com/r/${encodeURIComponent(title)}`,
-    source: 'Journal Crypto', publishedAt: Date.UTC(2026, 10, 11, 10, 0) - hoursAgo * 3600_000, summaryText: '',
+    source: 'Journal Crypto', publishedAt: Date.UTC(2026, 10, 20, 10, 0) - hoursAgo * 3600_000, summaryText: '',
   });
   // 11 novembre 2026, 10 h UTC : « maintenant » pour ces tests (avant les briefs US de 15 h 30 UTC).
-  const NOW = new Date(Date.UTC(2026, 10, 11, 10, 0));
+  const NOW = new Date(Date.UTC(2026, 10, 20, 10, 0));
 
   it('une actu notée importante par l’IA part en alerte, avec son résumé, puis ne repart jamais', async () => {
     const { deps, sent } = makeDeps({ transactions: [txSol] }, {
@@ -317,10 +321,42 @@ describe('cycle du runner — veille presse (idées 13)', () => {
   });
 });
 
+describe('cycle du runner — calendrier macro (idées 3/23)', () => {
+  it('la veille d’un événement macro, un message part une fois, avec la conduite à tenir', async () => {
+    // 11 novembre 2026 : le CPI est publié le lendemain.
+    const { deps, sent } = makeDeps({ transactions: [txSol] }, { prices: FLAT });
+    const first = await runCycle({ ...CFG, briefEnabled: false }, emptyState(), dry(), deps, new Date(2026, 10, 11, 9, 0));
+    expect(first.result.sent).toBe(1);
+    expect(sent[0]).toContain('Demain : Inflation US (CPI)');
+    expect(sent[0]).toContain('14 h 30');
+    expect(first.state.sent['macro:cpi:2026-11-12']).toBeTruthy();
+    // Le cycle suivant ne le renvoie pas.
+    const second = await runCycle({ ...CFG, briefEnabled: false }, first.state, dry(), deps, new Date(2026, 10, 11, 9, 5));
+    expect(second.result.sent).toBe(0);
+  });
+
+  it('le brief du matin cite l’horizon macro et ses métriques de cycle', async () => {
+    const { deps, sent } = makeDeps({ transactions: [txSol] }, {
+      prices: FLAT,
+      btcDaily: btcCandles(-0.05, 0),
+      fng: { value: 30, label: 'Peur' },
+    });
+    // 20 novembre 2026, 10 h : le CPI de décembre et le FOMC de décembre sont à l'horizon des 21 jours.
+    // (les métriques MVRV/stablecoins sont nulles ici : "Marché" ne les montre pas, jamais un chiffre inventé)
+    const st = { ...emptyState(), lastBriefSlot: { 'us-open': isoDay(new Date(2026, 10, 20)), 'us-close': isoDay(new Date(2026, 10, 20)) } };
+    await runCycle(CFG, st, dry({ forceBrief: true }), deps, H(10, 0));
+    const brief = sent.find((t) => t.includes('Boussole — brief du'));
+    expect(brief).toBeTruthy();
+    expect(brief).toContain('À l’horizon :');
+    expect(brief).toContain('Fed (FOMC) dans 19 j'); // à 19 jours du 20 novembre : le FOMC de décembre
+    expect(brief).toContain('halving estimé'); // la position de cycle, même sans MVRV disponible
+  });
+});
+
 describe('cycle du runner — briefs aux moments clés américains', () => {
   it('le brief d’ouverture US part après 9 h 30 New York, une seule fois par jour', async () => {
     const usCfg = { ...CFG, briefUsOpen: true, briefUsClose: false };
-    const day = new Date(2026, 10, 11, 12, 0); // n’importe quelle heure locale du jour : l’instant exact vient de New York
+    const day = new Date(2026, 10, 20, 12, 0); // n’importe quelle heure locale du jour : l’instant exact vient de New York
     const openMs = nyEpoch(9, 30, day);
     expect(openMs).not.toBeNull();
     if (openMs == null) return;
@@ -338,7 +374,7 @@ describe('cycle du runner — briefs aux moments clés américains', () => {
 
   it('le brief de clôture US part après 16 h New York, et le matin ne redémarre pas les créneaux', async () => {
     const usCfg = { ...CFG, briefUsOpen: false, briefUsClose: true };
-    const day = new Date(2026, 10, 11, 12, 0);
+    const day = new Date(2026, 10, 20, 12, 0);
     const closeMs = nyEpoch(16, 0, day);
     expect(closeMs).not.toBeNull();
     if (closeMs == null) return;

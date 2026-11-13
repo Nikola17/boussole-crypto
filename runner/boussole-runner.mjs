@@ -453,6 +453,24 @@ var TEMPERATURE = { extremeFear: 20, fear: 40, warm: 60, euphoria: 80 };
 var MIN_RUNG_VALUE_USD = 20;
 
 // src/lib/cycle.ts
+var HALVINGS = ["2012-11-28", "2016-07-09", "2020-05-11", "2024-04-20", "2028-04-15"];
+function halvingContext(now = /* @__PURE__ */ new Date()) {
+  const t = now.getTime();
+  let last = HALVINGS[0];
+  let next = HALVINGS[1] ?? HALVINGS[0];
+  for (let i = 0; i < HALVINGS.length - 1; i++) {
+    if (Date.parse(HALVINGS[i]) <= t) {
+      last = HALVINGS[i];
+      next = HALVINGS[i + 1];
+    }
+  }
+  return {
+    last,
+    next,
+    daysSince: Math.max(0, Math.floor((t - Date.parse(last)) / 864e5)),
+    daysToNext: Math.max(0, Math.ceil((Date.parse(next) - t) / 864e5))
+  };
+}
 function piecewise(x, points) {
   if (!Number.isFinite(x)) return NaN;
   if (x <= points[0][0]) return points[0][1];
@@ -470,7 +488,7 @@ function zoneFor(t) {
   if (t < TEMPERATURE.euphoria) return { key: "chaleur", label: "March\xE9 chaud", action: "DCA r\xE9duit (\xD70,5) et pr\xE9pare tes prises de profits par paliers sur les positions en gain.", dcaMultiplier: 0.5, tone: "down" };
   return { key: "euphorie", label: "Euphorie", action: "Prends des profits progressivement, stoppe les achats d\u2019altcoins, remonte ta part de stablecoins.", dcaMultiplier: 0.25, tone: "down" };
 }
-function computeCycle({ btcDaily, fng, fundingRate }) {
+function computeCycle({ btcDaily, fng, fundingRate, mvrv, stableShare }) {
   if (btcDaily.length < 200) return null;
   const closes = btcDaily.map((c) => c.close);
   const price = closes[closes.length - 1];
@@ -536,6 +554,26 @@ function computeCycle({ btcDaily, fng, fundingRate }) {
       explain: "Rapport MM111 / (2 \xD7 MM350). \xC0 100 %, il a signal\xE9 les sommets de cycle de 2013, 2017 et 2021."
     });
   }
+  if (mvrv != null && Number.isFinite(mvrv)) {
+    comps.push({
+      key: "mvrv",
+      label: "MVRV (BTC)",
+      value: `${mvrv.toFixed(2).replace(".", ",")}\xD7`,
+      weight: 10,
+      heat: piecewise(mvrv, [[0.8, 0], [1, 25], [1.5, 50], [2, 72], [2.5, 85], [3, 95], [4, 100]]),
+      explain: "Capitalisation divis\xE9e par capital r\xE9alis\xE9 (ce que valent les pi\xE8ces au prix o\xF9 elles ont boug\xE9 pour la derni\xE8re fois). Sous 1 : le march\xE9 d\xE9tient globalement en perte \u2014 zone d\u2019accumulation. Au-dessus de 3 : chaque cycle s\u2019y est arr\xEAt\xE9 (2013, 2017, 2021). Source gratuite retard\xE9e de ~7 jours."
+    });
+  }
+  if (stableShare != null && Number.isFinite(stableShare)) {
+    comps.push({
+      key: "stables",
+      label: "Puissance stablecoins",
+      value: `${stableShare.toFixed(1).replace(".", ",")} % de la crypto`,
+      weight: 5,
+      heat: piecewise(stableShare, [[3, 100], [5, 70], [7, 40], [9, 20], [12, 10]]),
+      explain: "Part des stablecoins dans la capitalisation totale : la poudre s\xE8che install\xE9e en attendant d\u2019acheter. Une part \xE9lev\xE9e = du carburant disponible ; une part faible = le capital est d\xE9j\xE0 investi (et r\xE9cup\xE9rer du cash co\xFBte cher)."
+    });
+  }
   if (fundingRate != null && Number.isFinite(fundingRate)) {
     const f = fundingRate * 100;
     comps.push({
@@ -549,7 +587,7 @@ function computeCycle({ btcDaily, fng, fundingRate }) {
   }
   const wsum = comps.reduce((s, c) => s + (Number.isFinite(c.heat) ? c.weight : 0), 0);
   const temperature = wsum > 0 ? comps.reduce((s, c) => s + (Number.isFinite(c.heat) ? c.heat * c.weight : 0), 0) / wsum : 50;
-  return { temperature, zone: zoneFor(temperature), components: comps, mayer, ratio200w, piCycle };
+  return { temperature, zone: zoneFor(temperature), components: comps, mayer, ratio200w, piCycle, halving: halvingContext() };
 }
 
 // src/lib/alerts.ts
@@ -726,6 +764,84 @@ function nextBasketOccurrences(b, from, count = 4) {
   return out;
 }
 
+// src/lib/macro.ts
+var MACRO_LABEL = {
+  fomc: "Fed (FOMC)",
+  cpi: "Inflation US (CPI)",
+  expiry: "\xC9ch\xE9ance d\xE9riv\xE9s BTC",
+  halving: "Halving Bitcoin"
+};
+var MACRO_ADVICE = {
+  fomc: "D\xE9cision de taux \xE0 19 h, puis conf\xE9rence de Powell \xE0 19 h 30 (Paris). Volatilit\xE9 garantie : \xE9vite de passer un ordre dans la demi-heure autour de l\u2019annonce, et garde ta r\xE9serve disponible 24 h.",
+  cpi: "Publication \xE0 14 h 30 (Paris). Si tu dois acheter ou vendre, fais-le plut\xF4t \xE0 distance de 14 h 25-14 h 45 : la surprise est souvent violente puis dig\xE9r\xE9e.",
+  expiry: "\xC9ch\xE9ance trimestrielle des futures et options Bitcoin (Deribit, 8 h UTC) : le cours peut bouger au matin sans raison visible, puis s\u2019apaiser. Pas de panique, pas d\u2019achat impulsif sur ce mouvement.",
+  halving: "La r\xE9compense de bloc est divis\xE9e par deux : l\u2019offre neuve passe de ~450 \xE0 ~225 BTC/jour. Historiquement, les 12-18 mois qui suivent sont la partie la plus chaude du cycle \u2014 c\u2019est le moment o\xF9 tes paliers de vente servent."
+};
+var FOMC_DAYS = [
+  "2026-01-28",
+  "2026-03-18",
+  "2026-04-29",
+  "2026-06-17",
+  "2026-07-29",
+  "2026-09-16",
+  "2026-10-28",
+  "2026-12-09"
+];
+var CPI_DAYS = [
+  "2026-01-13",
+  "2026-02-11",
+  "2026-03-11",
+  "2026-04-10",
+  "2026-05-12",
+  "2026-06-10",
+  "2026-07-14",
+  "2026-08-12",
+  "2026-09-11",
+  "2026-10-15",
+  "2026-11-12",
+  "2026-12-15"
+];
+function lastFridayOf(year, month) {
+  const last = new Date(year, month + 1, 0);
+  const d = new Date(last);
+  d.setDate(d.getDate() - (d.getDay() + 2) % 7);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function daysToIso(isoDate, now) {
+  const at = /* @__PURE__ */ new Date(isoDate + "T12:00:00");
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  return Math.round((at.getTime() - today.getTime()) / 864e5);
+}
+var mk = (kind, date, now, label) => ({
+  id: `${kind}:${date}`,
+  date,
+  kind,
+  label: label ?? MACRO_LABEL[kind],
+  daysTo: daysToIso(date, now),
+  advice: MACRO_ADVICE[kind]
+});
+function macroEvents(now) {
+  const year = now.getFullYear();
+  const ft = ["fomc", "cpi"];
+  const out = [];
+  for (const k of ft) for (const d of k === "fomc" ? FOMC_DAYS : CPI_DAYS) {
+    if (daysToIso(d, now) >= -2 && daysToIso(d, now) < 400) out.push(mk(k, d, now));
+  }
+  for (let y = year - 2; y <= year + 2; y++) {
+    const d = lastFridayOf(y, 11);
+    if (daysToIso(d, now) >= -2 && daysToIso(d, now) < 400) out.push(mk("expiry", d, now));
+    for (const m of [2, 5, 8]) {
+      const q = lastFridayOf(y, m);
+      if (daysToIso(q, now) >= -2 && daysToIso(q, now) < 400) out.push(mk("expiry", q, now));
+    }
+  }
+  out.sort((a, b) => a.daysTo - b.daysTo);
+  return out;
+}
+function nextMacroEvents(now, max = 4, withinDays = 60) {
+  return macroEvents(now).filter((e) => e.daysTo >= 0 && e.daysTo <= withinDays).slice(0, max);
+}
+
 // src/runner/brief.ts
 function nyEpoch(hour, minute, now) {
   let day;
@@ -767,8 +883,19 @@ function buildBrief(i) {
   const market = [];
   if (i.fng) market.push(`Fear & Greed ${i.fng.value} (${i.fng.label})`);
   if (i.temperature) market.push(`zone : ${i.temperature.zoneLabel} (${Math.round(i.temperature.value)}/100)`);
+  if (i.cycleMetrics?.mvrv != null) market.push(`MVRV ${i.cycleMetrics.mvrv.toFixed(2).replace(".", ",")}\xD7`);
+  if (i.cycleMetrics?.stableShare != null) market.push(`stablecoins ${i.cycleMetrics.stableShare.toFixed(1).replace(".", ",")} %`);
   if (btc?.usd != null) market.push(`BTC ${fmtPrice(btc.usd, "USD")}${btc.change != null ? ` (${fmtPct(btc.change, 1, true)} / 24 h)` : ""}`);
   lines.push(market.length ? `March\xE9 : ${market.join(" \xB7 ")}` : "March\xE9 : donn\xE9es indisponibles pour l\u2019instant.");
+  const horizon = nextMacroEvents(i.now, 3, 21);
+  if (horizon.length) {
+    lines.push(`\xC0 l\u2019horizon : ${horizon.map((e) => `${e.label} ${e.daysTo === 0 ? "aujourd\u2019hui" : e.daysTo === 1 ? "demain" : `dans ${e.daysTo} j`}`).join(" \xB7 ")}`);
+    const first = horizon[0];
+    if (first.daysTo <= 3) lines.push(`${first.label} \u2014 ${first.advice}`);
+  }
+  if (i.cycleMetrics?.halvingDaysToNext != null && i.cycleMetrics.halvingDaysToNext > 0) {
+    lines.push(`Cycle : prochain halving estim\xE9 dans ${Math.round(i.cycleMetrics.halvingDaysToNext / 30)} mois.`);
+  }
   const priceOf = (coinId) => {
     const p = i.prices[coinId];
     if (!p || typeof p !== "object") return null;
@@ -979,6 +1106,13 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
       if (last == null || nowMs - last >= ZONE_REPEAT_MS) queue.push({ key, text: zoneMessage(temperature.zone, temperature.temperature, state.zoneLabel) });
     }
   }
+  for (const ev of nextMacroEvents(now, 3, 2)) {
+    const key = `macro:${ev.id}`;
+    if (state.sent[key] == null) {
+      queue.push({ key, text: `${ev.daysTo === 0 ? "Aujourd\u2019hui" : "Demain"} : ${ev.label}
+${ev.advice}` });
+    }
+  }
   const ratedNews = [];
   const newsAlerts = [];
   const seenNews = [];
@@ -1050,6 +1184,7 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
       syncSavedAt: bundle.savedAt ?? null,
       syncDevice: bundle.device ?? null,
       temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
+      cycleMetrics: temperature ? { mvrv: temperature.mvrv, stableShare: temperature.stableShare, halvingDaysToNext: temperature.halvingDaysToNext } : null,
       slot: slot.id,
       news: ratedNews.slice(0, 6)
     });
@@ -1074,8 +1209,12 @@ async function marketTemperature(deps, fng) {
   const btcDaily = await deps.btcDaily().catch(() => null);
   if (!btcDaily) return null;
   const funding = await deps.funding().catch(() => null);
-  const r = computeCycle({ btcDaily, fng: fng?.value, fundingRate: funding ?? void 0 });
-  return r ? { temperature: r.temperature, zone: { key: r.zone.key, label: r.zone.label, action: r.zone.action } } : null;
+  const [mvrv, stableShare] = await Promise.all([
+    deps.mvrv().catch(() => null),
+    deps.stableShare().catch(() => null)
+  ]);
+  const r = computeCycle({ btcDaily, fng: fng?.value, fundingRate: funding ?? void 0, mvrv: mvrv ?? void 0, stableShare: stableShare ?? void 0 });
+  return r ? { temperature: r.temperature, zone: { key: r.zone.key, label: r.zone.label, action: r.zone.action }, mvrv, stableShare, halvingDaysToNext: r.halving.daysToNext } : null;
 }
 
 // src/runner/market.ts
@@ -1139,6 +1278,36 @@ async function fetchFearGreed() {
     if (!Number.isFinite(value)) return null;
     const LABELS = { "Extreme Fear": "Peur extr\xEAme", Fear: "Peur", Neutral: "Neutre", Greed: "Avidit\xE9", "Extreme Greed": "Avidit\xE9 extr\xEAme" };
     return { value, label: LABELS[d.value_classification ?? ""] ?? d.value_classification ?? "" };
+  } catch {
+    return null;
+  }
+}
+async function fetchMvrv() {
+  try {
+    const res = await fetch("https://bitcoin-data.com/v1/mvrv/zscore", { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15e3) });
+    if (!res.ok) return null;
+    const r = await res.json();
+    const v = Number(r.mvrv);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+async function fetchStablecoinShare(coingeckoKey) {
+  try {
+    const headers = {};
+    if (coingeckoKey) headers["x-cg-demo-api-key"] = coingeckoKey;
+    const [stableRes, globalRes] = await Promise.all([
+      fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category=stablecoins&order=market_cap_desc&per_page=100&page=1`, { headers: { ...headers, Accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS2) }),
+      fetch(`https://api.coingecko.com/api/v3/global`, { headers: { ...headers, Accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS2) })
+    ]);
+    if (!stableRes.ok || !globalRes.ok) return null;
+    const stables = await stableRes.json();
+    const global = await globalRes.json();
+    const cap = stables.reduce((sum, c) => sum + (Number(c.market_cap) || 0), 0);
+    const total = global.data?.total_market_cap?.usd ?? 0;
+    if (!(cap > 0) || !(total > 0) || cap > total) return null;
+    return cap / total * 100;
   } catch {
     return null;
   }
@@ -1277,6 +1446,14 @@ async function cachedBtcDaily() {
   }
   return btcDailyCache?.data ?? null;
 }
+var slowMetricsCache = null;
+async function cachedSlowMetrics(cfg) {
+  if (!slowMetricsCache || Date.now() - slowMetricsCache.at > 6 * 60 * 6e4) {
+    const [mvrv, stableShare] = await Promise.all([fetchMvrv().catch(() => null), fetchStablecoinShare(cfg.coingeckoKey).catch(() => null)]);
+    if (mvrv != null || stableShare != null || !slowMetricsCache) slowMetricsCache = { at: Date.now(), mvrv, stableShare };
+  }
+  return { mvrv: slowMetricsCache?.mvrv ?? null, stableShare: slowMetricsCache?.stableShare ?? null };
+}
 var fngCache = null;
 async function cachedFng() {
   if (!fngCache || Date.now() - fngCache.at > 30 * 6e4) {
@@ -1303,6 +1480,8 @@ var depsOf = (cfg) => ({
   fearGreed: () => cachedFng(),
   btcDaily: () => cachedBtcDaily(),
   funding: () => fetchBtcFunding(),
+  mvrv: async () => (await cachedSlowMetrics(cfg)).mvrv,
+  stableShare: async () => (await cachedSlowMetrics(cfg)).stableShare,
   news: (coins) => cfg.newsEnabled ? cachedNews(coins) : Promise.resolve([]),
   aiRates: (items) => cfg.mistralApiKey ? rateNews(cfg.mistralApiKey, cfg.mistralModel, items) : Promise.resolve(items.map(() => ({ importance: 0, resume: "" })))
 });

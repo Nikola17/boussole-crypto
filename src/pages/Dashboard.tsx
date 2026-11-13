@@ -11,6 +11,7 @@ import { fmtCompact, fmtMoney, fmtNum, fmtPrice } from '../lib/format';
 import { Link, navigate } from '../router';
 import { readBriefActions } from '../lib/reportData';
 import { BackupReminder } from '../components/StatusBanners';
+import { MacroCard } from '../components/MacroCard';
 import {
   Badge, Banner, Button, Card, CoinIcon, Delta, ErrorNote, InfoTip, PageHeader, SignalBadge, Sparkline, Spinner, Stat,
   TemperatureMeter,
@@ -70,7 +71,7 @@ export default function Dashboard() {
 
       <div className="grid gap-4 lg:grid-cols-5">
         {/* Température du marché — chiffre héros */}
-        <Card className="lg:col-span-3" title={<span className="inline-flex items-center gap-2"><Gauge className="size-4 text-accent" />Température du marché <InfoTip>Indice Boussole de 0 à 100 combinant le Fear &amp; Greed, le multiple de Mayer, le prix vs moyenne 200 semaines, le RSI hebdo, le Pi Cycle et le taux de financement du Bitcoin. Froid = opportunités, chaud = prudence.</InfoTip></span>}>
+        <Card className="lg:col-span-3" title={<span className="inline-flex items-center gap-2"><Gauge className="size-4 text-accent" />Température du marché <InfoTip>Indice Boussole de 0 à 100 combinant le Fear &amp; Greed, le multiple de Mayer, le prix vs moyenne 200 semaines, le RSI hebdo, le Pi Cycle, le taux de financement, le MVRV et la part des stablecoins. Froid = opportunités, chaud = prudence.</InfoTip></span>}>
           {cycle.isLoading && <Spinner label="Calcul du cycle (historique Bitcoin)…" />}
           {cycle.data && (
             <div>
@@ -142,6 +143,8 @@ export default function Dashboard() {
           )}
         </Card>
       </div>
+
+      <MacroCard />
 
       {/* Indicateurs clés */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-6">

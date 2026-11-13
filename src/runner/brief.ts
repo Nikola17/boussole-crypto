@@ -12,6 +12,7 @@ import { fmtDate, fmtPct, fmtPrice, isoDay } from '../lib/format';
 import type { CoinPrice } from './market';
 import type { RatedNews } from './news';
 import type { RunnerConfig } from './config';
+import { nextMacroEvents } from '../lib/macro';
 
 export type BriefSlotId = 'matin' | 'us-open' | 'us-close';
 
@@ -57,6 +58,8 @@ export interface BriefInputs {
   syncDevice: string | null;
   /** Température du marché calculée par le serveur (null : indisponible). */
   temperature?: { value: number; zoneLabel: string } | null;
+  /** Métriques de cycle du serveur : MVRV, part des stablecoins, position de halving (null : indisponibles). */
+  cycleMetrics?: { mvrv: number | null; stableShare: number | null; halvingDaysToNext: number | null } | null;
   /** Créneau du brief : « matin » (complet), ou formes courtes aux moments clés américains. */
   slot?: BriefSlotId;
   /** Actus fraîches des cryptos suivies (triées, au plus 3 lignes retinues dans le brief). */
@@ -81,8 +84,22 @@ export function buildBrief(i: BriefInputs): string {
   const market: string[] = [];
   if (i.fng) market.push(`Fear & Greed ${i.fng.value} (${i.fng.label})`);
   if (i.temperature) market.push(`zone : ${i.temperature.zoneLabel} (${Math.round(i.temperature.value)}/100)`);
+  if (i.cycleMetrics?.mvrv != null) market.push(`MVRV ${i.cycleMetrics.mvrv.toFixed(2).replace('.', ',')}×`);
+  if (i.cycleMetrics?.stableShare != null) market.push(`stablecoins ${i.cycleMetrics.stableShare.toFixed(1).replace('.', ',')} %`);
   if (btc?.usd != null) market.push(`BTC ${fmtPrice(btc.usd, 'USD')}${btc.change != null ? ` (${fmtPct(btc.change, 1, true)} / 24 h)` : ''}`);
   lines.push(market.length ? `Marché : ${market.join(' · ')}` : 'Marché : données indisponibles pour l’instant.');
+
+  // À l'horizon : les événements macro/crypto qui peuvent bouger le marché, avec la conduite à tenir.
+  const horizon = nextMacroEvents(i.now, 3, 21);
+  if (horizon.length) {
+    lines.push(`À l’horizon : ${horizon.map((e) => `${e.label} ${e.daysTo === 0 ? 'aujourd’hui' : e.daysTo === 1 ? 'demain' : `dans ${e.daysTo} j`}`).join(' · ')}`);
+    const first = horizon[0];
+    if (first.daysTo <= 3) lines.push(`${first.label} — ${first.advice}`);
+  }
+  if (i.cycleMetrics?.halvingDaysToNext != null && i.cycleMetrics.halvingDaysToNext > 0) {
+    lines.push(`Cycle : prochain halving estimé dans ${Math.round(i.cycleMetrics.halvingDaysToNext / 30)} mois.`);
+
+  }
 
   // Portefeuille au journal, valorisé aux prix connus (le runner ne relit pas les wallets blockchain).
   const priceOf = (coinId: string): number | null => {

@@ -21,7 +21,7 @@ import { fetchRemote, pushRemote } from '../lib/sync/github';
 import { applyEnv, validateConfig, type RunnerConfig } from './config';
 import { emptyState, parseState, type RunnerState } from './state';
 import { runCycle, type CycleDeps } from './cycle';
-import { fetchBtcDaily, fetchBtcFunding, fetchFearGreed, fetchPrices } from './market';
+import { fetchBtcDaily, fetchBtcFunding, fetchFearGreed, fetchMvrv, fetchPrices, fetchStablecoinShare } from './market';
 import { recentChats, sendMessage } from './telegram';
 import { fetchCoinNews, type NewsItem, type WatchedCoin } from './news';
 import { rateNews } from './ai';
@@ -90,6 +90,16 @@ async function cachedBtcDaily(): Promise<Candle[] | null> {
   return btcDailyCache?.data ?? null;
 }
 
+// MVRV et part des stablecoins : indicateurs lents par nature — rafraîchis au maximum toutes les 6 heures.
+let slowMetricsCache: { at: number; mvrv: number | null; stableShare: number | null } | null = null;
+async function cachedSlowMetrics(cfg: RunnerConfig): Promise<{ mvrv: number | null; stableShare: number | null }> {
+  if (!slowMetricsCache || Date.now() - slowMetricsCache.at > 6 * 60 * 60_000) {
+    const [mvrv, stableShare] = await Promise.all([fetchMvrv().catch(() => null), fetchStablecoinShare(cfg.coingeckoKey).catch(() => null)]);
+    if (mvrv != null || stableShare != null || !slowMetricsCache) slowMetricsCache = { at: Date.now(), mvrv, stableShare };
+  }
+  return { mvrv: slowMetricsCache?.mvrv ?? null, stableShare: slowMetricsCache?.stableShare ?? null };
+}
+
 // Fear & Greed : lu à chaque cycle pour la température de marché — rafraîchi au maximum toutes les 30 minutes.
 let fngCache: { at: number; data: { value: number; label: string } | null } | null = null;
 async function cachedFng(): Promise<{ value: number; label: string } | null> {
@@ -121,6 +131,8 @@ const depsOf = (cfg: RunnerConfig): CycleDeps => ({
   fearGreed: () => cachedFng(),
   btcDaily: () => cachedBtcDaily(),
   funding: () => fetchBtcFunding(),
+  mvrv: async () => (await cachedSlowMetrics(cfg)).mvrv,
+  stableShare: async () => (await cachedSlowMetrics(cfg)).stableShare,
   news: (coins) => cfg.newsEnabled ? cachedNews(coins) : Promise.resolve([]),
   aiRates: (items) => cfg.mistralApiKey ? rateNews(cfg.mistralApiKey, cfg.mistralModel, items) : Promise.resolve(items.map(() => ({ importance: 0, resume: '' }))),
 });
