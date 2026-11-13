@@ -624,7 +624,9 @@ function watchOf(bundle) {
   const list2 = (k) => Array.isArray(bundle.data[k]) ? bundle.data[k] : [];
   const stamps = bundle.data;
   const exitDone = stamps.exitDone && typeof stamps.exitDone === "object" && !Array.isArray(stamps.exitDone) ? stamps.exitDone : {};
-  return { alerts: list2("alerts"), transactions: list2("transactions"), theses: list2("theses"), exitDone };
+  const paperRaw = stamps.paper;
+  const paper = paperRaw && typeof paperRaw === "object" && !Array.isArray(paperRaw) ? paperRaw : null;
+  return { alerts: list2("alerts"), transactions: list2("transactions"), theses: list2("theses"), exitDone, paperTrades: list2("paperTrades"), paper };
 }
 var alertKey = (id) => `alert:${id}`;
 var rungKey = (coinId, multiple) => `exit:${coinId}:${multiple}`;
@@ -762,6 +764,65 @@ function nextBasketOccurrences(b, from, count = 4) {
     cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
   }
   return out;
+}
+
+// src/lib/paper.ts
+function paperPositions(trades, prices) {
+  const agg = /* @__PURE__ */ new Map();
+  for (const t of trades) {
+    const a = agg.get(t.coinId) ?? { coinId: t.coinId, symbol: t.symbol, name: t.name, quantity: 0, costUsd: 0 };
+    const fee = t.feeUsd ?? 0;
+    if (t.type === "buy") {
+      a.quantity += t.quantity;
+      a.costUsd += t.quantity * t.priceUsd + fee;
+    } else {
+      const avgCost = a.quantity > 0 ? a.costUsd / a.quantity : 0;
+      const qty = Math.min(t.quantity, a.quantity);
+      a.quantity -= qty;
+      a.costUsd = Math.max(0, a.costUsd - qty * avgCost);
+    }
+    if (a.quantity <= 1e-12) {
+      a.quantity = 0;
+      a.costUsd = Math.max(0, a.costUsd);
+    }
+    agg.set(t.coinId, a);
+  }
+  const positions = [...agg.values()].filter((a) => a.quantity > 0);
+  const unpriced = positions.filter((p) => prices.get(p.coinId) == null).length;
+  return {
+    positions: positions.map(({ coinId, symbol, name, quantity, costUsd }) => ({ coinId, symbol, name, quantity, costUsd })),
+    unpriced
+  };
+}
+function paperStatus(startingUsd, trades, prices) {
+  let cash = startingUsd;
+  for (const t of trades) {
+    const fee = t.feeUsd ?? 0;
+    if (t.type === "buy") cash -= t.quantity * t.priceUsd + fee;
+    else cash += t.quantity * t.priceUsd - fee;
+  }
+  const base = paperPositions(trades, prices);
+  const positions = base.positions.map((p) => {
+    const price = prices.get(p.coinId);
+    const value = price != null ? p.quantity * price : null;
+    return { ...p, priceUsd: price ?? null, valueUsd: value, pnlUsd: value != null ? value - p.costUsd : null, pnlPct: value != null && p.costUsd > 0 ? (value / p.costUsd - 1) * 100 : null };
+  });
+  positions.sort((a, b) => (b.valueUsd ?? b.costUsd) - (a.valueUsd ?? a.costUsd));
+  const investedCostUsd = positions.reduce((s, p) => s + p.costUsd, 0);
+  const valueUsd = positions.reduce((s, p) => s + (p.valueUsd ?? 0), 0);
+  const totalUsd = cash + valueUsd;
+  const totalInvestedUsd = trades.filter((t) => t.type === "buy").reduce((s, t) => s + t.quantity * t.priceUsd + (t.feeUsd ?? 0), 0);
+  return {
+    cashUsd: cash,
+    investedCostUsd,
+    valueUsd,
+    totalUsd,
+    pnlUsd: totalUsd - startingUsd,
+    pnlPct: startingUsd > 0 ? (totalUsd / startingUsd - 1) * 100 : 0,
+    totalInvestedUsd,
+    positions,
+    unpriced: base.unpriced
+  };
 }
 
 // src/lib/macro.ts
@@ -921,6 +982,16 @@ function buildBrief(i) {
     lines.push(`Portefeuille (journal) : ${fmtPrice(total, cur)}${withoutPrice ? ` \u2014 ${withoutPrice} ligne${withoutPrice > 1 ? "s" : ""} sans prix connu` : ""}`);
     lines.push(rows.slice(0, HEAD_TOP).map((r) => `${r.symbol.toUpperCase()} ${Math.round(r.share)} %${r.change != null ? ` (${fmtPct(r.change, 1, true)})` : ""}`).join(" \xB7 "));
   }
+  const usd = /* @__PURE__ */ new Map();
+  for (const [id, p] of Object.entries(i.prices)) if (typeof p?.usd === "number" && p.usd > 0) usd.set(id, p.usd);
+  const paper = watch.paper;
+  if (paper?.enabled && watch.paperTrades.length) {
+    const st = paperStatus(paper.startingUsd, watch.paperTrades, usd);
+    if (st.positions.length) {
+      const badge = st.pnlUsd >= 0 ? "+" : "";
+      lines.push(`Papier (exp\xE9rimentations) : ${fmtPrice(st.totalUsd, "USD")} (${badge}${st.pnlPct.toFixed(1).replace(".", ",")} %)${st.unpriced ? `${st.unpriced} ligne${st.unpriced > 1 ? "s" : ""} sans prix` : ""}`);
+    }
+  }
   const plans = list(i.bundle.data.dcaPlans).filter((p) => p.active);
   const dcaExecs = list(i.bundle.data.dcaExecutions);
   const baskets = list(i.bundle.data.basket).filter((b) => b.active);
@@ -948,8 +1019,6 @@ function buildBrief(i) {
   if (due.length) lines.push(`Aujourd\u2019hui : ${due.join(" \xB7 ")}`);
   if (!short && upcoming.length) lines.push(`Prochaine \xE9ch\xE9ance : ${upcoming.join(" \xB7 ")}`);
   if (!short && !due.length && !upcoming.length) lines.push("Aucune \xE9ch\xE9ance DCA programm\xE9e.");
-  const usd = /* @__PURE__ */ new Map();
-  for (const [id, p] of Object.entries(i.prices)) if (typeof p?.usd === "number" && p.usd > 0) usd.set(id, p.usd);
   const rungs = hitRungs(watch, usd);
   if (rungs.length) lines.push(`Paliers atteints non vendus : ${rungs.map((r) => `${r.symbol.toUpperCase()} \xD7${r.multiple} (vends ${r.pct} %)`).join(" \xB7 ")}`);
   if (!short) {
@@ -1028,6 +1097,7 @@ var ZONE_REPEAT_MS = 7 * DAY_MS2;
 function coinsOf(bundle, watch) {
   const ids = /* @__PURE__ */ new Set(["bitcoin"]);
   for (const coinId of buildPositions(watch.transactions).keys()) if (coinId) ids.add(coinId);
+  for (const t of watch.paperTrades) ids.add(t.coinId);
   for (const a of watch.alerts) if (a.active && !a.triggeredAt) ids.add(a.coinId);
   const ref = (v) => {
     if (v && typeof v === "object") {

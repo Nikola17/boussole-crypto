@@ -9,6 +9,7 @@ import { isBasketDay, nextBasketOccurrences } from '../lib/basket';
 import { isScheduledDay, nextOccurrences, periodKey } from '../lib/dca';
 import { buildPositions } from '../lib/portfolio';
 import { fmtDate, fmtPct, fmtPrice, isoDay } from '../lib/format';
+import { paperStatus } from '../lib/paper';
 import type { CoinPrice } from './market';
 import type { RatedNews } from './news';
 import type { RunnerConfig } from './config';
@@ -125,6 +126,20 @@ export function buildBrief(i: BriefInputs): string {
     lines.push(rows.slice(0, HEAD_TOP).map((r) => `${r.symbol.toUpperCase()} ${Math.round(r.share)} %${r.change != null ? ` (${fmtPct(r.change, 1, true)})` : ''}`).join(' · '));
   }
 
+  // Prix USD de tout ce qui est valorisé (journal, papier) : dits une fois, jamais inventés.
+  const usd = new Map<string, number>();
+  for (const [id, p] of Object.entries(i.prices)) if (typeof p?.usd === 'number' && p.usd > 0) usd.set(id, p.usd as number);
+
+  // Portefeuille papier (expérimentations) : le P&L des ordres fictifs, valorisé aux mêmes prix réels.
+  const paper = watch.paper;
+  if (paper?.enabled && watch.paperTrades.length) {
+    const st = paperStatus(paper.startingUsd, watch.paperTrades, usd);
+    if (st.positions.length) {
+      const badge = st.pnlUsd >= 0 ? '+' : '';
+      lines.push(`Papier (expérimentations) : ${fmtPrice(st.totalUsd, 'USD')} (${badge}${st.pnlPct.toFixed(1).replace('.', ',')} %)${st.unpriced ? `${st.unpriced} ligne${st.unpriced > 1 ? 's' : ''} sans prix` : ''}`);
+    }
+  }
+
   // Échéances du jour : panier puis plans DCA simples ; sinon, la prochaine à venir.
   const plans = list<DcaPlan>(i.bundle.data.dcaPlans).filter((p) => p.active);
   const dcaExecs = list<DcaExecution>(i.bundle.data.dcaExecutions);
@@ -156,8 +171,6 @@ export function buildBrief(i: BriefInputs): string {
   if (!short && !due.length && !upcoming.length) lines.push('Aucune échéance DCA programmée.');
 
   // Paliers de vente atteints mais pas vendus : rappelés tant que rien n'est fait.
-  const usd = new Map<string, number>();
-  for (const [id, p] of Object.entries(i.prices)) if (typeof p?.usd === 'number' && p.usd > 0) usd.set(id, p.usd as number);
   const rungs = hitRungs(watch, usd);
   if (rungs.length) lines.push(`Paliers atteints non vendus : ${rungs.map((r) => `${r.symbol.toUpperCase()} ×${r.multiple} (vends ${r.pct} %)`).join(' · ')}`);
 

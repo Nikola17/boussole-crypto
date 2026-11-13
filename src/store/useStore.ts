@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
-  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, PriceAlert, Profile, Settings, SyncDeletion, Thesis,
+  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, PaperConfig, PaperTrade, PriceAlert, Profile, Settings, SyncDeletion, Thesis,
   TradeEntry, Transaction, WalletAddress, WatchedToken,
 } from '../types';
 import { defaultProfile, rulesOf } from '../lib/profile';
@@ -39,6 +39,9 @@ export interface AppState {
   coreTrims: Record<string, string>;
   envelope: DefiEnvelope;
   defiBets: DefiBet[];
+  /** Portefeuille papier : ordres fictifs aux prix réels (profil « expérimentations », sans risque). */
+  paperTrades: PaperTrade[];
+  paper: PaperConfig;
   /** Cryptos que tu as confirmé voir dans l'application Crypto.com. */
   cdcSeen: string[];
   /** Suppressions à propager à l'autre appareil (`collection/identifiant` → date). */
@@ -87,6 +90,9 @@ export interface AppState {
   markCoreTrim: (coinId: string) => void;
   clearCoreTrim: (coinId: string) => void;
   setEnvelope: (patch: Partial<DefiEnvelope>) => void;
+  upsertPaperTrade: (t: PaperTrade) => void;
+  removePaperTrade: (id: string) => void;
+  setPaper: (patch: Partial<PaperConfig>) => void;
   upsertDefiBet: (b: DefiBet) => void;
   removeDefiBet: (id: string) => void;
   /** Ajoute des transactions importées ; celles dont l'identifiant existe déjà sont ignorées (aucun doublon). */
@@ -177,6 +183,8 @@ const initialData = () => ({
   exitDone: {} as Record<string, number[]>,
   coreTrims: {} as Record<string, string>,
   envelope: { ...DEFAULT_ENVELOPE },
+  paperTrades: [] as PaperTrade[],
+  paper: { enabled: true, startingUsd: 1000 } as PaperConfig,
   defiBets: [] as DefiBet[],
   cdcSeen: [] as string[],
   deletions: [] as SyncDeletion[],
@@ -279,6 +287,9 @@ export const useStore = create<AppState>()(
         };
       }),
       setEnvelope: (patch) => set((s) => ({ envelope: { ...s.envelope, ...patch }, ...bump(s, 'envelope') })),
+      upsertPaperTrade: (t) => set((s) => ({ paperTrades: upsert(s.paperTrades, touch(t)) })),
+      removePaperTrade: (id) => set((s) => ({ paperTrades: s.paperTrades.filter((x) => x.id !== id), ...dropped(s, `paperTrades/${id}`) })),
+      setPaper: (patch) => set((s) => ({ paper: { ...s.paper, ...patch }, ...bump(s, 'paper') })),
       upsertDefiBet: (b) => set((s) => ({ defiBets: upsert(s.defiBets, touch(b)) })),
       removeDefiBet: (id) => set((s) => ({ defiBets: s.defiBets.filter((x) => x.id !== id), ...dropped(s, `defiBets/${id}`) })),
       toggleExitDone: (coinId, multiple) => set((s) => {

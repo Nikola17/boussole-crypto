@@ -279,6 +279,32 @@ export interface Thesis extends CoinRef {
 
 export type AiReportKind = 'briefing' | 'committee' | 'quick' | 'pulse' | 'airdrops' | 'journal' | 'thesis' | 'gem';
 
+// ------------------------------------------------------------------ Portefeuille papier (expérimentations)
+
+/** Ordre fictif au prix réel du marché : tester une stratégie sans risquer un euro. */
+export interface PaperTrade extends CoinRef {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
+  id: string;
+  /** Dates ISO : le jour (tris/affichage) et l'instant précis si connu. */
+  date: string;
+  time?: string;
+  type: 'buy' | 'sell';
+  quantity: number;
+  /** Prix réel unitaire au moment de l'ordre ( USD — le papier est libellé en USDC). */
+  priceUsd: number;
+  /** Frais simulés (USDC) : les vraies plateformes en prennent, le papier aussi. */
+  feeUsd?: number;
+  note?: string;
+}
+
+/** Réglages du portefeuille papier : solde de départ et date du dernier reset. */
+export interface PaperConfig {
+  enabled: boolean;
+  startingUsd: number;
+  resetAt?: string;
+}
+
 export interface AiUsage {
   inputTokens: number;
   outputTokens: number;
