@@ -15,7 +15,9 @@ import { alertKey, alertMessage, consumeAlerts, hitAlerts, hitRungs, rungKey, ru
 import { buildBrief, slotsOfDay } from './brief';
 import type { CoinPrice } from './market';
 import { isHotNews, newsKey, type NewsItem, type RatedNews, type WatchedCoin } from './news';
+import { eventKey, refsOf, relevantEvents, smartBriefLines, smartMessage, type SmartEvent } from '../lib/smartmoney';
 import { nextMacroEvents } from '../lib/macro';
+import type { SmartWallet } from '../types';
 
 const DAY_MS = 24 * 3600_000;
 /** Une même zone de marché ne re-sonne pas plus d'une fois par semaine (les allers-retours rapides restent silencieux). */
@@ -50,6 +52,8 @@ export interface CycleDeps {
   news: (coins: WatchedCoin[]) => Promise<NewsItem[]>;
   /** Notes d'importance et résumés IA des actus (sans clé : valeurs à zéro). */
   aiRates: (items: NewsItem[]) => Promise<{ importance: number; resume: string }[]>;
+  /** Mouvements d'un wallet suivi depuis un instant donné (facultatif : désactivé, aucune clé, aucune erreur). */
+  smartEvents?: (wallets: SmartWallet[], sinceMs: number, nowMs: number) => Promise<SmartEvent[]>;
 }
 
 export interface CycleOptions {
@@ -212,6 +216,39 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
   }
   queue.push(...newsAlerts);
 
+  // 1 quat. Smart money : les wallets publics suivis (fonds, préparateurs actifs…) ne préviennent que pour
+  //      les tokens de TA liste — watched du DEX, positions du journal, alertes armées. Leur VENTE est le
+  //      signal : c'est elle qui fait relire la thèse de sortie. Un échec de lecture ne consomme jamais rien.
+  const smartRecent: SmartEvent[] = [];
+  const smartAlerts: { key: string; text: string }[] = [];
+  const alertedKeys = new Map<string, { walletId: string; atMs: number }>();
+  const smartCursorNext: Record<string, number> = {};
+  if (cfg.smartMoneyEnabled && watch.smartWallets.length && deps.smartEvents) {
+    // Un wallet ajouté à l'instant se suit à partir de maintenant (2 h de recul), l'historique n'est pas rejoué.
+    const sinceOf = (id: string): number => state.smCursor[id] ?? nowMs - 2 * 3600_000;
+    const sinceMs = Math.min(...watch.smartWallets.slice(0, 12).map((w) => sinceOf(w.id)));
+    const evts = await deps.smartEvents(watch.smartWallets.slice(0, 12), sinceMs, nowMs).catch(() => [] as SmartEvent[]);
+    smartRecent.push(...evts);
+    const refs = refsOf({
+      watched: watch.watchedTokens,
+      positions: [...buildPositions(watch.transactions).values()],
+      alerts: watch.alerts,
+    });
+    const relevant = new Set(relevantEvents(evts, refs));
+    for (const e of evts) {
+      const key = eventKey(e);
+      const isAlert = relevant.has(e) && shouldSend(state, key);
+      if (isAlert && smartAlerts.length < 3) {
+        smartAlerts.push({ key, text: smartMessage(e, nowMs) });
+        alertedKeys.set(key, { walletId: e.walletId, atMs: e.atMs });
+      } else {
+        // Déjà alerté, hors de ta liste, ou au-delà de la limite du cycle : traité, le curseur avance.
+        smartCursorNext[e.walletId] = Math.max(smartCursorNext[e.walletId] ?? 0, e.atMs);
+      }
+    }
+  }
+  queue.push(...smartAlerts);
+
   // 2. Envoi : une alerte n'est marquée envoyée qu'APRÈS un envoi réussi ; le premier échec arrête (on réessaie au cycle suivant).
   const consumedIds: string[] = [];
   for (const m of queue) {
@@ -221,6 +258,11 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
       state = markSent(state, [m.key], nowMs);
       result.sent++;
       if (m.alertId) consumedIds.push(m.alertId);
+      if (alertedKeys.has(m.key)) {
+        // L'alerte smart money vient de partir : ce wallet est lu jusqu'à ce mouvement au prochain cycle.
+        const a = alertedKeys.get(m.key)!;
+        state = { ...state, smCursor: { ...state.smCursor, [a.walletId]: Math.max(state.smCursor[a.walletId] ?? 0, a.atMs) } };
+      }
       if (m.key.startsWith('zone:') && temperature && temperature.zone.label !== state.zoneLabel) {
         // le changement de zone vient de partir : la nouvelle zone devient la référence
         state = { ...state, zoneLabel: temperature.zone.label };
@@ -229,6 +271,17 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
       result.error = e instanceof Error ? e.message : String(e);
       break;
     }
+  }
+
+  // Smart money : les mouvements traités sans alerte (hors liste, déjà envoyés…) font avancer le curseur
+  // de lecture ; les alertes qui n'ont pas pu partir gardent leur place, elles repartent au prochain cycle.
+  if (Object.keys(smartCursorNext).length && !opts.dry) {
+    const smCursor = { ...state.smCursor };
+    let moved = false;
+    for (const [id, at] of Object.entries(smartCursorNext)) {
+      if (at > (smCursor[id] ?? 0)) { smCursor[id] = at; moved = true; }
+    }
+    if (moved) state = { ...state, smCursor };
   }
 
   // 3. Consommation des alertes de prix dans le faisceau distant : l'application les verra déclenchées à
@@ -256,7 +309,7 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
       syncSavedAt: bundle.savedAt ?? null, syncDevice: bundle.device ?? null,
       temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
       cycleMetrics: temperature ? { mvrv: temperature.mvrv, stableShare: temperature.stableShare, halvingDaysToNext: temperature.halvingDaysToNext } : null,
-      slot: slot.id, news: ratedNews.slice(0, 6),
+      slot: slot.id, news: ratedNews.slice(0, 6), smart: smartBriefLines(smartRecent, nowMs),
     });
     try {
       await send(brief);

@@ -40,6 +40,11 @@ export interface GoPlusEvm {
   is_blacklisted?: Bit;
   slippage_modifiable?: Bit;
   trading_cooldown?: Bit;
+  /** Historique du créateur : GoPlus recense ses autres contrats — '1' si l'un d'eux est un honeypot. */
+  honeypot_with_same_creator?: Bit;
+  /** Part de l'offre détenue par le créateur / le propriétaire (en %, chaîne décimale). */
+  creator_percent?: string;
+  owner_percent?: string;
   holder_count?: string;
   holders?: { percent: string; is_locked?: number; is_contract?: number; tag?: string }[];
   lp_holders?: { percent: string; is_locked?: number; tag?: string }[];
@@ -101,6 +106,16 @@ export function evmReportFrom(response: { code?: number; result?: Record<string,
   if (on(d.slippage_modifiable)) flags.push({ label: 'Taxes modifiables par le propriétaire', severity: 'warn' });
   if (on(d.trading_cooldown)) flags.push({ label: 'Délai imposé entre deux transactions', severity: 'warn' });
   if (on(d.is_proxy)) flags.push({ label: 'Contrat proxy (code modifiable)', severity: 'warn' });
+  if (on(d.honeypot_with_same_creator)) flags.push({ label: 'Historique du créateur : il a déjà déployé un honeypot', severity: 'danger', detail: 'Le créateur de ce contrat a un antécédent : un de ses tokens précédents empêchait de revendre.' });
+  const creatorPct = Number(d.creator_percent ?? Number.NaN);
+  if (Number.isFinite(creatorPct)) {
+    if (creatorPct >= 15) flags.push({ label: `Le créateur détient ${creatorPct.toFixed(1)} % de l'offre`, severity: creatorPct >= 25 ? 'danger' : 'warn', detail: 'Il peut casser le prix en vendant d’un seul coup.' });
+  }
+  const ownerPct = Number(d.owner_percent ?? Number.NaN);
+  if (Number.isFinite(ownerPct)) {
+    if (ownerPct >= 15) flags.push({ label: `Le propriétaire du contrat détient ${ownerPct.toFixed(1)} % de l'offre`, severity: ownerPct >= 25 ? 'danger' : 'warn' });
+    else if (ownerPct > 0) flags.push({ label: `Le propriétaire du contrat détient ${ownerPct.toFixed(1)} % de l'offre`, severity: 'ok' });
+  }
   if (d.is_open_source === '0') flags.push({ label: 'Code source non vérifié', severity: 'danger' });
 
   const holders = d.holders ?? [];

@@ -11,13 +11,14 @@ import { CONFLICT } from '../lib/sync/github';
 import { runCycle, type CycleDeps, type CycleOptions } from './cycle';
 import { nyEpoch } from './brief';
 import { emptyState } from './state';
+import type { SmartEvent } from '../lib/smartmoney';
 import type { RunnerConfig } from './config';
 
 const PASS = 'phrase de passe du runner';
 const CFG: RunnerConfig = {
   syncRepo: 'Nikola17/boussole-sync', syncPath: 'boussole-sync.enc', syncToken: 'tok', passphrase: PASS,
   telegramToken: 'tg', telegramChatId: '42', coingeckoKey: null, currency: 'EUR',
-  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', stateDir: '', device: 'vps-test',
+  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, smartMoneyEnabled: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', stateDir: '', device: 'vps-test',
 };
 
 const txSol: Transaction = { id: 't1', coinId: 'solana', symbol: 'sol', name: 'Solana', date: '2026-01-10', type: 'buy', quantity: 100, price: 2, currency: 'USD', fee: 0, fxEurPerUsd: 0.87, updatedAt: '2026-01-10T00:00:00Z' };
@@ -32,7 +33,7 @@ const FLAT = { solana: { usd: 2, eur: 1.72, change: 0.1 }, bitcoin: { usd: 200_0
 const H = (h: number, m = 0): Date => new Date(2026, 10, 20, h, m);
 
 /** Faux services autour du cycle : tout est enregistré, rien ne sort. */
-function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; telegramError?: string; noFile?: boolean; prices?: Record<string, { usd?: number; eur?: number; change?: number }>; fng?: { value: number; label: string } | null; btcDaily?: Candle[] | null; news?: NewsItem[]; newsRatings?: { importance: number; resume: string }[]; countAi?: { n: number } } = {}) {
+function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; telegramError?: string; noFile?: boolean; prices?: Record<string, { usd?: number; eur?: number; change?: number }>; fng?: { value: number; label: string } | null; btcDaily?: Candle[] | null; news?: NewsItem[]; newsRatings?: { importance: number; resume: string }[]; countAi?: { n: number }; smartEvents?: SmartEvent[] } = {}) {
   const sent: string[] = [];
   const pushes: { text: string; sha: string | null }[] = [];
   let sha: string | null = 'sha-initial';
@@ -69,6 +70,8 @@ function makeDeps(bundle: Record<string, unknown>, opts: { pushError?: string; t
       if (opts.countAi) opts.countAi.n++;
       return items.map((_, i) => opts.newsRatings?.[i] ?? { importance: 0, resume: '' });
     },
+    // Smart money : silence par défaut (les tests dédiés fournissent les mouvements).
+    smartEvents: opts.smartEvents ? async () => opts.smartEvents! : undefined,
   };
   return { deps, sent, pushes };
 }
@@ -383,5 +386,46 @@ describe('cycle du runner — briefs aux moments clés américains', () => {
     const after = await runCycle(usCfg, st, dry(), deps, new Date(closeMs + 60_000));
     expect(sent.filter((t) => t.includes('clôture américaine'))).toHaveLength(1);
     expect(after.state.lastBriefSlot['us-close']).toBe(isoDay(day));
+  });
+});
+
+describe('cycle du runner — smart money (wallets suivis)', () => {
+  const CFG_SM = { ...CFG, smartMoneyEnabled: true };
+  const W = { id: 'w1', label: 'Fonds Test', chain: 'solana' as const, address: 'WALT', kind: 'fund' as const, addedAt: '2026-11-01' };
+  const watched = { id: 'solana:MintA', chainId: 'solana', address: 'MintA', symbol: 'ABC', name: 'Abc', addedAt: '2026-11-01', updatedAt: '2026-11-01T00:00:00Z' };
+  const at = H(6, 0).getTime();
+  const sell: SmartEvent = { walletId: 'w1', walletLabel: 'Fonds Test', chain: 'solana', side: 'sell', mint: 'MintA', symbol: 'ABC', name: 'Abc', uiAmount: 12.5, txHash: 'h1', atMs: at };
+
+  it("la VENTE d'un token de la liste déclenche l'alerte Telegram, la marque envoyée et avance le curseur", async () => {
+    const { deps, sent } = makeDeps({ smartWallets: [W], watchedTokens: [watched] }, { smartEvents: [sell] });
+    const { state, result } = await runCycle(CFG_SM, emptyState(), dry(), deps, H(6, 30));
+    expect(result.error).toBeNull();
+    expect(sent.some((t) => t.includes('Fonds Test VEND ABC'))).toBe(true);
+    expect(sent.some((t) => t.includes('thèse de sortie'))).toBe(true);
+    expect(state.sent['sm:w1:h1:MintA']).toBeTruthy();
+    expect(state.smCursor['w1']).toBe(at); // lu jusqu'à ce mouvement : pas de relecture au prochain cycle
+  });
+
+  it("un mouvement hors de la liste n'alerte pas, mais fait avancer le curseur (sans relecture en boucle)", async () => {
+    const out: SmartEvent = { ...sell, mint: 'MintZ', symbol: 'ZZZ', txHash: 'h2' };
+    const { deps, sent } = makeDeps({ smartWallets: [W], watchedTokens: [watched] }, { smartEvents: [out] });
+    const { state, result } = await runCycle(CFG_SM, emptyState(), dry(), deps, H(6, 30));
+    expect(result.sent).toBe(0);
+    expect(sent).toHaveLength(0);
+    expect(state.sent['sm:w1:h2:MintZ']).toBeUndefined();
+    expect(state.smCursor['w1']).toBe(at);
+  });
+
+  it("un échec Telegram n'envoie rien, ne marque rien, et n'avance pas le curseur : tout repart au cycle suivant", async () => {
+    const fail = makeDeps({ smartWallets: [W], watchedTokens: [watched] }, { smartEvents: [sell], telegramError: 'Telegram a refusé sendMessage' });
+    const first = await runCycle(CFG_SM, emptyState(), dry(), fail.deps, H(6, 30));
+    expect(first.result.sent).toBe(0);
+    expect(first.state.sent['sm:w1:h1:MintA']).toBeUndefined();
+    expect(first.state.smCursor['w1']).toBeUndefined(); // le mouvement reste à lire
+    const retry = makeDeps({ smartWallets: [W], watchedTokens: [watched] }, { smartEvents: [sell] });
+    const second = await runCycle(CFG_SM, first.state, dry(), retry.deps, H(6, 35));
+    expect(second.result.sent).toBe(1); // l'alerte a bien fini par partir
+    expect(second.state.sent['sm:w1:h1:MintA']).toBeTruthy();
+    expect(second.state.smCursor['w1']).toBe(at);
   });
 });

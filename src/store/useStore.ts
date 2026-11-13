@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
-  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, PaperConfig, PaperTrade, PriceAlert, Profile, Settings, SyncDeletion, Thesis,
+  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, PaperConfig, PaperTrade, PriceAlert, Profile, Settings, SmartWallet, SyncDeletion, Thesis,
   TradeEntry, Transaction, WalletAddress, WatchedToken,
 } from '../types';
 import { defaultProfile, rulesOf } from '../lib/profile';
@@ -42,6 +42,7 @@ export interface AppState {
   /** Portefeuille papier : ordres fictifs aux prix réels (profil « expérimentations », sans risque). */
   paperTrades: PaperTrade[];
   paper: PaperConfig;
+  smartWallets: SmartWallet[];
   /** Cryptos que tu as confirmé voir dans l'application Crypto.com. */
   cdcSeen: string[];
   /** Suppressions à propager à l'autre appareil (`collection/identifiant` → date). */
@@ -54,6 +55,8 @@ export interface AppState {
   toggleWatch: (coinId: string) => void;
   addWatchedToken: (t: WatchedToken) => void;
   removeWatchedToken: (id: string) => void;
+  addSmartWallet: (w: SmartWallet) => void;
+  removeSmartWallet: (id: string) => void;
   upsertTransaction: (tx: Transaction) => void;
   removeTransaction: (id: string) => void;
   /** Ajoute plusieurs transactions en une seule écriture (regroupement, échanges…). */
@@ -166,6 +169,7 @@ const initialData = () => ({
   profile: defaultProfile(),
   watchlist: ['bitcoin', 'ethereum', 'solana'],
   watchedTokens: [] as WatchedToken[],
+  smartWallets: [] as SmartWallet[],
   transactions: [] as Transaction[],
   wallets: [] as WalletAddress[],
   dcaPlans: [] as DcaPlan[],
@@ -209,6 +213,8 @@ export const useStore = create<AppState>()(
       toggleWatch: (coinId) => set((s) => ({ watchlist: s.watchlist.includes(coinId) ? s.watchlist.filter((x) => x !== coinId) : [...s.watchlist, coinId], ...bump(s, 'watchlist') })),
       addWatchedToken: (t) => set((s) => ({ watchedTokens: [touch(t), ...s.watchedTokens.filter((x) => x.id !== t.id)] })),
       removeWatchedToken: (id) => set((s) => ({ watchedTokens: s.watchedTokens.filter((x) => x.id !== id), ...dropped(s, `watchedTokens/${id}`) })),
+      addSmartWallet: (w) => set((s) => ({ smartWallets: [touch(w), ...s.smartWallets.filter((x) => x.id !== w.id)] })),
+      removeSmartWallet: (id) => set((s) => ({ smartWallets: s.smartWallets.filter((x) => x.id !== id), ...dropped(s, `smartWallets/${id}`) })),
       upsertTransaction: (tx) => set((s) => ({ transactions: upsert(s.transactions, touch(tx)) })),
       removeTransaction: (id) => set((s) => ({ transactions: s.transactions.filter((x) => x.id !== id), ...dropped(s, `transactions/${id}`) })),
       addTransactions: (txs) => set((s) => ({ transactions: [...txs.map(touch), ...s.transactions] })),

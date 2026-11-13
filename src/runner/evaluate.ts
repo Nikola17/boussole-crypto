@@ -5,7 +5,7 @@
 // Les wallets lus sur la blockchain (xpub du Ledger, adresse Phantom…) ne sont pas relus par le runner :
 // ce que le journal ne décrit pas n'est pas vu, et le cœur (BTC, ETH) n'a de toute façon pas de paliers.
 
-import type { PaperConfig, PaperTrade, PriceAlert, Thesis, Transaction } from '../types';
+import type { PaperConfig, PaperTrade, PriceAlert, SmartWallet, Thesis, Transaction, WatchedToken } from '../types';
 import type { SyncBundle } from '../lib/sync/merge';
 import { checkPriceAlerts } from '../lib/alerts';
 import { DEFAULT_LADDER, exitLadder, pendingRungs } from '../lib/exit';
@@ -20,6 +20,10 @@ export interface WatchData {
   /** Portefeuille papier (expérimentations) : ordres fictifs et ses réglages. */
   paperTrades: PaperTrade[];
   paper: PaperConfig | null;
+  /** Wallets publics suivis pour leurs résultats (smart money). */
+  smartWallets: SmartWallet[];
+  /** Tokens suivis des DEX (pépites) : l'autre liste qui importe au smart money. */
+  watchedTokens: WatchedToken[];
 }
 
 /** Extrait les listes utiles d'un faisceau de synchronisation (déjà déchiffré). */
@@ -31,7 +35,7 @@ export function watchOf(bundle: SyncBundle): WatchData {
   const paper = (paperRaw && typeof paperRaw === 'object' && !Array.isArray(paperRaw))
     ? paperRaw as PaperConfig
     : null;
-  return { alerts: list<PriceAlert>('alerts'), transactions: list<Transaction>('transactions'), theses: list<Thesis>('theses'), exitDone, paperTrades: list<PaperTrade>('paperTrades'), paper };
+  return { alerts: list<PriceAlert>('alerts'), transactions: list<Transaction>('transactions'), theses: list<Thesis>('theses'), exitDone, paperTrades: list<PaperTrade>('paperTrades'), paper, smartWallets: list<SmartWallet>('smartWallets'), watchedTokens: list<WatchedToken>('watchedTokens') };
 }
 
 export const alertKey = (id: string): string => `alert:${id}`;

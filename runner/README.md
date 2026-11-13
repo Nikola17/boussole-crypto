@@ -35,7 +35,14 @@ Il n'a besoin de **rien installer** : Node ≥ 20 suffit (le bundle
   BTC/ETH ni stablecoins) : flux Google News par crypto, rafraîchi toutes les 45 min ;
   une actu notée importante part en alerte Telegram, **résumée en 3 lignes par Mistral**
   si une clé est configurée (`mistralApiKey`, sinon heuristique de mots-clés), au plus
-  3 par cycle et une seule fois par actu.
+  3 par cycle et une seule fois par actu ;
+- **smart money** : les wallets publics que tu suis dans l'application (page
+  « Smart money », synchronisés avec le reste) sont lus sur Solana (RPC public),
+  Ethereum et Base (Blockscout) — aucune clé API nécessaire. Quand un wallet
+  suivi achète un token de ta liste (tokens suivis du DEX, positions du journal,
+  alertes armées), l'alerte part sur Telegram ; **sa VENTE** est mise en avant :
+  c'est le signal « relis ta thèse de sortie ». Le brief du matin résume leurs
+  mouvements des dernières 24 h (`smartMoneyEnabled`, activé par défaut).
 
 ## Limites connues (voulu ainsi pour cette première version)
 
