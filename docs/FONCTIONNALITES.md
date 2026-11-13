@@ -146,6 +146,23 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Veille presse par crypto** : pour chaque crypto suivie (positions du journal + alertes armées, hors BTC/ETH et stablecoins), le runner lit l'actualité (Google News, flux rafraîchi toutes les 45 minutes). Une actu importante arrive sur Telegram — résumée en 3 lignes par Mistral si une clé API est configurée, sinon filtrée par heuristique de mots-clés. Au plus 3 alertes par cycle, une seule fois par actu ; un échec de l'IA ne consomme rien.
 - **Trois briefs de données par jour** : le matin (complet : marché et zone, échéances, portefeuille, paliers, alertes armées, actus, fraîcheur de la sync), puis à l'ouverture des marchés américains (9 h 30, New York) et à leur clôture (16 h) sous forme courte avec les actus du moment. Heures exactes été comme hiver ; chaque créneau se désactive dans la configuration (briefUsOpen, briefUsClose).
 - **Configuration runner enrichie** : newsEnabled, mistralApiKey (ou variable d'environnement MISTRAL_API_KEY), mistralModel. Sans clé, tout marche quand même, en heuristique.
+### v1.11.0 — DCA aiguisé et calendrier macro (lot 12)
+
+- **Température du marché plus juste** : le MVRV Bitcoin (source gratuite, ~7 jours de retard, sous 1 gelé / au-delà de 3 en surchauffe) et la part des stablecoins dans la capitalisation totale (la poudre sèche installée) pèsent désormais dans la stratégie DCA « acheter plus quand c'est froid, moins quand c'est chaud ». Le panier du jour suit, et l'explique.
+- **Position dans le cycle de halving** : distance au prochain halving estimé ; la température du marché en tient compte.
+- **Carte « À l'horizon » sur le Cockpit** : les prochains rendez-vous — FOMC (dates officielles 2026), CPI américain (dates 2026 mesurées, signalées comme telles), échéances trimestrielles des dérivés Bitcoin (dernier vendredi de mars, juin, septembre, décembre), halving. Chaque événement dit quoi faire (« jour d'échéance : volatilité possible, n'achète pas dans la précipitation », etc.).
+- **Anticipation J-1** : la veille d'un événement important, notification dans l'application (si activées) et alerte Telegram depuis le serveur, avec le conseil.
+- **Brief enrichi (VPS)** : ligne « À l'horizon » + conseil si l'échéance est imminente, compte à rebours du prochain halving, MVRV et part stablecoins dans la ligne Marché.
+- Correctif testé par la même occasion : la formule des derniers vendredis du trimestre était fausse (été comme hiver, année bissextile comprise).
+
+### v1.12.0 — Portefeuille papier, le profil « expérimentations » (lot 13)
+
+- **Page « Papier »** : 1000 USDC fictifs au départ, des ordres fictifs aux prix réels du marché avec 0,1 % de frais simulés. Tester une stratégie ou un timing sans risquer un euro.
+- **Bilan en temps réel** : cash restant, positions valorisées aux prix du moment, P&L. Ordres impossibles refusés avec la raison (pas assez de cash papier, ou tu ne détiens pas assez de la crypto vendue). Une ligne sans prix connu n'affiche jamais 0.
+- **Comparaison honnête avec Bitcoin** : le même montant investi en BTC aux mêmes dates aurait donné tel résultat — le vrai test d'une stratégie, pas juste « j'ai gagné en bull market ».
+- **Profil séparé du vrai journal** : le Wallet n'est jamais touché. Le papier se synchronise entre appareils (clés « paperTrades » et « paper ») et est inclus dans les sauvegardes.
+- **Le serveur suit aussi** : le brief Telegram ajoute la ligne « Papier (expérimentations) » avec sa valorisation ; les coins papier comptent dans l'évaluation du cycle.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute
