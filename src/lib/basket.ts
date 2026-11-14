@@ -81,6 +81,8 @@ export interface BasketContext {
   cdc: Record<string, CdcState> | null;
   /** Score investisseur Boussole (facultatif) pour départager les lignes « découverte ». */
   scores: Record<string, number>;
+  /** Découverte automatique : les candidates du scan chosit par Boussole (mode « auto »). */
+  autoDiscovery?: CoinRef[];
   rules: { maxPerGemPct: number; minLinePct: number; maxDiscoveryLines: number };
   discoveryLinesOpen: number;
 }
@@ -132,24 +134,26 @@ function pickCore(b: BasketPlan, ctx: BasketContext, amount: number): { coin: Ba
   return { coin, reason };
 }
 
-/** Une seule ligne « découverte » par échéance, choisie selon tes règles. */
+/** Une seule ligne « découverte » par échéance, choisie selon tes règles — tu l'as choisie, ou Boussole l'a choisie. */
 function pickDiscovery(
-  b: BasketPlan,
+  list: CoinRef[],
   ctx: BasketContext,
   wanted: number,
+  amountUsd: number,
+  minOrderUsd: number,
   excluded: { symbol: string; reason: string }[],
 ): { coin: CoinRef; usd: number; reason: string } | null {
   const total = ctx.totalValueUsd;
   const { maxPerGemPct, minLinePct, maxDiscoveryLines } = ctx.rules;
   const cands: { coin: CoinRef; value: number; pct: number; score: number | null }[] = [];
-  for (const c of b.discovery) {
+  for (const c of list) {
     const sym = c.symbol.toUpperCase();
     const value = ctx.values[c.coinId] ?? 0;
     const share = total > 0 ? (value / total) * 100 : 0;
     const ch = ctx.change7d[c.coinId];
     if (ctx.cdc && ctx.cdc[c.coinId] === 'unknown') excluded.push({ symbol: sym, reason: 'absente de la liste Crypto.com' });
     else if (ch != null && ch > FOMO_7D_PCT) excluded.push({ symbol: sym, reason: `+${Math.round(ch)} % en 7 jours (FOMO)` });
-    else if (share >= maxPerGemPct && total >= 20 * b.amountUsd) excluded.push({ symbol: sym, reason: `plafond de ${pct(maxPerGemPct)} atteint` });
+    else if (share >= maxPerGemPct && total >= 20 * amountUsd) excluded.push({ symbol: sym, reason: `plafond de ${pct(maxPerGemPct)} atteint` });
     else if (value <= 0 && ctx.discoveryLinesOpen >= maxDiscoveryLines) excluded.push({ symbol: sym, reason: `déjà ${ctx.discoveryLinesOpen} lignes découverte ouvertes (maximum ${maxDiscoveryLines})` });
     else cands.push({ coin: c, value, pct: share, score: ctx.scores[c.coinId] ?? null });
   }
@@ -165,15 +169,15 @@ function pickDiscovery(
   }
 
   let amount = wanted;
-  if (total >= 20 * b.amountUsd) {
+  if (total >= 20 * amountUsd) {
     const room = (maxPerGemPct / 100) * (total + wanted) - pick.value;
     if (room < wanted) {
       amount = room;
       reason += ` (limité par son plafond de ${pct(maxPerGemPct)})`;
     }
   }
-  if (amount < b.minOrderUsd) {
-    excluded.push({ symbol: pick.coin.symbol.toUpperCase(), reason: `il reste moins de ${usd(b.minOrderUsd)} avant son plafond` });
+  if (amount < minOrderUsd) {
+    excluded.push({ symbol: pick.coin.symbol.toUpperCase(), reason: `il reste moins de ${usd(minOrderUsd)} avant son plafond` });
     return null;
   }
   return { coin: refOf(pick.coin), usd: round2(amount), reason };
@@ -199,13 +203,18 @@ export function planBasketOrder(b: BasketPlan, ctx: BasketContext): BasketPlanRe
   else if (share > 0 && factor < 1) notes.push('Marché chaud : ligne découverte réduite de moitié.');
 
   // 1. La ligne découverte est décidée en premier : elle peut être refusée par tes règles.
+  //    En mode « auto », tu n'as rien choisi : les candidates viennent du scan (lib/discovery.ts).
+  const auto = b.discoveryMode === 'auto';
+  const discList = auto ? (ctx.autoDiscovery ?? []) : b.discovery;
   let disc: { coin: CoinRef; usd: number; reason: string } | null = null;
   if (discWanted > 0.005) {
-    if (!b.discovery.length) notes.push('Liste découverte vide : ajoute des cryptos à étudier. Le montant revient au cœur.');
+    if (auto && !discList.length) notes.push('Découverte automatique : aucune candidate pour le moment (scan indisponible ?). Le montant revient au cœur.');
+    else if (!auto && !discList.length) notes.push('Liste découverte vide : ajoute des cryptos à étudier, ou passe la découverte en mode automatique. Le montant revient au cœur.');
     else if (discWanted < b.minOrderUsd) notes.push(`Part découverte (${usd(discWanted)}) sous le minimum de ${usd(b.minOrderUsd)} : elle revient au cœur.`);
     else {
-      disc = pickDiscovery(b, ctx, discWanted, excluded);
+      disc = pickDiscovery(discList, ctx, discWanted, b.amountUsd, b.minOrderUsd, excluded);
       if (!disc) notes.push('Aucune ligne découverte ne passe tes règles aujourd’hui : le montant revient au cœur.');
+      else if (auto) disc.reason = `Découverte automatique : ${disc.reason.toLowerCase()}`;
     }
   }
   const discSpent = disc ? disc.usd : 0;

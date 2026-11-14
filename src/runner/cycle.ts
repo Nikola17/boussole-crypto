@@ -135,6 +135,8 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
 
   const bundle = asBundle(await unseal(remote.content, cfg.passphrase));
   const watch = watchOf(bundle);
+  // Mode vacances : veille critique uniquement (alertes de prix, paliers), le bruit s'arrête.
+  const onVacation = !!watch.vacationUntil && watch.vacationUntil >= dayKey;
   const priceRows = await deps.prices(coinsOf(bundle, watch));
   const priceMap = new Map<string, number>();
   for (const [id, p] of Object.entries(priceRows)) if (typeof p.usd === 'number' && p.usd > 0) priceMap.set(id, p.usd);
@@ -163,7 +165,7 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
   if (temperature) {
     if (!state.zoneLabel) {
       if (!opts.dry) state = { ...state, zoneLabel: temperature.zone.label };
-    } else if (state.zoneLabel !== temperature.zone.label) {
+    } else if (!onVacation && state.zoneLabel !== temperature.zone.label) {
       const key = `zone:${temperature.zone.label}`;
       const last = state.sent[key];
       if (last == null || nowMs - last >= ZONE_REPEAT_MS) queue.push({ key, text: zoneMessage(temperature.zone, temperature.temperature, state.zoneLabel) });
@@ -172,7 +174,7 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
 
   // 1 bis ter. Calendrier macro/crypto : un événement qui arrive aujourd'hui ou demain est annoncé une fois,
   //      avec la conduite à tenir (Fed, CPI, échéance de dérivés — le halving, lui, est un repère de long terme).
-  for (const ev of nextMacroEvents(now, 3, 2)) {
+  for (const ev of (onVacation ? [] : nextMacroEvents(now, 3, 2))) {
     const key = `macro:${ev.id}`;
     if (state.sent[key] == null) {
       queue.push({ key, text: `${ev.daysTo === 0 ? 'Aujourd’hui' : 'Demain'} : ${ev.label}\n${ev.advice}` });
@@ -185,7 +187,7 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
   const ratedNews: RatedNews[] = [];
   const newsAlerts: { key: string; text: string }[] = [];
   const seenNews: string[] = [];
-  if (cfg.newsEnabled) {
+  if (cfg.newsEnabled && !onVacation) {
     const coins = newsCoinsOf(watch);
     const fresh = coins.length ? await deps.news(coins).catch(() => [] as NewsItem[]) : [];
     const candidates = fresh
@@ -225,7 +227,7 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
   const smartAlerts: { key: string; text: string }[] = [];
   const alertedKeys = new Map<string, { walletId: string; atMs: number }>();
   const smartCursorNext: Record<string, number> = {};
-  if (cfg.smartMoneyEnabled && watch.smartWallets.length && deps.smartEvents) {
+  if (cfg.smartMoneyEnabled && !onVacation && watch.smartWallets.length && deps.smartEvents) {
     // Un wallet ajouté à l'instant se suit à partir de maintenant (2 h de recul), l'historique n'est pas rejoué.
     const sinceOf = (id: string): number => state.smCursor[id] ?? nowMs - 2 * 3600_000;
     const sinceMs = Math.min(...watch.smartWallets.slice(0, 12).map((w) => sinceOf(w.id)));
@@ -317,7 +319,7 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
       temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
       cycleMetrics: temperature ? { mvrv: temperature.mvrv, stableShare: temperature.stableShare, halvingDaysToNext: temperature.halvingDaysToNext } : null,
       slot: slot.id, news: ratedNews.slice(0, 6), smart: smartBriefLines(smartRecent, nowMs),
-      emerging: emergingLines,
+      emerging: emergingLines, vacationUntil: onVacation ? watch.vacationUntil : null,
     });
     try {
       await send(brief);

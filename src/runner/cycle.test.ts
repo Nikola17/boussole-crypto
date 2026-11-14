@@ -418,6 +418,25 @@ describe('cycle du runner — smart money (wallets suivis)', () => {
     expect(state.smCursor['w1']).toBe(at);
   });
 
+
+  it("mode vacances : ni alerte presse ni smart money — mais le prix et les paliers continuent", async () => {
+    const CFG_SM = { ...CFG, smartMoneyEnabled: true, newsEnabled: true };
+    const { deps, sent } = makeDeps(
+      { smartWallets: [W], watchedTokens: [watched], profile: { vacationUntil: '2026-11-20' } },
+      { smartEvents: [sell], prices: FLAT, fng: { value: 55, label: 'Neutral' }, news: [] },
+    );
+    const { state } = await runCycle(CFG_SM, emptyState(), dry(), deps, H(6, 30));
+    expect(sent.some((t) => t.includes('VEND'))).toBe(false);      // veil critical only
+    expect(sent.some((t) => t.includes('Wallets suivis'))).toBe(false);
+    expect(state.sent['sm:w1:h1:MintA']).toBeUndefined();          // nothing marked consumed
+    const morning = makeDeps(
+      { smartWallets: [W], watchedTokens: [watched], profile: { vacationUntil: '2026-11-20' } },
+      { smartEvents: [sell], prices: FLAT },
+    );
+    await runCycle(CFG_SM, state, dry(), morning.deps, H(8, 30));
+    expect(morning.sent.some((t) => t.includes("Mode vacances jusqu'au 2026-11-20"))).toBe(true);
+  });
+
   it("un échec Telegram n'envoie rien, ne marque rien, et n'avance pas le curseur : tout repart au cycle suivant", async () => {
     const fail = makeDeps({ smartWallets: [W], watchedTokens: [watched] }, { smartEvents: [sell], telegramError: 'Telegram a refusé sendMessage' });
     const first = await runCycle(CFG_SM, emptyState(), dry(), fail.deps, H(6, 30));

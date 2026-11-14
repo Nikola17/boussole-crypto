@@ -680,7 +680,9 @@ function watchOf(bundle) {
   const exitDone = stamps.exitDone && typeof stamps.exitDone === "object" && !Array.isArray(stamps.exitDone) ? stamps.exitDone : {};
   const paperRaw = stamps.paper;
   const paper = paperRaw && typeof paperRaw === "object" && !Array.isArray(paperRaw) ? paperRaw : null;
-  return { alerts: list2("alerts"), transactions: list2("transactions"), theses: list2("theses"), exitDone, paperTrades: list2("paperTrades"), paper, smartWallets: list2("smartWallets"), watchedTokens: list2("watchedTokens") };
+  const profileRaw = stamps.profile;
+  const vacationUntil = profileRaw && typeof profileRaw === "object" && typeof profileRaw.vacationUntil === "string" && /^\d{4}-\d{2}-\d{2}$/.test(profileRaw.vacationUntil) ? profileRaw.vacationUntil : null;
+  return { alerts: list2("alerts"), transactions: list2("transactions"), theses: list2("theses"), exitDone, paperTrades: list2("paperTrades"), paper, smartWallets: list2("smartWallets"), watchedTokens: list2("watchedTokens"), vacationUntil };
 }
 var alertKey = (id) => `alert:${id}`;
 var rungKey = (coinId, multiple) => `exit:${coinId}:${multiple}`;
@@ -1085,6 +1087,9 @@ function buildBrief(i) {
     lines.push(`Actus : ${topNews.map((n2) => `\xAB ${n2.title} \xBB${n2.source ? ` (${n2.source})` : ""}`).join(" \xB7 ")}`);
     for (const n2 of topNews) if (n2.resume) lines.push(`${n2.coinName} : ${n2.resume.replace(/\s+/g, " ").slice(0, 320)}`);
   }
+  if (!short && i.vacationUntil) {
+    lines.push(`Mode vacances jusqu'au ${i.vacationUntil} : veille critique uniquement \u2014 alertes de prix et paliers. \xC9ch\xE9ances et actus reprendront apr\xE8s.`);
+  }
   const smart = i.smart ?? [];
   if (smart.length && !short) {
     lines.push(`Wallets suivis : ${smart[0]}`);
@@ -1333,6 +1338,7 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
   }
   const bundle = asBundle(await unseal(remote.content, cfg.passphrase));
   const watch = watchOf(bundle);
+  const onVacation = !!watch.vacationUntil && watch.vacationUntil >= dayKey;
   const priceRows = await deps.prices(coinsOf(bundle, watch));
   const priceMap = /* @__PURE__ */ new Map();
   for (const [id, p] of Object.entries(priceRows)) if (typeof p.usd === "number" && p.usd > 0) priceMap.set(id, p.usd);
@@ -1353,13 +1359,13 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
   if (temperature) {
     if (!state.zoneLabel) {
       if (!opts.dry) state = { ...state, zoneLabel: temperature.zone.label };
-    } else if (state.zoneLabel !== temperature.zone.label) {
+    } else if (!onVacation && state.zoneLabel !== temperature.zone.label) {
       const key = `zone:${temperature.zone.label}`;
       const last = state.sent[key];
       if (last == null || nowMs - last >= ZONE_REPEAT_MS) queue.push({ key, text: zoneMessage(temperature.zone, temperature.temperature, state.zoneLabel) });
     }
   }
-  for (const ev of nextMacroEvents(now, 3, 2)) {
+  for (const ev of onVacation ? [] : nextMacroEvents(now, 3, 2)) {
     const key = `macro:${ev.id}`;
     if (state.sent[key] == null) {
       queue.push({ key, text: `${ev.daysTo === 0 ? "Aujourd\u2019hui" : "Demain"} : ${ev.label}
@@ -1369,7 +1375,7 @@ ${ev.advice}` });
   const ratedNews = [];
   const newsAlerts = [];
   const seenNews = [];
-  if (cfg.newsEnabled) {
+  if (cfg.newsEnabled && !onVacation) {
     const coins = newsCoinsOf(watch);
     const fresh = coins.length ? await deps.news(coins).catch(() => []) : [];
     const candidates = fresh.filter((n2) => nowMs - n2.publishedAt < 15 * 36e5).filter((n2) => state.sent[newsKey(n2)] == null).slice(0, 8);
@@ -1398,7 +1404,7 @@ ${ev.advice}` });
   const smartAlerts = [];
   const alertedKeys = /* @__PURE__ */ new Map();
   const smartCursorNext = {};
-  if (cfg.smartMoneyEnabled && watch.smartWallets.length && deps.smartEvents) {
+  if (cfg.smartMoneyEnabled && !onVacation && watch.smartWallets.length && deps.smartEvents) {
     const sinceOf = (id) => state.smCursor[id] ?? nowMs - 2 * 36e5;
     const sinceMs = Math.min(...watch.smartWallets.slice(0, 12).map((w) => sinceOf(w.id)));
     const evts = await deps.smartEvents(watch.smartWallets.slice(0, 12), sinceMs, nowMs).catch(() => []);
@@ -1487,7 +1493,8 @@ ${ev.advice}` });
       slot: slot.id,
       news: ratedNews.slice(0, 6),
       smart: smartBriefLines(smartRecent, nowMs),
-      emerging: emergingLines
+      emerging: emergingLines,
+      vacationUntil: onVacation ? watch.vacationUntil : null
     });
     try {
       await send(brief);

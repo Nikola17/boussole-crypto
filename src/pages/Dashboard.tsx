@@ -20,6 +20,7 @@ import { AiProgress, CostHint, NeedKey } from '../components/AiBlocks';
 import { Markdown } from '../components/Markdown';
 import { fngLabel } from '../api/feargreed';
 import { WeeklyCard } from '../components/WeeklyCard';
+import { DisciplineCard } from '../components/DisciplineCard';
 
 function greeting(name: string) {
   const h = new Date().getHours();
@@ -208,7 +209,10 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <WeeklyCard />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <WeeklyCard />
+        <DisciplineCard />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Narratives />

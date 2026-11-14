@@ -69,6 +69,8 @@ export interface BriefInputs {
   smart?: string[];
   /** Pépites émergentes : jeunes paires Solana/Base en traction, scannées, une ligne chacune. */
   emerging?: string[];
+  /** Mode vacances actif : jusqu'à cette date (AAAA-MM-JJ). */
+  vacationUntil?: string | null;
 }
 
 const HEAD_TOP = 3;
@@ -190,6 +192,11 @@ export function buildBrief(i: BriefInputs): string {
   if (topNews.length) {
     lines.push(`Actus : ${topNews.map((n) => `« ${n.title} »${n.source ? ` (${n.source})` : ''}`).join(' · ')}`);
     for (const n of topNews) if (n.resume) lines.push(`${n.coinName} : ${n.resume.replace(/\s+/g, ' ').slice(0, 320)}`);
+  }
+
+  // Mode vacances : la veille critique continue (prix, paliers), le reste est explicitement en pause.
+  if (!short && i.vacationUntil) {
+    lines.push(`Mode vacances jusqu'au ${i.vacationUntil} : veille critique uniquement — alertes de prix et paliers. Échéances et actus reprendront après.`);
   }
 
   // Smart money : ce que les wallets suivis ont fait depuis 24 h. La vente est l'information qui compte.

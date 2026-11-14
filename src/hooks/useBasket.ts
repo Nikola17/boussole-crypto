@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { getMarkets } from '../api/coingecko';
 import { useStore } from '../store/useStore';
-import { useCycle, useMarkets, useScan } from './useMarket';
+import { useCycle, useMarkets, useScan, useSmallCaps } from './useMarket';
 import { usePortfolio } from './usePortfolio';
 import { useCryptoCom } from './useCryptoCom';
 import {
@@ -12,6 +12,7 @@ import {
 } from '../lib/basket';
 import { rulesOf } from '../lib/profile';
 import { scatterReport } from '../lib/scatter';
+import { autoDiscoveryCandidates } from '../lib/discovery';
 import type { CoinRef } from '../types';
 import { useToday } from './useClock';
 
@@ -38,7 +39,23 @@ export function useBasket() {
   const cycle = useCycle();
   const markets = useMarkets();
 
-  const ids = useMemo(() => (basket ? [...new Set([...basket.core.map((c) => c.coinId), ...basket.discovery.map((c) => c.coinId)])] : []), [basket]);
+  // Découverte automatique : tu ne choisis plus rien — les candidates viennent du scan des pépites.
+  const autoMode = basket?.discoveryMode === 'auto';
+  const smalls = useSmallCaps(autoMode);
+  const autoPicks = useMemo(() => {
+    if (!autoMode || !basket || !smalls.data) return [];
+    const inputs = smalls.data.map((m) => ({
+      id: m.id, symbol: m.symbol, name: m.name, marketCap: m.market_cap, fdv: m.fully_diluted_valuation, volume24h: m.total_volume,
+      change7d: m.price_change_percentage_7d_in_currency ?? null, change30d: m.price_change_percentage_30d_in_currency ?? null,
+      athChangePct: m.ath_change_percentage, rank: m.market_cap_rank,
+    }));
+    return autoDiscoveryCandidates(inputs, {
+      excluded: new Set(basket.core.map((c) => c.coinId)),
+      excludedSymbols: new Set(basket.core.map((c) => c.symbol.toUpperCase())),
+    });
+  }, [autoMode, basket, smalls.data]);
+
+  const ids = useMemo(() => (basket ? [...new Set([...basket.core.map((c) => c.coinId), ...basket.discovery.map((c) => c.coinId), ...(autoPicks.map((p) => p.coin.coinId))])] : []), [basket, autoPicks]);
   // On réutilise les cours déjà chargés (top 250) et on ne demande à CoinGecko que les cryptos manquantes.
   const marketMap = useMemo(() => new Map((markets.data ?? []).map((m) => [m.id, m])), [markets.data]);
   const missing = useMemo(() => ids.filter((id) => !marketMap.has(id)), [ids, marketMap]);
@@ -54,7 +71,9 @@ export function useBasket() {
 
   // Le cycle peut manquer (Binance injoignable) : l'ordre est alors calculé à ×1 avec un avertissement, au lieu de disparaître un jour de DCA.
   const cycleSettled = !!cycle.data || !!cycle.error;
-  const ready = !!basket && !pf.loading && cycleSettled && !!markets.data && (missing.length === 0 || !!bm.data || bm.isError);
+  // En mode auto, le scan des pépites doit avoir répondu (même vide) : jamais de plan « sans regarder ».
+  const autoSettled = !autoMode || !!smalls.data || !!smalls.isError;
+  const ready = !!basket && !pf.loading && cycleSettled && autoSettled && !!markets.data && (missing.length === 0 || !!bm.data || bm.isError);
   const loadError = (markets.error ?? cycle.error ?? null) as Error | null;
 
   const ctx = useMemo((): BasketContext | null => {
@@ -79,10 +98,11 @@ export function useBasket() {
       change7d,
       cdc: cdcMap,
       scores,
+      autoDiscovery: autoPicks.length ? autoPicks.map((p) => p.coin) : undefined,
       rules: { maxPerGemPct: rules.maxPerGemPct, minLinePct: rules.minLinePct, maxDiscoveryLines: rules.maxDiscoveryLines },
       discoveryLinesOpen: scatterReport(pf.holdings, rules).discoveryLines,
     };
-  }, [basket, ready, profile, pf.holdings, pf.alloc, coins, ids, scan.data, cdc, cycle.data]);
+  }, [basket, ready, profile, pf.holdings, pf.alloc, coins, ids, scan.data, cdc, cycle.data, autoPicks]);
 
   const plan = useMemo(() => (basket && ctx ? planBasketOrder(basket, ctx) : null), [basket, ctx]);
 
@@ -102,5 +122,7 @@ export function useBasket() {
 
   return {
     loadError, missingCoins: bm.isError && missing.length > 0, retry: () => { void markets.refetch(); void bm.refetch(); },
-    basket, ctx, plan, ready, loading: !!basket && !ready && !loadError, markets: coins, known, priceOf, rate: pf.rate, currency: pf.currency, cycle: cycle.data, temperature: cycle.data?.temperature ?? null, holdings: pf.holdings, last, periodKey, done, due, next };
+    basket, ctx, plan, ready, loading: !!basket && !ready && !loadError, markets: coins, known, priceOf, rate: pf.rate, currency: pf.currency, cycle: cycle.data, temperature: cycle.data?.temperature ?? null, holdings: pf.holdings, last, periodKey, done, due, next,
+    autoCandidates: autoPicks,
+  };
 }
