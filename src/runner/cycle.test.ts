@@ -18,7 +18,7 @@ const PASS = 'phrase de passe du runner';
 const CFG: RunnerConfig = {
   syncRepo: 'Nikola17/boussole-sync', syncPath: 'boussole-sync.enc', syncToken: 'tok', passphrase: PASS,
   telegramToken: 'tg', telegramChatId: '42', coingeckoKey: null, currency: 'EUR',
-  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, smartMoneyEnabled: false, emergingEnabled: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', stateDir: '', device: 'vps-test',
+  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, smartMoneyEnabled: false, emergingEnabled: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', quietStart: 0, quietEnd: 0, stateDir: '', device: 'vps-test',
 };
 
 const txSol: Transaction = { id: 't1', coinId: 'solana', symbol: 'sol', name: 'Solana', date: '2026-01-10', type: 'buy', quantity: 100, price: 2, currency: 'USD', fee: 0, fxEurPerUsd: 0.87, updatedAt: '2026-01-10T00:00:00Z' };
@@ -478,5 +478,61 @@ describe('cycle du runner — digest des pépites émergentes', () => {
     );
     await runCycle(CFG, emptyState(), dry(), off.deps, H(8, 30));
     expect(off.sent.some((t) => t.includes('Émergentes'))).toBe(false);
+  });
+});
+
+describe('cycle du runner — silence nocturne', () => {
+  const CFG_NIGHT = { ...CFG, quietStart: 23, quietEnd: 8 };
+
+  it('la nuit (2 h) : les alertes n’envoient rien, elles attendent en file sans rien consommer', async () => {
+    const { deps, sent, pushes } = makeDeps({ alerts: [alert], transactions: [txSol] });
+    const { state, result } = await runCycle(CFG_NIGHT, emptyState(), dry(), deps, H(2, 0));
+    expect(sent).toHaveLength(0);
+    expect(pushes).toHaveLength(0);
+    expect(result.sent).toBe(0);
+    expect(state.sent).toEqual({});
+    expect(Object.keys(state.quietQueue)).toEqual(expect.arrayContaining(['alert:a1', 'exit:solana:2']));
+    expect(state.quietQueue['alert:a1'].alertId).toBe('a1');
+  });
+
+  it('le matin (9 h) : un digest résume la nuit, puis les alertes sont consommées du faisceau', async () => {
+    const { deps, sent, pushes } = makeDeps({ alerts: [alert], transactions: [txSol] });
+    const night = await runCycle(CFG_NIGHT, emptyState(), dry(), deps, H(2, 0));
+    const morning = await runCycle(CFG_NIGHT, night.state, dry(), deps, H(9, 0));
+    expect(night.result.sent).toBe(0);
+    expect(sent).toHaveLength(2); // le digest de la nuit, puis le brief du matin (jamais 4 notifications)
+    expect(sent[0]).toContain('Pendant la nuit');
+    expect(sent[0]).toContain('Alerte SOL');
+    expect(sent[0]).toContain('Palier ×2 atteint sur SOL');
+    expect(morning.state.quietQueue).toEqual({});
+    expect(morning.state.sent['alert:a1']).toBeTruthy();
+    expect(pushes).toHaveLength(1); // la consommation repart dans la synchronisation
+    const consumed = (await unseal(pushes[0].text, PASS)) as { data: { alerts: PriceAlert[] } };
+    expect(consumed.data.alerts[0]).toMatchObject({ id: 'a1', active: false });
+  });
+
+  it('une même alerte qui persiste la nuit n’occupe qu’une ligne du message du matin', async () => {
+    const { deps, sent } = makeDeps({ alerts: [alert], transactions: [txSol] });
+    const d23 = await runCycle(CFG_NIGHT, emptyState(), dry(), deps, new Date(2026, 10, 20, 23, 30)); // vendredi soir
+    expect(d23.state.quietQueue['alert:a1']).toBeTruthy(); // mise en attente la nuit venue
+    const d02 = await runCycle(CFG_NIGHT, d23.state, dry(), deps, new Date(2026, 10, 21, 2, 0)); // samedi, 2 h
+    expect(Object.keys(d02.state.quietQueue).sort()).toEqual(['alert:a1', 'exit:solana:2']); // toujours pas de doublon
+    await runCycle(CFG_NIGHT, d02.state, dry(), deps, new Date(2026, 10, 21, 9, 0)); // samedi matin
+    const digests = sent.filter((t) => t.includes('Pendant la nuit'));
+    expect(digests).toHaveLength(1);
+    expect(digests[0].split('Alerte SOL').length).toBe(2); // l’alerte y est une fois, pas deux
+    expect(digests[0].split('Palier ×2').length).toBe(2); // le palier aussi, une seule ligne
+  });
+
+  it('un échec Telegram au matin laisse la nuit entière en attente : rien n’est perdu', async () => {
+    const { deps, sent } = makeDeps({ alerts: [alert], transactions: [txSol] });
+    const night = await runCycle(CFG_NIGHT, emptyState(), dry(), deps, H(2, 0));
+    expect(sent).toHaveLength(0);
+    const bad = makeDeps({ alerts: [alert], transactions: [txSol] }, { telegramError: 'Telegram KO' });
+    const morning = await runCycle(CFG_NIGHT, night.state, dry(), bad.deps, H(9, 0));
+    expect(morning.result.sent).toBe(0);
+    expect(morning.result.error).toContain('Telegram');
+    expect(Object.keys(morning.state.quietQueue)).toHaveLength(2);
+    expect(morning.state.sent).toEqual({}); // rien de marqué : le suivant retentera
   });
 });

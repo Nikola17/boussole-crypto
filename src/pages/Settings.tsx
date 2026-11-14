@@ -13,6 +13,7 @@ import { backupFolderLabel, ensureNotificationPermission, isElectron, isNative, 
 import { Link } from '../router';
 import { useAiContext } from '../ai/context';
 import { checkPassphrase } from '../lib/sync/crypto';
+import { fetchRaw } from '../lib/sync/github';
 import { runSync, useSyncStatus } from '../hooks/useSync';
 import { mergeBackupInto } from '../lib/sync/merge';
 import { describeRunnerStatus, readRunnerStatus } from '../lib/runnerSync';
@@ -344,6 +345,30 @@ export default function Settings() {
   );
 }
 
+/** Signal de vie du serveur veilleur (VPS) : le petit fichier non chiffré que le runner pousse toutes les 10 minutes. */
+function HeartbeatLine() {
+  const { syncEnabled, syncRepo, syncToken } = useStore((st) => st.settings);
+  const q = useQuery({
+    queryKey: ['watch-heartbeat'],
+    queryFn: () => fetchRaw(syncRepo, 'heartbeat.json', syncToken),
+    enabled: syncEnabled && !!syncRepo.trim() && !!syncToken.trim(),
+    staleTime: 10 * 60_000,
+    refetchInterval: 10 * 60_000,
+    retry: 1,
+  });
+  if (!syncEnabled) return null;
+  if (q.isLoading) return null;
+  let at: number | null = null;
+  try { at = q.data ? Date.parse((JSON.parse(q.data) as { at?: string }).at ?? '') : null; } catch { at = null; }
+  const fresh = at != null && Number.isFinite(at) && Date.now() - at < 45 * 60_000;
+  if (at == null || !Number.isFinite(at)) return <p className="-mt-2 text-xs text-warn">Serveur veilleur : aucun signal de vie reçu pour l'instant. Vérifie le service sur le VPS si cela persiste.</p>;
+  return (
+    <p className={`-mt-2 text-xs ${fresh ? 'text-ink-2' : 'text-warn'}`}>
+      Serveur veilleur : {fresh ? `dernier pointage ${fmtRelative(at)}` : `dernier pointage ${fmtRelative(at)} — vérifie le service sur le VPS`}.
+    </p>
+  );
+}
+
 /** Synchronisation chiffrée PC ↔ téléphone : dépôt GitHub privé + phrase de passe (AES-GCM) + fusion automatique. */
 function SyncCard() {
   const s = useStore((st) => st.settings);
@@ -379,6 +404,7 @@ function SyncCard() {
             {error ?? (busy ? 'Synchronisation en cours…' : lastAt > 0 ? `Synchronisé ${fmtRelative(lastAt).replace('il y a', 'il y a')}` : 'Jamais synchronisé.')}
           </span>
         </div>
+        <HeartbeatLine />
         <p className="text-xs text-muted">Ce qui part vers GitHub : tes transactions, comptes, wallets, plans DCA et panier, thèses, alertes, réglages de profil — chiffrés. Jamais : tes clés API (IA, CoinGecko), ni ce jeton, ni cette phrase, ni les rapports IA et conversations propres à chaque appareil.</p>
       </div>
     </Card>

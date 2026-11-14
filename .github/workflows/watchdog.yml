@@ -1,0 +1,28 @@
+# L'œil du gardien : il vérifie que le serveur veilleur (hermes) donne toujours signe de vie.
+# Toutes les 20 minutes, GitHub Actions lit « heartbeat.json » du dépôt de synchronisation (poussé par
+# le runner toutes les 10 minutes) et prévient sur Telegram si le serveur se tait — même si c'est le VPS
+# lui-même qui est tombé. Les secrets vivent dans les secrets du dépôt (SYNC_PAT, TELEGRAM_TOKEN,
+# TELEGRAM_CHAT_ID) ; l'état du gardien (dernière alerte) vit dans « watchdog.json » du dépôt de sync.
+name: Gardien du serveur veilleur
+on:
+  schedule:
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: node .github/watchdog/watchdog.mjs
+        env:
+          SYNC_PAT: ${{ secrets.SYNC_PAT }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

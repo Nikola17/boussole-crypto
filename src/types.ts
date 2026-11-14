@@ -107,6 +107,21 @@ export interface HotNote {
   createdAt: string;
 }
 
+/** Attente anti-FOMO : un achat prévu sur une crypto qui a trop monté en 7 jours doit attendre 24 h. */
+export interface ImpulseWait {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
+  id: string;
+  coinId: string;
+  symbol: string;
+  name: string;
+  /** La variation 7 jours constatée au moment de l'attente (en %) — pour ne rien inventer plus tard. */
+  change7dPct?: number;
+  createdAt: string;
+  /** ISO 8601 : avant cette date, l'achat reste bloqué. */
+  unlockAt: string;
+}
+
 /** Une modification datée du profil (ou de ses règles) : l'historique de ce qui a changé, et quand. */
 export interface ProfileChange {
   // Synchronisation : date de la dernière modification de cet élément (ISO 8601).

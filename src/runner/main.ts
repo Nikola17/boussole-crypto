@@ -70,6 +70,24 @@ const defaultStateDir = (): string => join(homedir(), '.local', 'state', 'bousso
 
 const stateFileOf = (cfg: RunnerConfig): string => join(cfg.stateDir || defaultStateDir(), 'runner-state.json');
 
+// ---------------------------------------------------------------- signal de vie
+
+// Dépôt de sync : petit fichier en clair « heartbeat.json » (aucun secret) qui dit « le serveur tourne ».
+// Une GitHub Action (l'œil du gardien) le relit toutes les 20 minutes et préviens sur Telegram s'il vieillit.
+const HEARTBEAT_PATH = 'heartbeat.json';
+/** Poussé au maximum toutes les 10 minutes : le cycle tourne toutes les 5, l'œil alerte après 45 min de silence. */
+const HEARTBEAT_PERIOD_MS = 10 * 60_000;
+let lastHeartbeatAt = 0;
+
+async function pushHeartbeat(cfg: RunnerConfig): Promise<void> {
+  if (Date.now() - lastHeartbeatAt < HEARTBEAT_PERIOD_MS) return;
+  const previous = await fetchRemote(cfg.syncRepo, HEARTBEAT_PATH, cfg.syncToken).catch(() => null);
+  const stamped = JSON.stringify({ at: new Date().toISOString(), device: cfg.device });
+  await pushRemote(cfg.syncRepo, HEARTBEAT_PATH, cfg.syncToken, stamped, previous?.sha ?? null);
+  lastHeartbeatAt = Date.now();
+}
+
+
 function loadState(cfg: RunnerConfig): RunnerState {
   const p = stateFileOf(cfg);
   return existsSync(p) ? parseState(readFileSync(p, 'utf-8')) : emptyState();
@@ -197,7 +215,10 @@ async function modeMain(cfg: RunnerConfig, mode: 'loop' | 'once' | 'brief' | 'di
   const run = async (): Promise<void> => {
     const { state, result } = await runCycle(cfg, loadState(cfg), { dry: false, forceBrief: mode === 'brief' }, depsOf(cfg));
     saveState(cfg, state);
+    // Signal de vie pour l'œil du gardien : un échec d'envoi du battement ne casse jamais la surveillance.
+    await pushHeartbeat(cfg).catch((e) => log(`Battement de vie non envoyé : ${e instanceof Error ? e.message : String(e)}`));
     if (result.sent) log(`${result.sent} message${result.sent > 1 ? 's' : ''} envoyé${result.sent > 1 ? 's' : ''}${result.consumed ? `, ${result.consumed} alerte${result.consumed > 1 ? 's' : ''} consommée${result.consumed > 1 ? 's' : ''} dans la synchronisation` : ''}.`);
+    if (result.watching || result.sent) log(`Surveillance : ${result.watching} alerte${result.watching > 1 ? 's' : ''} armée${result.watching > 1 ? 's' : ''}.`);
     if (result.error) log(`Échec : ${result.error}`);
   };
 
@@ -205,7 +226,7 @@ async function modeMain(cfg: RunnerConfig, mode: 'loop' | 'once' | 'brief' | 'di
     await run();
     return;
   }
-  log(`Surveillance démarrée : contrôle toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : 'matin désactivé'}${cfg.briefUsOpen ? ', ouverture US (9 h 30 New York)' : ''}${cfg.briefUsClose ? ', clôture US (16 h New York)' : ''}. Veille presse : ${cfg.newsEnabled ? `activée${cfg.mistralApiKey ? ' (résumés IA)' : ' (heuristique, sans clé IA)'}` : 'désactivée'}. Smart money : ${cfg.smartMoneyEnabled ? 'activé' : 'désactivé'}${cfg.emergingEnabled ? ', digest émergentes dans le brief du matin' : ''}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffré de bout en bout).`);
+  log(`Surveillance démarrée : contrôle toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : 'matin désactivé'}${cfg.briefUsOpen ? ', ouverture US (9 h 30 New York)' : ''}${cfg.briefUsClose ? ', clôture US (16 h New York)' : ''}.${cfg.quietStart !== cfg.quietEnd ? ` Silence nocturne : les alertes arrivent regroupées après ${cfg.quietEnd} h (fenêtre ${cfg.quietStart} h → ${cfg.quietEnd} h).` : ''} Veille presse : ${cfg.newsEnabled ? `activée${cfg.mistralApiKey ? ' (résumés IA)' : ' (heuristique, sans clé IA)'}` : 'désactivée'}. Smart money : ${cfg.smartMoneyEnabled ? 'activé' : 'désactivé'}${cfg.emergingEnabled ? ', digest émergentes dans le brief du matin' : ''}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffré de bout en bout).`);
   for (;;) {
     try {
       await run();

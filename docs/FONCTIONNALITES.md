@@ -202,6 +202,13 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Toutes les plateformes** : Windows (.ico de 16 à 256 px avec une version simplifiée pour les petites tailles, icône près de l'horloge), Android (icône adaptative vectorielle, version monochrome pour les icônes à thème d'Android 13+, écrans de démarrage, icône des notifications), macOS (.icns) et iOS (clair, sombre, teinté) prêts pour plus tard.
 - **Un seul script** (scripts/make-icons.cjs) régénère tout à partir de la définition du logo ; charte et fichiers dans branding/.
 
+### v1.18.0 — Le gardien (lot 19)
+
+- **Silence nocturne et messages regroupés (VPS)** : entre `quietStart` et `quietEnd` (23 h → 8 h par défaut, heures du serveur), aucune alerte Telegram ne part. Elles attendent en file (regroupées par clé, une alerte persistante n’occupe qu’une seule ligne) et arrivent en UN message le matin, avec l’heure réelle de chaque événement. Un échec d’envoi du digest ne perd rien : il repart au cycle suivant. La file survit à un redémarrage du service. Deux heures identiques dans `runner.json` coupent le silence.
+- **Délai de réflexion de 24 h (règle anti-FOMO)** : un achat du jour, hors panier/dépôt, sur une crypto qui a pris +50 % ou plus en 7 jours ne s’enregistre plus dans la minute — le formulaire propose « Poser le délai de 24 h​». L’attente est visible dans Guide → profil (carte « Attentes de 24 h », avec la variation constatée et l’heure de déblocage), synchronisée entre appareils. Passées les 24 h, l’achat redevient possible ; sans donnée de marché, la règle ne bloque pas ce qu’elle ne peut pas constater.
+- **Œil du gardien (supervision du VPS)** : le runner pousse toutes les 10 min un petit fichier non chiffré `heartbeat.json` (« j’existe ») dans le dépôt de sync. Une GitHub Action du dépôt de code le relit toutes les 20 min : 45 min de silence → message Telegram « le serveur veilleur n’a plus donné signe de vie » (au plus une fois toutes les 2 h), puis « il est de retour » à la reprise. Le VPS peut tomber : c’est GitHub qui veille sur lui.
+- **Dans l’application (Réglages → Synchronisation)** : une ligne « Serveur veilleur » affiche le dernier pointage du VPS et passe en orange au-delà de 45 min.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

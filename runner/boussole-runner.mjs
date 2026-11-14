@@ -80,6 +80,16 @@ function validateConfig(raw, opts = {}) {
     briefHour = typeof briefHourRaw === "number" && Number.isInteger(briefHourRaw) && briefHourRaw >= 0 && briefHourRaw <= 23 ? briefHourRaw : -1;
     if (briefHour < 0) problems.push("briefHour doit \xEAtre un entier entre 0 et 23.");
   }
+  const hourOf = (v, name) => {
+    if (v === void 0) return null;
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 23) {
+      problems.push(`${name} doit \xEAtre un entier entre 0 et 23.`);
+      return null;
+    }
+    return v;
+  };
+  const quietStart = hourOf(r.quietStart, "quietStart") ?? 23;
+  const quietEnd = hourOf(r.quietEnd, "quietEnd") ?? 8;
   const intervalRaw = r.intervalMinutes;
   let intervalMinutes = 5;
   if (intervalRaw !== void 0) {
@@ -121,6 +131,8 @@ function validateConfig(raw, opts = {}) {
       mistralApiKey: str(r.mistralApiKey) || null,
       mistralModel: str(r.mistralModel) || "mistral-small-latest",
       timeZone,
+      quietStart,
+      quietEnd,
       stateDir: str(r.stateDir),
       device: str(r.device) || "vps-boussole"
     },
@@ -147,7 +159,7 @@ function applyEnv(raw, env = process.env) {
 var DAY_MS = 24 * 36e5;
 var SENT_RETENTION_MS = 30 * DAY_MS;
 function emptyState() {
-  return { sent: {}, lastBriefSlot: {}, zoneLabel: null, smCursor: {}, okAt: null, attemptAt: null, error: null };
+  return { sent: {}, lastBriefSlot: {}, zoneLabel: null, quietQueue: {}, smCursor: {}, okAt: null, attemptAt: null, error: null };
 }
 function parseState(json) {
   if (!json) return emptyState();
@@ -155,10 +167,19 @@ function parseState(json) {
     const r = JSON.parse(json);
     const sent = r.sent && typeof r.sent === "object" && !Array.isArray(r.sent) ? r.sent : {};
     const slots = r.lastBriefSlot && typeof r.lastBriefSlot === "object" && !Array.isArray(r.lastBriefSlot) ? r.lastBriefSlot : {};
-    const out = { sent: {}, lastBriefSlot: {}, zoneLabel: typeof r.zoneLabel === "string" ? r.zoneLabel : null, smCursor: {}, okAt: typeof r.okAt === "number" ? r.okAt : null, attemptAt: typeof r.attemptAt === "number" ? r.attemptAt : null, error: typeof r.error === "string" ? r.error : null };
+    const out = { sent: {}, lastBriefSlot: {}, zoneLabel: typeof r.zoneLabel === "string" ? r.zoneLabel : null, quietQueue: {}, smCursor: {}, okAt: typeof r.okAt === "number" ? r.okAt : null, attemptAt: typeof r.attemptAt === "number" ? r.attemptAt : null, error: typeof r.error === "string" ? r.error : null };
     if (typeof r.lastBriefDay === "string" && typeof slots.matin === "undefined") out.lastBriefSlot.matin = r.lastBriefDay;
     for (const [k, v] of Object.entries(slots)) if (typeof v === "string") out.lastBriefSlot[k] = v;
     for (const [k, v] of Object.entries(sent)) if (typeof v === "number" && Number.isFinite(v)) out.sent[k] = v;
+    const quietRaw = r.quietQueue;
+    if (quietRaw && typeof quietRaw === "object" && !Array.isArray(quietRaw)) {
+      for (const [k, v] of Object.entries(quietRaw)) {
+        const q = v;
+        if (typeof q.text === "string" && q.text.trim() && typeof q.at === "number" && Number.isFinite(q.at)) {
+          out.quietQueue[k] = { text: q.text, at: q.at, ...typeof q.alertId === "string" ? { alertId: q.alertId } : {} };
+        }
+      }
+    }
     const cursorRaw = r.smCursor;
     if (cursorRaw && typeof cursorRaw === "object" && !Array.isArray(cursorRaw)) {
       for (const [k, v] of Object.entries(cursorRaw)) if (typeof v === "number" && Number.isFinite(v)) out.smCursor[k] = v;
@@ -197,6 +218,30 @@ function recordStatus(state, ok, error, now) {
     out.error = null;
   } else out.error = error ?? "erreur inconnue";
   return out;
+}
+function inQuietWindow(start, end, now) {
+  if (start === end) return false;
+  const h = now.getHours();
+  return start < end ? h >= start && h < end : h >= start || h < end;
+}
+function holdQuiet(state, items, now) {
+  if (!items.length) return state;
+  const quietQueue = { ...state.quietQueue };
+  for (const it of items) quietQueue[it.key] = { text: it.text, at: now, alertId: it.alertId };
+  return { ...state, quietQueue };
+}
+function dropQuiet(state, keys) {
+  if (!keys.length) return state;
+  const quietQueue = { ...state.quietQueue };
+  for (const k of keys) delete quietQueue[k];
+  return { ...state, quietQueue };
+}
+function quietMessage(items, timeZone = "Europe/Paris") {
+  const fmt = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone });
+  const lines = items.sort((a, b) => a.at - b.at).map((it) => `${fmt.format(new Date(it.at))} \u2014 ${it.text.split("\n")[0]}`);
+  const shown = lines.slice(0, 8);
+  if (lines.length > 8) shown.push(`+ ${lines.length - 8} autre${lines.length > 9 ? "s" : ""} pendant la nuit`);
+  return ["Pendant la nuit, sans r\xE9veiller personne :", ...shown].join("\n");
 }
 
 // src/lib/sync/crypto.ts
@@ -1428,6 +1473,31 @@ ${ev.advice}` });
   }
   queue.push(...smartAlerts);
   const consumedIds = [];
+  const quiet = inQuietWindow(cfg.quietStart, cfg.quietEnd, now);
+  if (quiet && queue.length && !opts.dry) {
+    state = holdQuiet(state, queue, nowMs);
+    queue.length = 0;
+  }
+  if (!quiet && Object.keys(state.quietQueue).length && !opts.dry) {
+    const held = Object.entries(state.quietQueue);
+    const digest = quietMessage(held.map(([, v]) => v), cfg.timeZone);
+    try {
+      await send(digest);
+      const heldKeys = new Set(held.map(([k]) => k));
+      const heldIds = held.flatMap(([, v]) => v.alertId ? [v.alertId] : []);
+      state = markSent(state, [...heldKeys], nowMs);
+      state = dropQuiet(state, [...heldKeys]);
+      const lastZone = [...held].reverse().find(([k]) => k.startsWith("zone:"));
+      if (lastZone && temperature && state.zoneLabel !== temperature.zone.label && lastZone[1].text.includes(temperature.zone.label)) {
+        state = { ...state, zoneLabel: temperature.zone.label };
+      }
+      result.sent++;
+      consumedIds.push(...heldIds);
+      for (let i = queue.length - 1; i >= 0; i--) if (heldKeys.has(queue[i].key)) queue.splice(i, 1);
+    } catch (e) {
+      result.error = e instanceof Error ? e.message : String(e);
+    }
+  }
   for (const m of queue) {
     if (opts.dry) {
       opts.onDry?.(m.text);
@@ -2235,6 +2305,16 @@ function loadConfig(path, allowMissingChatId) {
 }
 var defaultStateDir = () => join(homedir(), ".local", "state", "boussole");
 var stateFileOf = (cfg) => join(cfg.stateDir || defaultStateDir(), "runner-state.json");
+var HEARTBEAT_PATH = "heartbeat.json";
+var HEARTBEAT_PERIOD_MS = 10 * 6e4;
+var lastHeartbeatAt = 0;
+async function pushHeartbeat(cfg) {
+  if (Date.now() - lastHeartbeatAt < HEARTBEAT_PERIOD_MS) return;
+  const previous = await fetchRemote(cfg.syncRepo, HEARTBEAT_PATH, cfg.syncToken).catch(() => null);
+  const stamped = JSON.stringify({ at: (/* @__PURE__ */ new Date()).toISOString(), device: cfg.device });
+  await pushRemote(cfg.syncRepo, HEARTBEAT_PATH, cfg.syncToken, stamped, previous?.sha ?? null);
+  lastHeartbeatAt = Date.now();
+}
 function loadState(cfg) {
   const p = stateFileOf(cfg);
   return existsSync(p) ? parseState(readFileSync(p, "utf-8")) : emptyState();
@@ -2344,14 +2424,16 @@ async function modeMain(cfg, mode) {
   const run = async () => {
     const { state, result } = await runCycle(cfg, loadState(cfg), { dry: false, forceBrief: mode === "brief" }, depsOf(cfg));
     saveState(cfg, state);
+    await pushHeartbeat(cfg).catch((e) => log(`Battement de vie non envoy\xE9 : ${e instanceof Error ? e.message : String(e)}`));
     if (result.sent) log(`${result.sent} message${result.sent > 1 ? "s" : ""} envoy\xE9${result.sent > 1 ? "s" : ""}${result.consumed ? `, ${result.consumed} alerte${result.consumed > 1 ? "s" : ""} consomm\xE9e${result.consumed > 1 ? "s" : ""} dans la synchronisation` : ""}.`);
+    if (result.watching || result.sent) log(`Surveillance : ${result.watching} alerte${result.watching > 1 ? "s" : ""} arm\xE9e${result.watching > 1 ? "s" : ""}.`);
     if (result.error) log(`\xC9chec : ${result.error}`);
   };
   if (mode === "once" || mode === "brief") {
     await run();
     return;
   }
-  log(`Surveillance d\xE9marr\xE9e : contr\xF4le toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : "matin d\xE9sactiv\xE9"}${cfg.briefUsOpen ? ", ouverture US (9 h 30 New York)" : ""}${cfg.briefUsClose ? ", cl\xF4ture US (16 h New York)" : ""}. Veille presse : ${cfg.newsEnabled ? `activ\xE9e${cfg.mistralApiKey ? " (r\xE9sum\xE9s IA)" : " (heuristique, sans cl\xE9 IA)"}` : "d\xE9sactiv\xE9e"}. Smart money : ${cfg.smartMoneyEnabled ? "activ\xE9" : "d\xE9sactiv\xE9"}${cfg.emergingEnabled ? ", digest \xE9mergentes dans le brief du matin" : ""}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffr\xE9 de bout en bout).`);
+  log(`Surveillance d\xE9marr\xE9e : contr\xF4le toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : "matin d\xE9sactiv\xE9"}${cfg.briefUsOpen ? ", ouverture US (9 h 30 New York)" : ""}${cfg.briefUsClose ? ", cl\xF4ture US (16 h New York)" : ""}.${cfg.quietStart !== cfg.quietEnd ? ` Silence nocturne : les alertes arrivent regroup\xE9es apr\xE8s ${cfg.quietEnd} h (fen\xEAtre ${cfg.quietStart} h \u2192 ${cfg.quietEnd} h).` : ""} Veille presse : ${cfg.newsEnabled ? `activ\xE9e${cfg.mistralApiKey ? " (r\xE9sum\xE9s IA)" : " (heuristique, sans cl\xE9 IA)"}` : "d\xE9sactiv\xE9e"}. Smart money : ${cfg.smartMoneyEnabled ? "activ\xE9" : "d\xE9sactiv\xE9"}${cfg.emergingEnabled ? ", digest \xE9mergentes dans le brief du matin" : ""}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffr\xE9 de bout en bout).`);
   for (; ; ) {
     try {
       await run();

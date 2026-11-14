@@ -41,3 +41,35 @@ export function trimStatus(lastIso: string | undefined, now = new Date(), minDay
 export function isTinyLine(valueUsd: number, totalUsd: number, minLinePct: number): boolean {
   return totalUsd > 0 && (valueUsd / totalUsd) * 100 < minLinePct;
 }
+
+// ------------------------------------------------------------------ délai de réflexion anti-FOMO
+
+/** Une crypto qui prend +50 % en 7 jours ne s'achète pas dans la minute : attente de 24 h, appliquée à froid. */
+export const FOMO_SPIKE_7D_PCT = 50;
+export const FOMO_WAIT_MS = 24 * 3600_000;
+
+export interface ImpulseVerdict {
+  /** L'achat doit-il être bloqué maintenant ? */
+  blocked: boolean;
+  /** Une attente existe-t-elle déjà pour cette crypto ? */
+  started: boolean;
+  /** Date ISO de déblocage de l'attente existante (null : pas d'attente). */
+  unlockAt: string | null;
+  /** Heures restantes avant le déblocage (0 : c'est ouvert). */
+  hoursLeft: number;
+}
+
+/**
+ * La règle des 24 h : un achat hors DCA sur une crypto qui a pris +50 % ou plus en 7 jours doit attendre un jour,
+ * pour séparer l'envie de la décision. Sans donnée de marché (variation inconnue), la règle ne s'applique pas —
+ * elle ne bloque que ce qu'elle peut constater. Elle ne remplace pas la décision : elle lui laisse le temps.
+ */
+export function impulseVerdict(change7dPct: number | null | undefined, wait: { unlockAt: string } | null | undefined, nowMs: number): ImpulseVerdict {
+  const spike = change7dPct != null && Number.isFinite(change7dPct) && change7dPct >= FOMO_SPIKE_7D_PCT;
+  if (!spike) return { blocked: false, started: false, unlockAt: null, hoursLeft: 0 };
+  if (!wait || !Number.isFinite(Date.parse(wait.unlockAt))) return { blocked: true, started: false, unlockAt: null, hoursLeft: Math.ceil(FOMO_WAIT_MS / 3600_000) };
+  const left = Date.parse(wait.unlockAt) - nowMs;
+  if (left > 0) return { blocked: true, started: true, unlockAt: wait.unlockAt, hoursLeft: Math.max(1, Math.ceil(left / 3600_000)) };
+  return { blocked: false, started: true, unlockAt: wait.unlockAt, hoursLeft: 0 };
+}
+

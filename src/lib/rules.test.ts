@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brokenThesisCoins, isTinyLine, lagsBitcoin, outsideDcaCheck, trimStatus } from './rules';
+import { brokenThesisCoins, impulseVerdict, isTinyLine, lagsBitcoin, outsideDcaCheck, trimStatus } from './rules';
 import { rebalance, rebalanceAction } from './portfolio';
 import { exitLadder, pendingRungs, DEFAULT_LADDER } from './exit';
 import { ARCHETYPES } from './profile';
@@ -138,5 +138,25 @@ describe('ordre du jour transmis à l’IA', () => {
     expect(c.panierDca).toBeNull();
     expect(String(c.avertissement)).toContain('partiel');
     expect(c.temperatureMarche).toBeNull();
+  });
+});
+
+describe('délai de réflexion 24 h (anti-FOMO)', () => {
+  const NOW = Date.parse('2026-11-20T15:00:00Z');
+  it('sans emballement constaté, aucun blocage — la règle ne s’invente pas de données', () => {
+    expect(impulseVerdict(12, undefined, NOW).blocked).toBe(false);
+    expect(impulseVerdict(null, undefined, NOW).blocked).toBe(false); // marché indisponible : ouvert
+  });
+  it('+50 % en 7 jours sans attente : bloqué, l’attente doit être posée explicitement', () => {
+    const v = impulseVerdict(51, undefined, NOW);
+    expect(v).toMatchObject({ blocked: true, started: false, unlockAt: null });
+    expect(v.hoursLeft).toBe(24);
+  });
+  it('une attente en cours décompte ; expirée, elle débloque l’achat', () => {
+    const unlockAt = new Date(NOW + 5 * 3600_000).toISOString();
+    const v = impulseVerdict(88, { unlockAt }, NOW);
+    expect(v).toMatchObject({ blocked: true, started: true, hoursLeft: 5 });
+    const done = impulseVerdict(88, { unlockAt: new Date(NOW - 60_000).toISOString() }, NOW);
+    expect(done).toMatchObject({ blocked: false, started: true, hoursLeft: 0 });
   });
 });

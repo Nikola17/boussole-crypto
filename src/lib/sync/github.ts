@@ -58,6 +58,22 @@ export async function fetchRemote(repo: string, path: string, token: string): Pr
   return { sha: j.sha, content: await b64ToString(j.content) };
 }
 
+/**
+ * Lit un fichier NON chiffré du dépôt de sync (signal de vie du serveur, dernière version…), contenu texte.
+ * Retourne null s'il n'existe pas encore : jamais d'erreur pour un fichier facultatif.
+ */
+export async function fetchRaw(repo: string, path: string, token: string): Promise<string | null> {
+  const res = await api(repoUrl(repo, path), token);
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const msg = await res.json().catch(() => ({}));
+    throw new Error(msg.message ? `Lecture GitHub impossible (${res.status} : ${msg.message}).` : `Lecture GitHub impossible (${res.status}).`);
+  }
+  const j = (await res.json()) as { content?: unknown; encoding?: string };
+  if (typeof j.content !== 'string') throw new Error('Le fichier distant est illisible.');
+  return await b64ToString(j.content);
+}
+
 /** Écrit le fichier chiffré ; garantit que l'on n'écrase jamais une modification inconnue. */
 export async function pushRemote(repo: string, path: string, token: string, content: string, knownSha: string | null): Promise<void> {
   const body: Record<string, unknown> = { message: 'Boussole : synchronisation', content: bytesToB64(new TextEncoder().encode(content)) };

@@ -39,6 +39,9 @@ export interface RunnerConfig {
   mistralModel: string;
   /** Fuseau dans lequel lire l'heure du brief et les jours d'échéance (le serveur est souvent en UTC). */
   timeZone: string;
+  /** Silence nocturne : aucune alerte Telegram entre cette heure et quietEnd ; identiques = pas de silence. */
+  quietStart: number;
+  quietEnd: number;
   /** Répertoire de l'état local du runner (aucun secret dedans). */
   stateDir: string;
   /** Nom du serveur, écrit dans le fichier de sync avec les consommations d'alertes. */
@@ -74,6 +77,15 @@ export function validateConfig(raw: unknown, opts: { allowMissingChatId?: boolea
     briefHour = typeof briefHourRaw === 'number' && Number.isInteger(briefHourRaw) && briefHourRaw >= 0 && briefHourRaw <= 23 ? briefHourRaw : -1;
     if (briefHour < 0) problems.push('briefHour doit être un entier entre 0 et 23.');
   }
+
+  // Silence nocturne : deux heures entières, ou deux valeurs identiques pour l'annuler.
+  const hourOf = (v: unknown, name: string): number | null => {
+    if (v === undefined) return null;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 23) { problems.push(`${name} doit être un entier entre 0 et 23.`); return null; }
+    return v;
+  };
+  const quietStart = hourOf(r.quietStart, 'quietStart') ?? 23;
+  const quietEnd = hourOf(r.quietEnd, 'quietEnd') ?? 8;
 
   const intervalRaw = r.intervalMinutes;
   let intervalMinutes = 5;
@@ -121,6 +133,8 @@ export function validateConfig(raw: unknown, opts: { allowMissingChatId?: boolea
       mistralApiKey: str(r.mistralApiKey) || null,
       mistralModel: str(r.mistralModel) || 'mistral-small-latest',
       timeZone,
+      quietStart,
+      quietEnd,
       stateDir: str(r.stateDir),
       device: str(r.device) || 'vps-boussole',
     },

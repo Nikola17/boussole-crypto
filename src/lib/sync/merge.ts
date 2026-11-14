@@ -6,7 +6,7 @@
 import type { SyncDeletion } from '../../types';
 
 /** Rubriques-listes : chaque élément a un identifiant, la fusion se fait élément par élément. */
-export const ITEM_KEYS = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'theses', 'accounts', 'basketExecutions', 'defiBets', 'paperTrades', 'smartWallets', 'hotNotes', 'profileHistory'] as const;
+export const ITEM_KEYS = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'theses', 'accounts', 'basketExecutions', 'defiBets', 'paperTrades', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory'] as const;
 export type ItemKey = (typeof ITEM_KEYS)[number];
 
 /** Rubriques datées dans `syncStamp` : fusionnées d'un bloc, la version la plus récente l'emporte. */

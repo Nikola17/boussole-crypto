@@ -10,7 +10,7 @@ import { buildPositions, isStable } from '../lib/portfolio';
 import { computeCycle } from '../lib/cycle';
 import type { Candle } from '../lib/indicators';
 import type { RunnerConfig } from './config';
-import { type RunnerState, markSent, pruneSent, recordStatus, shouldSend } from './state';
+import { type RunnerState, dropQuiet, holdQuiet, inQuietWindow, markSent, pruneSent, quietMessage, recordStatus, shouldSend } from './state';
 import { alertKey, alertMessage, consumeAlerts, hitAlerts, hitRungs, rungKey, rungMessage, watchOf, zoneMessage, type MessageCurrency } from './evaluate';
 import { buildBrief, slotsOfDay } from './brief';
 import type { CoinPrice } from './market';
@@ -253,8 +253,39 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
   }
   queue.push(...smartAlerts);
 
-  // 2. Envoi : une alerte n'est marquée envoyée qu'APRÈS un envoi réussi ; le premier échec arrête (on réessaie au cycle suivant).
+  // 2. Envoi. Silence nocturne : rien ne part entre quietStart et quietEnd — les alertes attendent en file
+  //    (regroupées par clé, heures réelles conservées) et partent en un seul message à la fin de la nuit.
   const consumedIds: string[] = [];
+  const quiet = inQuietWindow(cfg.quietStart, cfg.quietEnd, now);
+  if (quiet && queue.length && !opts.dry) {
+    state = holdQuiet(state, queue, nowMs);
+    queue.length = 0;
+  }
+  if (!quiet && Object.keys(state.quietQueue).length && !opts.dry) {
+    // Fin de nuit (premier cycle hors fenêtre) : un digest unique réveille le matin avec tout ce qui s'est passé.
+    const held = Object.entries(state.quietQueue);
+    const digest = quietMessage(held.map(([, v]) => v), cfg.timeZone);
+    try {
+      await send(digest);
+      const heldKeys = new Set(held.map(([k]) => k));
+      const heldIds = held.flatMap(([, v]) => (v.alertId ? [v.alertId] : []));
+      state = markSent(state, [...heldKeys], nowMs);
+      state = dropQuiet(state, [...heldKeys]);
+      // La nuit a peut-être changé la zone : le message s'est envolé avec le digest, la référence suit.
+      const lastZone = [...held].reverse().find(([k]) => k.startsWith('zone:'));
+      if (lastZone && temperature && state.zoneLabel !== temperature.zone.label && lastZone[1].text.includes(temperature.zone.label)) {
+        state = { ...state, zoneLabel: temperature.zone.label };
+      }
+      result.sent++;
+      consumedIds.push(...heldIds);
+      // La même alerte repérée par CE cycle (avant l'envoi du digest) ne part qu'une fois : elle est déjà dedans.
+      for (let i = queue.length - 1; i >= 0; i--) if (heldKeys.has(queue[i].key)) queue.splice(i, 1);
+    } catch (e) {
+      result.error = e instanceof Error ? e.message : String(e);
+      // Le digest n'est pas parti : il attendra le prochain cycle, les alertes restent tenues.
+    }
+  }
+  // Une alerte n'est marquée envoyée qu'APRÈS un envoi réussi ; le premier échec arrête (on réessaie au cycle suivant).
   for (const m of queue) {
     if (opts.dry) { opts.onDry?.(m.text); continue; } // à blanc : montré, jamais compté ni marqué
     try {

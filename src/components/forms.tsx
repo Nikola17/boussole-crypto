@@ -6,10 +6,10 @@ import { useStore } from '../store/useStore';
 import { useCycle, useEurUsdHistory, useFx, useMarkets } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { FREQUENCY_LABEL, STRATEGY_HELP, STRATEGY_LABEL, type DcaStrategy, type Frequency } from '../lib/dca';
-import { fmtMoney, isoDay, uid } from '../lib/format';
+import { fmtMoney, fmtNum, isoDay, uid } from '../lib/format';
 import { isStable } from '../lib/portfolio';
 import { eurPerUsdOn, FALLBACK_EUR_PER_USD } from '../lib/fx';
-import { outsideDcaCheck } from '../lib/rules';
+import { outsideDcaCheck, impulseVerdict, FOMO_WAIT_MS } from '../lib/rules';
 import type { CoinRef, DcaPlan, PriceAlert, Thesis, TradeEntry, Transaction, TxType } from '../types';
 import type { Currency } from '../lib/format';
 import { CoinPicker } from './CoinPicker';
@@ -29,6 +29,8 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
   const upsert = useStore((s) => s.upsertTransaction);
   const accounts = useStore((s) => s.accounts);
   const currencyPref = useStore((s) => s.settings.currency);
+  const impulseWaits = useStore((s) => s.impulseWaits);
+  const upsertImpulseWait = useStore((s) => s.upsertImpulseWait);
   const fx = useFx();
   const pf = usePortfolio();
   const [coin, setCoin] = useState<CoinRef | null>(null);
@@ -124,10 +126,35 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
     ? outsideDcaCheck({ temperature: cycle.data?.temperature ?? null, reserveUsd, amountUsd: totalUsd })
     : null;
 
+  // Règle des 24 h anti-FOMO : une crypto qui a pris +50 % en 7 jours ne s'achète pas dans la minute.
+  const markets = useMarkets();
+  const change7d = coin ? markets.data?.find((m) => m.id === coin.coinId)?.price_change_percentage_7d_in_currency ?? null : null;
+  const impulseGate = !!coin && !initial && type === 'buy' && !isStable(coin.symbol, coin.coinId) && date === isoDay();
+  const existingWait = impulseGate ? impulseWaits.find((w) => w.coinId === coin?.coinId) : undefined;
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!impulseGate) return;
+    const i = setInterval(() => tick((n) => n + 1), 30_000); // le décompte bouge tout seul tant qu'on regarde
+    return () => clearInterval(i);
+  }, [impulseGate]);
+  const impulse = impulseGate ? impulseVerdict(change7d, existingWait, Date.now()) : null;
+
   const valid = coin && quantity !== '' && quantity > 0 && (type === 'transfer' ? !!account && !!toAccount && account !== toAccount : price !== '' && price >= 0);
+
+  function startWait() {
+    if (!coin) return;
+    upsertImpulseWait({
+      id: uid(),
+      coinId: coin.coinId, symbol: coin.symbol, name: coin.name,
+      change7dPct: change7d ?? undefined,
+      createdAt: new Date().toISOString(),
+      unlockAt: new Date(Date.now() + FOMO_WAIT_MS).toISOString(),
+    });
+  }
 
   function save() {
     if (!valid || !coin) return;
+    if (impulse?.blocked) return; // la règle garde la main même face à un clic pressé
     const tx: Transaction = {
       id: initial?.id ?? uid(),
       ...coin,
@@ -153,7 +180,11 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={initial ? 'Modifier la transaction' : 'Nouvelle transaction'} footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button><Button variant="primary" disabled={!valid} onClick={save}>Enregistrer</Button></>}>
+    <Modal open={open} onClose={onClose} title={initial ? 'Modifier la transaction' : 'Nouvelle transaction'} footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button>{impulse?.blocked && !impulse.started ? (
+      <Button variant="secondary" disabled={!coin} onClick={startWait}>Poser le délai de 24 h</Button>
+    ) : (
+      <Button variant="primary" disabled={!valid || !!impulse?.blocked} onClick={save}>Enregistrer</Button>
+    )}</>}>
       <div className="space-y-3">
         <Field label="Crypto"><CoinPicker value={coin} onChange={setCoin} /></Field>
         <div className="grid grid-cols-2 gap-3">
@@ -209,6 +240,21 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
         {outside && !outside.allowed && (
           <Banner tone="warn" title="Achat hors DCA : ta règle dit non">
             Ta stratégie n’autorise un achat hors DCA qu’avec la réserve d’USDC et quand le marché a vraiment peur : {outside.reasons.join(' ; ')}. Tu peux l’enregistrer, mais demande-toi si ce n’est pas du FOMO.
+          </Banner>
+        )}
+        {impulse && impulse.blocked && !impulse.started && (
+          <Banner tone="warn" title="Règle des 24 h : cette montée demande un délai">
+            {coin?.name} a pris +{fmtNum(change7d ?? 0)} % en 7 jours. Ta stratégie impose 24 h de réflexion avant d’acheter pareil mouvement : pose le délai, reviens demain à la même heure. Il arrive souvent que l’envie soit passée — c’est le but.
+          </Banner>
+        )}
+        {impulse && impulse.blocked && impulse.started && (
+          <Banner tone="warn" title={`Attente posée — achat possible dans environ ${impulse.hoursLeft} h`}>
+            Le délai expire {new Date(impulse.unlockAt ?? '').toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}. La fenêtre reste ouverte : tu peux revenir la remplir, ou la fermer et laisser tomber — ça compte aussi.
+          </Banner>
+        )}
+        {impulse && !impulse.blocked && impulse.started && (
+          <Banner tone="info" title="24 h de réflexion écoulées">
+            Tu peux enregistrer maintenant. Si tu ne le fais pas, c’est que la règle a fait son travail.
           </Banner>
         )}
       </div>

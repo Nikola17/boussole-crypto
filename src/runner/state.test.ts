@@ -1,7 +1,7 @@
 // État local du runner : dédoublonnage des envois (une fois seulement), zone de marché, statut du dernier contrôle.
 
 import { describe, expect, it } from 'vitest';
-import { emptyState, markSent, parseState, shouldSend, pruneSent, recordStatus, SENT_RETENTION_MS } from './state';
+import { dropQuiet, emptyState, holdQuiet, markSent, parseState, quietMessage, shouldSend, pruneSent, recordStatus, SENT_RETENTION_MS } from './state';
 
 const NOW = 1_800_000_000_000;
 
@@ -47,5 +47,28 @@ describe('état du runner', () => {
     expect(st).toMatchObject({ attemptAt: NOW, okAt: null, error: 'CoinGecko a répondu 429' });
     st = recordStatus(st, true, null, NOW + 60_000);
     expect(st).toMatchObject({ attemptAt: NOW + 60_000, okAt: NOW + 60_000, error: null });
+  });
+});
+
+describe('silence nocturne — la file d\'attente de la nuit', () => {
+  it('tient, regroupe par clé, puis se vide proprement', () => {
+    let st = emptyState();
+    st = holdQuiet(st, [{ key: 'alert:a1', text: 'Alerte SOL', alertId: 'a1' }], 1000);
+    st = holdQuiet(st, [{ key: 'alert:a1', text: 'Alerte SOL (relue à 3 h)' }], 2000); // même clé : remplacée, pas dupliquée
+    expect(st.quietQueue['alert:a1']).toMatchObject({ text: 'Alerte SOL (relue à 3 h)', at: 2000 });
+    st = dropQuiet(st, ['alert:a1']);
+    expect(st.quietQueue).toEqual({});
+  });
+  it('la file survit à une relecture du fichier d\'état (aucune alerte perdue par un redémarrage)', () => {
+    let st = holdQuiet(emptyState(), [{ key: 'exit:solana:2', text: 'Palier ×2' }], 1000);
+    const restored = parseState(JSON.stringify(st));
+    expect(restored.quietQueue['exit:solana:2']).toEqual({ text: 'Palier ×2', at: 1000 });
+  });
+  it('le message du matin cite l\'heure d\'origine du mouvement et regroupe au-delà de huit lignes', () => {
+    const items = Array.from({ length: 10 }, (_, i) => ({ text: `Alerte ${i}\ndétail`, at: Date.parse('2026-11-20T02:30:00Z') + i * 60000 }));
+    const msg = quietMessage(items, 'Europe/Paris');
+    expect(msg).toContain('Pendant la nuit');
+    expect(msg).toContain('+ 2 autres pendant la nuit');
+    expect(msg.split('Heure d\'Europe')).toHaveLength(1); // pas de fuite de fuseau brut
   });
 });

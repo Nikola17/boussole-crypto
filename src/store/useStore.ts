@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
-  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, HotNote, PaperConfig, PaperTrade, PriceAlert, Profile, ProfileChange, Settings, SmartWallet, SyncDeletion, Thesis,
+  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, HotNote, ImpulseWait, PaperConfig, PaperTrade, PriceAlert, Profile, ProfileChange, Settings, SmartWallet, SyncDeletion, Thesis,
   TradeEntry, Transaction, WalletAddress, WatchedToken,
 } from '../types';
 import { defaultProfile, rulesOf } from '../lib/profile';
@@ -44,6 +44,8 @@ export interface AppState {
   paper: PaperConfig;
   smartWallets: SmartWallet[];
   hotNotes: HotNote[];
+  /** Attentes anti-FOMO : achats sur une crypto qui a trop monté en 7 jours, bloqués 24 h. */
+  impulseWaits: ImpulseWait[];
   profileHistory: ProfileChange[];
   /** Cryptos que tu as confirmé voir dans l'application Crypto.com. */
   cdcSeen: string[];
@@ -61,6 +63,8 @@ export interface AppState {
   removeSmartWallet: (id: string) => void;
   upsertHotNote: (n: HotNote) => void;
   removeHotNote: (id: string) => void;
+  upsertImpulseWait: (w: ImpulseWait) => void;
+  removeImpulseWait: (id: string) => void;
   upsertTransaction: (tx: Transaction) => void;
   removeTransaction: (id: string) => void;
   /** Ajoute plusieurs transactions en une seule écriture (regroupement, échanges…). */
@@ -188,6 +192,7 @@ const initialData = () => ({
   watchedTokens: [] as WatchedToken[],
   smartWallets: [] as SmartWallet[],
   hotNotes: [] as HotNote[],
+  impulseWaits: [] as ImpulseWait[],
   profileHistory: [] as ProfileChange[],
   transactions: [] as Transaction[],
   wallets: [] as WalletAddress[],
@@ -246,6 +251,8 @@ export const useStore = create<AppState>()(
       removeSmartWallet: (id) => set((s) => ({ smartWallets: s.smartWallets.filter((x) => x.id !== id), ...dropped(s, `smartWallets/${id}`) })),
       upsertHotNote: (n) => set((s) => ({ hotNotes: upsert(s.hotNotes, touch(n)) })),
       removeHotNote: (id) => set((s) => ({ hotNotes: s.hotNotes.filter((x) => x.id !== id), ...dropped(s, `hotNotes/${id}`) })),
+      upsertImpulseWait: (w) => set((s) => ({ impulseWaits: upsert(s.impulseWaits, touch(w)) })),
+      removeImpulseWait: (id) => set((s) => ({ impulseWaits: s.impulseWaits.filter((x) => x.id !== id), ...dropped(s, `impulseWaits/${id}`) })),
       upsertTransaction: (tx) => set((s) => ({ transactions: upsert(s.transactions, touch(tx)) })),
       removeTransaction: (id) => set((s) => ({ transactions: s.transactions.filter((x) => x.id !== id), ...dropped(s, `transactions/${id}`) })),
       addTransactions: (txs) => set((s) => ({ transactions: [...txs.map(touch), ...s.transactions] })),

@@ -1,5 +1,5 @@
-import { BookOpen, CheckCircle2, ClipboardCheck, Compass, Palmtree, RotateCcw, UserRound } from 'lucide-react';
-import { fmtDate } from '../lib/format';
+import { BookOpen, CheckCircle2, ClipboardCheck, Compass, Hourglass, Palmtree, RotateCcw, Trash2, UserRound } from 'lucide-react';
+import { fmtDate, fmtNum } from '../lib/format';
 import { useState } from 'react';
 import { clsx } from 'clsx';
 import { useStore } from '../store/useStore';
@@ -115,6 +115,7 @@ export function ProfileTab() {
         {profile.completed && <TargetEditor />}
         {profile.completed && <ProfileHistoryCard />}
         {profile.completed && <VacationCard />}
+        <ImpulseWaitsCard />
       </div>
     </div>
   );
@@ -168,6 +169,36 @@ function VacationCard() {
           <p className="text-sm text-muted">Activé, ce mode n'arrêtera que le calendrier et les actus : ton serveur garde les yeux ouverts sur tes prix et tes paliers de vente.</p>
         )}
       </div>
+    </Card>
+  );
+}
+
+/** Les attentes anti-FOMO : ce que tu as voulu acheter trop vite, et où en est le délai de 24 h. */
+function ImpulseWaitsCard() {
+  const waits = useStore((s) => s.impulseWaits);
+  const remove = useStore((s) => s.removeImpulseWait);
+  const now = Date.now();
+  if (!waits.length) return null;
+  return (
+    <Card title={<span className="inline-flex items-center gap-2"><Hourglass className="size-4 text-accent" />Attentes de 24 h</span>} subtitle="Les achats qu'une montée de +50 % en 7 jours a mis en attente">
+      <ul className="divide-y divide-line">
+        {[...waits].sort((a, b) => Date.parse(a.unlockAt) - Date.parse(b.unlockAt)).map((w) => {
+          const left = Date.parse(w.unlockAt) - now;
+          return (
+            <li key={w.id} className="flex items-center gap-3 py-2.5">
+              <Badge tone={left > 0 ? 'warn' : 'up'}>{left > 0 ? `entre ${Math.max(1, Math.ceil(left / 3600_000))} h` : 'réflexion faite'}</Badge>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-ink">{w.symbol.toUpperCase()} — {w.name}</p>
+                <p className="text-xs text-muted">
+                  {w.change7dPct != null ? `+${fmtNum(w.change7dPct)} % en 7 jours au moment de l'attente · ` : ''}débloquée {new Date(w.unlockAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                </p>
+              </div>
+              <Button size="sm" variant="ghost" icon={<Trash2 className="size-4" />} aria-label="Abandonner" onClick={() => remove(w.id)} />
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-xs text-muted">Passées les 24 h, l'achat redevient possible depuis le portefeuille. Supprimer une attente ne l'achète pas : elle veut juste dire « plus envie ».</p>
     </Card>
   );
 }

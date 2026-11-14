@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { applyEnv, validateConfig } from './config';
+import { inQuietWindow } from './state';
 
 const OK = {
   syncRepo: 'Nikola17/boussole-sync',
@@ -61,5 +62,20 @@ describe('configuration du runner', () => {
     });
     const { config } = validateConfig(merged);
     expect(config).toMatchObject({ syncRepo: 'a/b', syncToken: 'tok-env', telegramToken: 'tg-env', passphrase: 'dans-le-fichier', telegramChatId: 'chat-du-fichier', coingeckoKey: 'cg-demo' });
+  });
+});
+
+describe('configuration — silence nocturne', () => {
+  it('heures invalides refusées ; absentes : silence 23 h → 8 h par défaut', () => {
+    expect(validateConfig({ ...OK, quietStart: 'minuit' }).problems.some((p) => p.includes('quietStart'))).toBe(true);
+    expect(validateConfig({ ...OK, quietEnd: 24 }).problems.some((p) => p.includes('quietEnd'))).toBe(true);
+    const { config } = validateConfig(OK);
+    expect(config).toMatchObject({ quietStart: 23, quietEnd: 8 });
+  });
+  it('deux heures identiques annulent le silence (la fenêtre n’existe pas)', () => {
+    expect(inQuietWindow(23, 8, new Date(2026, 10, 20, 2, 0))).toBe(true);
+    expect(inQuietWindow(23, 8, new Date(2026, 10, 20, 12, 0))).toBe(false);
+    expect(inQuietWindow(8, 8, new Date(2026, 10, 20, 2, 0))).toBe(false); // désactivé
+    expect(inQuietWindow(0, 6, new Date(2026, 10, 20, 3, 0))).toBe(true); // fenêtre simple sans minuit
   });
 });

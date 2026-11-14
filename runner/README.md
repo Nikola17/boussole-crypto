@@ -31,6 +31,10 @@ Il n'a besoin de **rien installer** : Node ≥ 20 suffit (le bundle
   (16 h, New York) sous forme courte (marché, portefeuille, paliers, échéances du
   jour, actus). Heures exactes calculées été comme hiver ; chaque créneau est
   désactivable (`briefUsOpen`, `briefUsClose`). Ce n'est pas le brief IA de l'application ;
+- **silence nocturne** : entre `quietStart` et `quietEnd` (23 h → 8 h par
+  défaut, heures du serveur), aucune alerte ne part. Elles attendent en file (une alerte
+  persistante n'occupe qu'une ligne) et arrivent en **un seul message le matin**, heure
+  d'origine de chaque événement comprise. Deux heures identiques coupent le silence ;
 - **veille presse** des cryptos suivies (positions du journal + alertes armées, sans
   BTC/ETH ni stablecoins) : flux Google News par crypto, rafraîchi toutes les 45 min ;
   une actu notée importante part en alerte Telegram, **résumée en 3 lignes par Mistral**
@@ -48,6 +52,17 @@ Il n'a besoin de **rien installer** : Node ≥ 20 suffit (le bundle
   suffisants, pression acheteuse nette), chacune passée au scan de sécurité,
   avec les wallets suivus qui y sont entrés (`emergingEnabled`, activé par
   défaut). Des pistes à vérifier, jamais des conseils d'achat.
+
+## L'œil du gardien (supervision du serveur lui-même)
+
+Le runner pousse toutes les 10 minutes un petit fichier en clair `heartbeat.json`
+(« j'existe », un horodatage, aucun secret) dans le dépôt de sync. Le dépôt de code
+contient une GitHub Action (toutes les 20 minutes) qui le relit : 45 minutes de silence,
+et elle prévient sur Telegram « le serveur veilleur n'a plus donné signe de vie » —
+puis « il est de retour » à la reprise (au plus un rappel toutes les 2 heures ; l'état
+vit dans `watchdog.json` du dépôt de sync). Le VPS peut tomber : c'est GitHub qui
+veille sur lui. Requis : les secrets du dépôt de code `SYNC_PAT` (jeton Contents RW du
+dépôt de sync), `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID`.
 
 ## Limites connues (voulu ainsi pour cette première version)
 
