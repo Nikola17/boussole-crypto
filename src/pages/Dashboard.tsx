@@ -1,5 +1,5 @@
 import { ArrowRight, Flame, Gauge, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../store/useStore';
@@ -8,6 +8,7 @@ import { usePortfolio } from '../hooks/usePortfolio';
 import { useFocusCoins, useGuidance } from '../hooks/useGuidance';
 import { useBriefing } from '../hooks/useBriefing';
 import { fmtCompact, fmtMoney, fmtNum, fmtPrice } from '../lib/format';
+import { pushWidgetState, widgetAvailable } from '../lib/widget';
 import { Link, navigate } from '../router';
 import { readBriefActions } from '../lib/reportData';
 import { BackupReminder } from '../components/StatusBanners';
@@ -42,6 +43,22 @@ export default function Dashboard() {
   const briefing = useBriefing();
   const focus = useFocusCoins();
   const scan = useScan(focus, cycle.data?.temperature);
+
+  // Widget Android (écran d'accueil) : température + valeur du portefeuille, poussées à chaque relevé.
+  useEffect(() => {
+    if (!widgetAvailable()) return;
+    const t = setTimeout(() => {
+      void pushWidgetState({
+        temperature: cycle.data?.temperature ?? null,
+        zone: cycle.data?.zone?.label ?? null,
+        value: pf.totals?.value ?? null,
+        currency,
+        updatedAt: new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+      });
+    }, 1500); // laisse le portefeuille et le cycle se calmer après un refetch
+    return () => clearTimeout(t);
+  }, [cycle.data, pf.totals, currency]);
+
   const [showWhy, setShowWhy] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1024);
 
   const btc = markets.data?.find((m) => m.id === 'bitcoin');

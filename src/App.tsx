@@ -21,7 +21,7 @@ import { fmtPrice, isoDay } from './lib/format';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAutoBackup } from './hooks/useBackup';
 import { useSyncLifecycle } from './hooks/useSync';
-import { loadSecrets } from './lib/secure';
+import { loadSecrets, saveSecrets, secretsSealed } from './lib/secure';
 import Dashboard from './pages/Dashboard';
 
 const Market = lazy(() => import('./pages/Market'));
@@ -84,10 +84,12 @@ function AppEffects() {
   useSyncLifecycle();
   const exit = useExitPlan();
 
-  // Windows : les clés et phrases secrètes sont chiffrées par le système et rangées à part ; on les restitue au démarrage.
+  // Windows et Android : les clés et phrases secrètes sont chiffrées par le système (safeStorage / keystore)
+  // et rangées à part ; on les restitue au démarrage — et on rescelle ce qui pourrait rester en clair.
   useEffect(() => {
     void loadSecrets().then((sec) => {
       if (Object.keys(sec).length) useStore.getState().setSettings(sec);
+      if (secretsSealed()) saveSecrets(useStore.getState().settings); // première exécution sur Android : on scelle l'existant
     });
   }, []);
 
