@@ -116,7 +116,7 @@ addEventListener('checkAlerts', function (resolve) {
         if (hit && !sent[key]) {
           pending.push(key);
           pendingAlertIds.push(a.id);
-          out.push({ id: notifId(key), title: 'Alerte ' + String(a.symbol).toUpperCase(), body: a.name + ' est passé ' + (a.condition === 'above' ? 'au-dessus' : 'en dessous') + ' de ' + money(a.priceUsd) + ' (cours : ' + money(p) + ').', scheduleAt: new Date(now + 1000) });
+          out.push({ id: notifId(key), title: 'Alerte ' + String(a.symbol).toUpperCase(), body: a.name + ' est passé ' + (a.condition === 'above' ? 'au-dessus' : 'en dessous') + ' de ' + money(a.priceUsd) + ' (cours : ' + money(p) + ').', scheduleAt: new Date(now + 1000), smallIcon: 'ic_stat_boussole' });
         }
       });
 
@@ -127,7 +127,7 @@ addEventListener('checkAlerts', function (resolve) {
         // Un palier atteint est notifié une seule fois : il reste affiché dans l'application tant que la vente n'est pas enregistrée.
         if (sent[key]) return;
         pending.push(key);
-        out.push({ id: notifId(key), title: 'Palier ×' + x.multiple + ' atteint sur ' + String(x.symbol).toUpperCase(), body: 'Vends ' + x.pct + ' % de ta position de départ : ce palier a été fixé à froid. Ouvre Boussole.', scheduleAt: new Date(now + 1000) });
+        out.push({ id: notifId(key), title: 'Palier ×' + x.multiple + ' atteint sur ' + String(x.symbol).toUpperCase(), body: 'Vends ' + x.pct + ' % de ta position de départ : ce palier a été fixé à froid. Ouvre Boussole.', scheduleAt: new Date(now + 1000), smallIcon: 'ic_stat_boussole' });
       });
 
       // La notification d'abord ; seulement si elle est programmée, l'alerte est « consommée ». Sinon (autorisation refusée, erreur du

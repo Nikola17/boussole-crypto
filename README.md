@@ -1,4 +1,6 @@
-# 🧭 Boussole Crypto — ton copilote d'investissement
+<p align="center"><img src="public/icon.svg" width="112" alt="Logo Boussole Crypto"></p>
+
+# Boussole Crypto — ton copilote d'investissement
 
 Tableau de bord personnel pour investir en cryptomonnaies avec méthode : **signaux d'achat/vente expliqués**, **détecteur de pépites** avec scan anti-arnaque, **panier DCA** (cœur + une ligne découverte, réserve d'USDC, règles contre l'éparpillement), **plan de sortie par paliers**, **comptes** (Ledger, Crypto.com, Phantom) sans double comptage, **rendement et staking**, **trading**, **airdrops**, **fiscalité française** et un **copilote IA** qui rédige ton analyse quotidienne.
 
@@ -98,7 +100,7 @@ Au premier build, une clé de signature est créée dans `android/boussole-relea
 Pour une nouvelle version : augmente `version` dans `package.json`, puis relance les deux commandes.
 
 ### Icônes
-`npx electron scripts/make-icons.cjs` régénère l'icône Windows et les icônes et écrans de démarrage Android à partir du logo vectoriel.
+`npx electron scripts/make-icons.cjs` régénère toutes les déclinaisons du logo (Windows `.ico` et icône près de l'horloge, macOS `.icns`, Android adaptative + monochrome + notifications + écrans de démarrage, iOS, favicon) à partir de sa définition géométrique. Charte et fichiers : [`branding/`](branding/README.md).
 
 ### Structure
 ```

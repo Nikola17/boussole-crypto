@@ -88,7 +88,8 @@ function ensureTray() {
     return;
   }
   if (tray) return;
-  const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.png')).resize({ width: 16, height: 16 });
+  // tray.png (16 px) et tray@2x.png (32 px, écrans haute densité) : dessin simplifié, lisible en tout petit.
+  const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'tray.png'));
   tray = new Tray(icon);
   tray.setToolTip('Boussole Crypto');
   tray.setContextMenu(Menu.buildFromTemplate([

@@ -12,7 +12,8 @@
       "initialViewportFitValueHint": "cover"
     },
     "LocalNotifications": {
-      "iconColor": "#3987e5"
+      "smallIcon": "ic_stat_boussole",
+      "iconColor": "#f0a312"
     },
     "BackgroundRunner": {
       "label": "fr.nseguy.boussole.alerts",

@@ -2,7 +2,7 @@
 
 import { clsx } from 'clsx';
 import {
-  Bot, Coins, Compass, FlaskConical, Gift, GraduationCap, LayoutDashboard, LineChart, Menu, Repeat, Settings, Users, Wallet, X,
+  Bot, Coins, FlaskConical, Gift, GraduationCap, LayoutDashboard, LineChart, Menu, Repeat, Settings, Users, Wallet, X,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useHashPath } from '../router';
@@ -57,7 +57,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Barre latérale */}
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-line bg-surface px-3 py-4 lg:flex">
         <Link to="/" className="mb-6 flex items-center gap-2.5 px-2">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-accent text-white"><Compass className="size-5" /></span>
+          <img src="./icon.svg" alt="" className="size-9" />
           <span>
             <span className="block text-[0.95rem] font-semibold leading-tight text-ink">Boussole</span>
             <span className="block text-[0.7rem] text-muted">Copilote crypto</span>
@@ -91,7 +91,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {/* Barre supérieure mobile */}
         <header className="safe-top sticky top-0 z-30 flex items-center justify-between border-b border-line bg-page/95 px-4 py-2.5 backdrop-blur lg:hidden">
           <Link to="/" className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-accent text-white"><Compass className="size-[18px]" /></span>
+            <img src="./icon.svg" alt="" className="size-8" />
             <span className="text-[0.95rem] font-semibold text-ink">Boussole</span>
           </Link>
           <button type="button" aria-label="Ouvrir le menu" onClick={() => setMenu(true)} className="inline-flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2">

@@ -1,7 +1,7 @@
 {
   "name": "boussole-crypto",
   "productName": "Boussole Crypto",
-  "version": "1.17.0",
+  "version": "1.17.1",
   "description": "Boussole — copilote d'investissement crypto : signaux achat/vente, pépites, DCA, trading, wallet, airdrops et analyse IA quotidienne.",
   "author": "Nico",
   "license": "MIT",
@@ -71,6 +71,8 @@
       "dist/**/*",
       "electron/**/*",
       "build/icon.png",
+      "build/tray.png",
+      "build/tray@2x.png",
       "package.json",
       "!node_modules/**/*"
     ],
@@ -97,8 +99,12 @@
           ]
         }
       ],
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "signAndEditExecutable": true
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.finance"
     },
     "nsis": {
       "oneClick": false,

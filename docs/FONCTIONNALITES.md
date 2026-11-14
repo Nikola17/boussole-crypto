@@ -196,6 +196,12 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Découpage du grand fichier d'interface** : les 529 lignes de ui.tsx deviennent sept familles dans src/components/uikit/ (structure, boutons, badges, jauges, formulaires, retours, tableaux), ré-exportées par un barrel — aucun écran changé, aucun import cassé.
 - **Vérifié au passage** : pas de SDK IA embarqué (appels directs en fetch, pages déjà à la demande), garde-fous hors navigateur du pont des secrets.
 
+### v1.17.1 — Nouveau logo « Nuit & or »
+
+- **Logo** : un anneau de boussole ouvert, une courbe qui monte et une pointe d'aiguille dorée qui sort de l'anneau, sur fond bleu nuit. Affiché dans l'en-tête et l'écran d'accueil de l'application.
+- **Toutes les plateformes** : Windows (.ico de 16 à 256 px avec une version simplifiée pour les petites tailles, icône près de l'horloge), Android (icône adaptative vectorielle, version monochrome pour les icônes à thème d'Android 13+, écrans de démarrage, icône des notifications), macOS (.icns) et iOS (clair, sombre, teinté) prêts pour plus tard.
+- **Un seul script** (scripts/make-icons.cjs) régénère tout à partir de la définition du logo ; charte et fichiers dans branding/.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute
