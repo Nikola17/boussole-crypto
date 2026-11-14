@@ -215,6 +215,13 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Verrou biométrique (Android)** : Réglages → « Verrou à l’ouverture » — empreinte, visage ou code de l’appareil exigé à chaque ouverture de Boussole. Réglage propre à chaque téléphone, jamais synchronisé. Masque complet de l’appli tant que l’authentification n’est pas réussie.
 - **Détection de mise à jour (PC et Android)** : chaque publication écrit latestVersion.json dans le dépôt de synchronisation ; l’application ouverte affiche un bandeau « Boussole X.Y.Z est disponible » avec un bouton Télécharger qui ouvre la page des releases (À partir de la 1.19.0 ; un dépôt privé ne permet pas le téléchargement silencieux sans embarquer un jeton — le bouton reste le chemin le plus court).
 
+### v1.20.0 — Mise à jour depuis l’application (lot 21)
+
+- **Répertoire de code public** : audit complet de l’historique avant ouverture (aucun jeton, mot de passe, IP ni donnée personnelle n’y ont jamais été commis), nettoyage du chat id Telegram d’un vieux fichier de test et réécriture de la totalité de l’historique. Le dépôt de synchronisation et ses données chiffrées restent privés.
+- **Installer depuis l’application (Windows)** : le bandeau « Boussole X.Y.Z est disponible » télécharge l’installeur dans l’application (pourcentage en direct), le lance, et l’assistant d’installation fait le reste. Seules les URL des releases du dépôt Boussole sont acceptées ; un installeur incomplet n’est jamais exécuté.
+- **Installer depuis l’application (Android)** : le bandeau télécharge l’APK et ouvre l’installeur système. La première fois, Android demandera d’autoriser Boussole à installer des mises à jour ; ensuite, une simple confirmation à chaque version. La signature étant identique, l’installation se fait par-dessus l’existante et les données restent.
+- **Dans le navigateur** (version de développement) : le bouton ouvre la page des releases, la détection reste identique.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

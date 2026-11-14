@@ -12,5 +12,6 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(BoussoleWidget.class);
         registerPlugin(BoussoleKeychain.class);
         registerPlugin(BoussoleLock.class);
+        registerPlugin(BoussoleUpdate.class);
     }
 }

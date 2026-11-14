@@ -44,6 +44,45 @@ export async function unlockApp(): Promise<{ ok: boolean; reason?: string }> {
   }
 }
 
+/** Pont Android du téléchargement + installation de mise à jour (aucune clé, releases publiques). */
+async function androidInstallUpdate(url: string): Promise<{ ok: boolean; reason?: string }> {
+  if (typeof window === 'undefined') return { ok: false, reason: 'indisponible ici' };
+  const cap = (window as unknown as { Capacitor?: { Plugins?: Record<string, { downloadAndInstall?: (a: { url: string }) => Promise<{ ok: boolean; reason?: string }> } | undefined> } }).Capacitor;
+  const upd = cap?.Plugins?.['BoussoleUpdate'];
+  if (!upd?.downloadAndInstall) return { ok: false, reason: 'la mise à jour embarquée exige la version installée (APK)' };
+  try {
+    return await upd.downloadAndInstall({ url });
+  } catch {
+    return { ok: false, reason: 'échec du téléchargement' };
+  }
+}
+
+/**
+ * Installe la mise à jour depuis l'application.
+ * Ordinateur : l'installeur se télécharge (progression via onProgress) puis se lance, l'app se ferme.
+ * Android : l'APK se télécharge et l'installeur système s'ouvre (confirmation à l'écran).
+ * Navigateur : la page des releases s'ouvre — pas d'installateur embarqué.
+ */
+export async function installUpdate(url: string, onProgress?: (pct: number) => void): Promise<{ ok: boolean; reason?: string }> {
+  if (isNative) return androidInstallUpdate(url);
+  const d = typeof window !== 'undefined' ? (window as unknown as { boussoleDesktop?: DesktopApi }).boussoleDesktop : null;
+  if (isElectron && d?.installUpdate) {
+    const stop = d.onUpdateProgress?.((pct) => {
+      if (pct < 0) onProgress?.(-1);
+      else onProgress?.(pct);
+    });
+    try {
+      const r = await d.installUpdate(url);
+      if (r && r.ok) return { ok: true };
+      return { ok: false, reason: r?.error ?? 'échec du téléchargement' };
+    } finally {
+      stop?.();
+    }
+  }
+  openExternal(url);
+  return { ok: true, reason: 'ouvert dans le navigateur' };
+}
+
 interface DesktopApi {
   get: () => Promise<{ background: boolean; autoStart: boolean }>;
   set: (patch: { background?: boolean; autoStart?: boolean }) => Promise<{ background: boolean; autoStart: boolean }>;
@@ -54,6 +93,10 @@ interface DesktopApi {
   sealSecret?: (value: string) => Promise<string | null>;
   /** Déchiffre une chaîne scellée par sealSecret ; null si indéchiffrable. */
   openSecret?: (blob: string) => Promise<string | null>;
+  /** Mise à jour : télécharge l'installeur officiel puis le lance (l'app se ferme) ; -1 en échec. */
+  installUpdate?: (url: string) => Promise<{ ok: boolean; error?: string } | null>;
+  /** Progression du téléchargement de mise à jour (0-100, -1 en échec) ; renvoie l'arrêt d'écoute. */
+  onUpdateProgress?: (cb: (pct: number) => void) => () => void;
 }
 
 /** Pont vers le processus principal d'Electron (zone de notification, démarrage avec Windows) ; null ailleurs. */

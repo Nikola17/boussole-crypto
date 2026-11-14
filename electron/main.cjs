@@ -1,7 +1,9 @@
 // Boussole Crypto — processus principal Electron (application Windows .exe)
-const { app, BrowserWindow, shell, session, Menu, Tray, nativeImage, ipcMain, Notification, safeStorage } = require('electron');
+const { app, BrowserWindow, shell, session, Menu, Tray, nativeImage, ipcMain, Notification, safeStorage, net } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
+const { spawn } = require('node:child_process');
 
 // Variable de développement : ignorée dans l'application installée (elle n'autoriserait qu'à pointer le navigateur ailleurs).
 const DEV_URL = (!app.isPackaged && process.env.ELECTRON_START_URL) || '';
@@ -229,6 +231,40 @@ app.whenReady().then(() => {
   ipcMain.handle('secrets:decrypt', async (event, blob) => {
     if (!fromApp(event) || typeof blob !== 'string' || !blob) return null;
     try { return safeStorage.decryptString(Buffer.from(blob, 'base64')); } catch { return null; }
+  });
+
+  // Mise a jour depuis l'application : telecharge l'installeur depuis les releases publiques du depot,
+  // puis le lance. Seules ces URL-la sont acceptees, et un installeur incomplet n'est jamais execute.
+  ipcMain.handle('desktop:installUpdate', async (event, url) => {
+    if (!fromApp(event) || typeof url !== 'string') return { ok: false, error: 'refuse' };
+    const okUrl = /^https:\/\/github\.com\/Nikola17\/boussole-crypto\/releases\/download\/v\d+\.\d+\.\d+\/Boussole-Crypto-Setup-\d+\.\d+\.\d+\.exe$/.test(url);
+    if (!okUrl) return { ok: false, error: 'source inattendue' };
+    const win = BrowserWindow.getAllWindows()[0];
+    try {
+      const res = await net.fetch(url);
+      if (!res.ok) throw new Error('telechargement refuse (HTTP ' + res.status + ')');
+      const total = Number(res.headers.get('content-length')) || 0;
+      const dest = path.join(os.tmpdir(), 'Boussole-Setup-' + Date.now() + '.exe');
+      const out = fs.createWriteStream(dest);
+      const reader = res.body.getReader();
+      let received = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        out.write(Buffer.from(value));
+        received += value.byteLength;
+        if (total > 0 && win && !win.isDestroyed()) win.webContents.send('update:progress', Math.round((received / total) * 100));
+      }
+      await new Promise((resolve, reject) => { out.end((e) => (e ? reject(e) : resolve())); });
+      if (received < 1000000) { fs.rmSync(dest, { force: true }); throw new Error('installeur incomplet (' + received + ' octets)'); }
+      win?.webContents.send('update:progress', 100);
+      spawn(dest, [], { detached: true, stdio: 'ignore' }).unref();
+      setTimeout(() => app.quit(), 400); // l'installeur prend le relais, on libere les fichiers
+      return { ok: true };
+    } catch (e) {
+      win?.webContents.send('update:progress', -1);
+      return { ok: false, error: String((e && e.message) || e) };
+    }
   });
 
   ensureTray();

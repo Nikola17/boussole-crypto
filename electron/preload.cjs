@@ -13,4 +13,7 @@ contextBridge.exposeInMainWorld('boussoleDesktop', {
   // Secrets : chiffrés par Windows (safeStorage), jamais écrits en clair dans le stockage de l'application.
   sealSecret: (value) => ipcRenderer.invoke('secrets:encrypt', typeof value === 'string' ? value : ''),
   openSecret: (blob) => ipcRenderer.invoke('secrets:decrypt', typeof blob === 'string' ? blob : ''),
+  // Mise a jour : telecharge l'installeur officiel, la progression remonte au bandeau.
+  installUpdate: (url) => ipcRenderer.invoke('desktop:installUpdate', typeof url === 'string' ? url : ''),
+  onUpdateProgress: (cb) => { const h = (_e, pct) => cb(pct); ipcRenderer.on('update:progress', h); return () => ipcRenderer.removeListener('update:progress', h); },
 });

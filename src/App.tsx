@@ -14,7 +14,7 @@ import { useToday } from './hooks/useClock';
 import { aiReady } from './ai/run';
 import { alertCoinsToFetch, checkPriceAlerts } from './lib/alerts';
 import { useBriefing } from './hooks/useBriefing';
-import { cancelDcaReminders, ensureNotificationPermission, isNative, notify, scheduleDcaReminders, syncDesktop, unlockApp } from './lib/platform';
+import { cancelDcaReminders, ensureNotificationPermission, installUpdate, isNative, notify, openExternal, scheduleDcaReminders, syncDesktop, unlockApp } from './lib/platform';
 import { useSmartAlerts } from './hooks/useSmartAlerts';
 import { useExitPlan } from './hooks/useExitPlan';
 import { EMPTY_WATCH, syncRunner, watchAlerts } from './lib/runnerSync';
@@ -22,8 +22,7 @@ import { fmtPrice, isoDay } from './lib/format';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAutoBackup } from './hooks/useBackup';
 import { useSyncLifecycle } from './hooks/useSync';
-import { useLatestVersion } from './hooks/useUpdate';
-import { openExternal } from './lib/platform'
+import { updateAssetUrl, useLatestVersion } from './hooks/useUpdate';
 import { loadSecrets, saveSecrets, secretsSealed } from './lib/secure';
 import Dashboard from './pages/Dashboard';
 
@@ -255,17 +254,42 @@ function LockGate() {
   );
 }
 
-/** Nouvelle version disponible (détectée via le dépôt de synchronisation) : un bandeau, un bouton, rien d'automatique. */
+/**
+ * Nouvelle version disponible : un bandeau, un bouton « Installer » — le téléchargement se fait
+ * dans l'application (releases publiques du dépôt, aucun jeton), l'installeur système termine le travail.
+ */
 function UpdateBanner() {
   const version = useLatestVersion();
   const [dismissed, setDismissed] = useState(false);
+  const [pct, setPct] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!version || dismissed) return null;
+  async function install() {
+    if (!version || busy) return;
+    const url = updateAssetUrl(version, isNative ? 'android' : 'windows');
+    setBusy(true);
+    setError(null);
+    setPct(isNative ? null : 0);
+    const r = await installUpdate(url, (p) => setPct(p >= 0 ? p : null));
+    setBusy(false);
+    if (!r.ok) {
+      setError(r.reason ?? 'échec de la mise à jour');
+      setPct(null);
+    }
+  }
   return (
-    <div className="mb-3 flex items-center gap-3 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-ink-2">
+    <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-ink-2">
       <Compass className="size-5 shrink-0 text-accent" />
-      <p className="flex-1">Boussole {version} est disponible — les nouveautés sont sur la page de la release.</p>
-      <Button size="sm" variant="primary" onClick={() => openExternal('https://github.com/Nikola17/boussole-crypto/releases/latest')}>Télécharger</Button>
-      <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>Plus tard</Button>
+      <p className="min-w-52 flex-1 text-ink">
+        Boussole {version} est disponible.
+        {pct != null && pct < 100 && <span className="ml-2 text-muted">Téléchargement… {pct} %</span>}
+        {pct === 100 && <span className="ml-2 text-up">Téléchargement terminé — l'installeur s'ouvre.</span>}
+        {error && <span className="ml-2 text-warn">{error}</span>}
+      </p>
+      <Button size="sm" variant="primary" disabled={busy} onClick={() => void install()}>{busy ? 'Un instant…' : 'Installer la mise à jour'}</Button>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => openExternal('https://github.com/Nikola17/boussole-crypto/releases/latest')}>La page</Button>
+      {pct == null && !busy && <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>Plus tard</Button>}
     </div>
   );
 }

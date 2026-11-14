@@ -35,3 +35,11 @@ export function useLatestVersion(): string | null {
   });
   return q.data?.version && isNewerVersion(q.data.version, __APP_VERSION__) ? q.data.version : null;
 }
+
+/** L'URL du fichier à installer depuis l'application (releases publiques, aucun jeton nécessaire). */
+export function updateAssetUrl(version: string, platform: 'windows' | 'android'): string {
+  const v = version.trim().replace(/^v/, '');
+  if (!/^\d+\.\d+\.\d+$/.test(v)) return '';
+  const file = platform === 'windows' ? `Boussole-Crypto-Setup-${v}.exe` : `Boussole-Crypto-${v}.apk`;
+  return `https://github.com/Nikola17/boussole-crypto/releases/download/v${v}/${file}`;
+}
