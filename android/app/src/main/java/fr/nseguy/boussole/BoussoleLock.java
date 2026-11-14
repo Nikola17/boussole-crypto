@@ -54,23 +54,34 @@ public class BoussoleLock extends Plugin {
                 .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK
                         | BiometricManager.Authenticators.DEVICE_CREDENTIAL)
                 .build();
-        // La boîte de dialogue système tient sur l'activité courante : le contenu de l'app reste masqué derrière.
-        BiometricPrompt bp = new BiometricPrompt(getActivity(), ContextCompat.getMainExecutor(ctx), new BiometricPrompt.AuthenticationCallback() {
-            @Override
-            public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
-                JSObject out = new JSObject();
-                out.put("ok", true);
-                call.resolve(out);
-            }
+        // Capacitor exécute les méthodes de plugin hors du fil de l'interface : BiometricPrompt, lui, exige le fil
+        // principal (sinon exception → « verrou indisponible » côté application). On y bascule explicitement.
+        getActivity().runOnUiThread(() -> {
+            try {
+                // La boîte de dialogue système tient sur l'activité courante : le contenu de l'app reste masqué derrière.
+                BiometricPrompt bp = new BiometricPrompt(getActivity(), ContextCompat.getMainExecutor(ctx), new BiometricPrompt.AuthenticationCallback() {
+                    @Override
+                    public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                        JSObject out = new JSObject();
+                        out.put("ok", true);
+                        call.resolve(out);
+                    }
 
-            @Override
-            public void onAuthenticationError(int errorCode, CharSequence errString) {
+                    @Override
+                    public void onAuthenticationError(int errorCode, CharSequence errString) {
+                        JSObject out = new JSObject();
+                        out.put("ok", false);
+                        out.put("reason", errString != null ? errString.toString() : "annulé");
+                        call.resolve(out);
+                    }
+                });
+                bp.authenticate(prompt);
+            } catch (Exception e) {
                 JSObject out = new JSObject();
                 out.put("ok", false);
-                out.put("reason", errString != null ? errString.toString() : "annulé");
+                out.put("reason", "verrou indisponible (" + e.getClass().getSimpleName() + ")");
                 call.resolve(out);
             }
         });
-        bp.authenticate(prompt);
     }
 }

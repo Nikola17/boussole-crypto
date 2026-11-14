@@ -222,6 +222,13 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Installer depuis l’application (Android)** : le bandeau télécharge l’APK et ouvre l’installeur système. La première fois, Android demandera d’autoriser Boussole à installer des mises à jour ; ensuite, une simple confirmation à chaque version. La signature étant identique, l’installation se fait par-dessus l’existante et les données restent.
 - **Dans le navigateur** (version de développement) : le bouton ouvre la page des releases, la détection reste identique.
 
+### v1.20.1 — Correctif du verrou à l’ouverture
+
+- **Le verrou bloquait l’application alors qu’il était désactivé** (condition inversée), y compris sur Windows, où il n’existe pas : il ne s’affiche plus que si l’option est activée, et seulement sur Android.
+- **Écran de verrouillage transparent** (couleur de fond inexistante dans le thème) : il masque de nouveau tout le contenu.
+- **« Verrou indisponible » à chaque essai** : le plugin ouvrait la fenêtre d’empreinte hors du fil de l’interface, ce qu’Android refuse ; il bascule maintenant sur le fil principal et renvoie la vraie raison d’un échec.
+- **Jamais enfermé** : si le téléphone n’a plus aucun code ni empreinte, Boussole s’ouvre au lieu de rester bloquée.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

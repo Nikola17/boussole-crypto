@@ -14,7 +14,7 @@ import { useToday } from './hooks/useClock';
 import { aiReady } from './ai/run';
 import { alertCoinsToFetch, checkPriceAlerts } from './lib/alerts';
 import { useBriefing } from './hooks/useBriefing';
-import { cancelDcaReminders, ensureNotificationPermission, installUpdate, isNative, notify, openExternal, scheduleDcaReminders, syncDesktop, unlockApp } from './lib/platform';
+import { cancelDcaReminders, ensureNotificationPermission, installUpdate, isNative, lockAvailable, notify, openExternal, scheduleDcaReminders, syncDesktop, unlockApp } from './lib/platform';
 import { useSmartAlerts } from './hooks/useSmartAlerts';
 import { useExitPlan } from './hooks/useExitPlan';
 import { EMPTY_WATCH, syncRunner, watchAlerts } from './lib/runnerSync';
@@ -229,20 +229,27 @@ function Welcome() {
 /** Android : verrou biométrique à l'ouverture — l'application reste masquée tant que tu ne t'es pas authentifié. */
 function LockGate() {
   const appLock = useStore((s) => s.settings.appLock);
-  const [locked, setLocked] = useState(!appLock || !isNative);
+  // Verrouillé seulement si l'option est activée ET sur Android (le seul endroit où le verrou existe).
+  const [locked, setLocked] = useState(() => appLock && isNative);
   const [attempt, setAttempt] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!locked) return;
+    let alive = true;
     setError(null);
-    void unlockApp().then((r) => {
+    void (async () => {
+      // Plus aucun verrou sur le téléphone (code supprimé) : le verrou de Boussole ne peut rien protéger de plus, on n'enferme pas l'utilisateur.
+      if (!(await lockAvailable())) { if (alive) setLocked(false); return; }
+      const r = await unlockApp();
+      if (!alive) return;
       if (r.ok) setLocked(false);
       else setError(r.reason ?? 'authentification échouée');
-    });
+    })();
+    return () => { alive = false; };
   }, [locked, attempt]);
   if (!locked) return null;
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-bg p-6">
+    <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-page p-6">
       <span className="flex size-14 items-center justify-center rounded-2xl bg-accent text-white"><Compass className="size-8" /></span>
       <div className="text-center">
         <h1 className="text-lg font-semibold text-ink">Boussole est verrouillée</h1>
