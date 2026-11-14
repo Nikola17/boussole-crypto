@@ -57,7 +57,7 @@ public class BoussoleLock extends Plugin {
         // La boîte de dialogue système tient sur l'activité courante : le contenu de l'app reste masqué derrière.
         BiometricPrompt bp = new BiometricPrompt(getActivity(), ContextCompat.getMainExecutor(ctx), new BiometricPrompt.AuthenticationCallback() {
             @Override
-            public void onAuthenticationSucceeded(int cameraId, BiometricPrompt.CryptoObject result) {
+            public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
                 JSObject out = new JSObject();
                 out.put("ok", true);
                 call.resolve(out);
