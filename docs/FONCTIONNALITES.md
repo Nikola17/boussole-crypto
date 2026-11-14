@@ -178,6 +178,24 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Fiche habituelle au clic** : scan de sécurité (GoPlus/RugCheck enrichi de la 1.13.0), suivi du token, avis de l'IA.
 - **Digest du matin (Telegram)** : le serveur scanne les nouveaux pools, retient les candidates en traction, passe chacune au scan, note les wallets suivis entrés, envoie au plus 3 lignes (« des pistes à vérifier, jamais des conseils d'achat ») ; désactivable (emergingEnabled).
 
+### v1.15.0 — Discipline & coaching + découverte automatique (lot 16)
+
+- **Découverte automatique du panier DCA** : le mode « Boussole choisit » prend ses candidates dans le scan des pépites (petites capis, classées par score), et toutes les règles du panier gardent la barrière : plafond par pépite, FOMO 7 j écarté, une ligne finie avant d'en ouvrir une autre, disponibilité sur la plateforme d'achat. L'utilisateur ne règle plus que la part « découverte » — plus de liste à remplir.
+- **Journal à chaud** : bouton « Noter » sur une alerte déclenchée (attendu/acheté/vendu/partiel + pourquoi), pris sur le moment, synchronisé.
+- **Discipline du mois** (Cockpit) : score honnête 0-100 — régularité des échéances (50 pts), achats maîtrisés hors impulsions (30 pts, une impulsion −6), journal à chaud tenu (20 pts).
+- **Mode vacances** : veille critique uniquement (alertes de prix, paliers), sur l'app et le serveur, jusqu'à la date choisie ; rappels, actus, smart money et digest émergentes en pause.
+- **Historique daté des réglages** : chaque modification de profil ou de règle tracée (avant → après, quand).
+
+### v1.16.0 — Android : widget + coffre matériel (lot 17)
+
+- **Widget d'écran d'accueil** : température du marché + zone, valeur du portefeuille, rafraîchis à chaque relevé (30 min au pire par le système). Plugins natifs Capacitor (BoussoleWidget, AppWidgetProvider, préférences privées).
+- **Secrets sous keystore Android** : clés API et phrases de passe chiffrées AES-256-GCM par une clé qui ne quitte pas le matériel (plugin BoussoleKeychain), comme le fait Windows avec DPAPI ; l'existant est rescellé au premier démarrage.
+
+### v1.17.0 — Chantier qualité (lot 18)
+
+- **Découpage du grand fichier d'interface** : les 529 lignes de ui.tsx deviennent sept familles dans src/components/uikit/ (structure, boutons, badges, jauges, formulaires, retours, tableaux), ré-exportées par un barrel — aucun écran changé, aucun import cassé.
+- **Vérifié au passage** : pas de SDK IA embarqué (appels directs en fetch, pages déjà à la demande), garde-fous hors navigateur du pont des secrets.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute
