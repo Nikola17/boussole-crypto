@@ -58,7 +58,7 @@ export function NeedKey({ compact }: { compact?: boolean }) {
       title="Active ton copilote IA"
       action={<Button size="sm" variant="primary" icon={<KeyRound className="size-4" />} onClick={() => navigate('/reglages')}>Configurer</Button>}
     >
-      {compact ? 'Ajoute ta clé API (Nous Portal ou Claude) dans Réglages.' : 'Ajoute ta clé API (Nous Portal pour un modèle économique, ou Anthropic pour Claude) dans Réglages afin d’obtenir le brief quotidien, le comité des sages et le conseiller. La clé reste sur ton appareil.'}
+      {compact ? 'Ajoute ta clé API (Nous Portal, Mistral AI ou Claude) dans Réglages.' : 'Ajoute ta clé API (Nous Portal ou Mistral AI pour des modèles économiques, ou Anthropic pour Claude) dans Réglages afin d’obtenir le brief quotidien, le comité des sages et le conseiller. La clé reste sur ton appareil.'}
     </Banner>
   );
 }
@@ -69,7 +69,11 @@ export function CostHint({ calls, searches = 0 }: { calls: number; searches?: nu
   const models = useCompatModels(settings.compatBaseUrl, undefined);
   let label: string;
   let perCall: number | null;
-  if (compat) {
+  if (settings.aiProvider === 'mistral') {
+    // Mistral ne publie pas ses tarifs dans son API : pas d'estimation chiffrée, le rapport affichera les jetons consommés.
+    label = prettyModel(settings.mistralModel);
+    perCall = null;
+  } else if (compat) {
     // Ordre de grandeur : ~20k jetons d'entrée et ~5k de sortie (réflexion comprise) par appel.
     const m = findModel(models.data, settings.compatModel);
     label = prettyModel(settings.compatModel);
@@ -131,7 +135,7 @@ export function ReportView({ report, onDelete, headerExtra }: { report: AiReport
   return (
     <Card
       title={<span className="inline-flex items-center gap-2"><Sparkles className="size-4 text-accent" />{report.title}</span>}
-      subtitle={`${fmtDate(report.createdAt, true)} · ${prettyModel(report.model)}${report.usage && report.usage.costKnown !== false ? ` · ${fmtNum(report.usage.costUsd, 3)} $` : ''}${report.usage?.searches ? ` · ${report.usage.searches} recherches` : ''}`}
+      subtitle={`${fmtDate(report.createdAt, true)} · ${prettyModel(report.model)}${report.usage && report.usage.costKnown !== false ? ` · ${fmtNum(report.usage.costUsd, 3)} $` : report.usage && report.usage.inputTokens + report.usage.outputTokens > 0 ? ` · ${fmtNum(report.usage.inputTokens + report.usage.outputTokens, 0)} jetons` : ''}${report.usage?.searches ? ` · ${report.usage.searches} recherches` : ''}`}
       actions={<>{headerExtra}{onDelete && <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={onDelete} aria-label="Supprimer le rapport" />}</>}
     >
       <Markdown>{report.markdown}</Markdown>

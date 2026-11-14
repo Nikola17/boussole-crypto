@@ -1,11 +1,11 @@
 // Panier DCA : plan (jours, budget en USDC, cœur et liste « découverte »), ordre du jour, validation et historique.
 
 import { Check, Pencil, Plus, Shield, SkipForward, Sparkles, Trash2, Wand2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { newId, useStore } from '../store/useStore';
 import { useBasket } from '../hooks/useBasket';
 import { usePortfolio } from '../hooks/usePortfolio';
-import { useFx } from '../hooks/useMarket';
+import { useFearGreed, useFx } from '../hooks/useMarket';
 import { DAY_LABEL, MAX_DISCOVERY, type PlannedOrder } from '../lib/basket';
 import { fmtDate, fmtMoney, fmtNum, fmtQty, isoDay } from '../lib/format';
 import type { BasketCoin, BasketExecution, BasketOrderLog, BasketPlan, CoinRef, Transaction } from '../types';
@@ -14,7 +14,8 @@ import { CdcBadge } from './CdcBadge';
 import { useCryptoCom } from '../hooks/useCryptoCom';
 import { Markdown } from './Markdown';
 import { useAiConfig } from './AiBlocks';
-import { runBasketReview } from '../ai/tasks';
+import { runBasketOptimize, runBasketReview } from '../ai/tasks';
+import { applyDcaAiAdvice, dcaAiPayload, parseDcaAiReply, type AppliedAdvice, type DcaAiAdvice, type PoolCoin } from '../lib/dcaAi';
 import { Badge, Banner, Button, Card, CoinIcon, Empty, ErrorNote, Field, Input, Modal, NumberInput, Segmented, Select, Spinner, Toggle } from './ui';
 import { AUTO_BASE_TOP, AUTO_MAX_LINES } from '../lib/autoBasket';
 
@@ -110,6 +111,7 @@ export function BasketEditor({ open, onClose, initial }: { open: boolean; onClos
                 <Field label="Réserve d’USDC" hint="Alimentée quand le marché est chaud, puisée quand il a peur."><NumberInput value={d.reserveUsd} onChange={(v) => set({ reserveUsd: v === '' ? 0 : v })} /></Field>
               </div>
             </details>
+            <Toggle checked={!!d.aiOptimize} onChange={(v) => set({ aiOptimize: v })} label="Optimiser l’ordre avec l’IA à chaque échéance" hint="L’IA relit l’ordre des règles avec l’actualité et peut remplacer une ligne par une autre candidate autorisée, sans jamais changer les montants. Une analyse par échéance (quelques centimes au plus)." />
           </>
         )}
         {!auto && (
@@ -203,7 +205,7 @@ const USDC: CoinRef = { coinId: 'usd-coin', symbol: 'usdc', name: 'USDC' };
 const n2 = (x: number) => fmtNum(Math.round(x * 100) / 100, 2);
 
 /** Confirmation des ordres réellement passés : la quantité reçue vient de ta plateforme, pas d'une estimation. */
-function ExecuteModal({ open, onClose, b }: { open: boolean; onClose: () => void; b: ReturnType<typeof useBasket> }) {
+function ExecuteModal({ open, onClose, b, custom }: { open: boolean; onClose: () => void; b: ReturnType<typeof useBasket>; custom: PlannedOrder[] | null }) {
   const addExec = useStore((s) => s.addBasketExecution);
   const fx = useFx();
   const [orders, setOrders] = useState<PlannedOrder[]>([]);
@@ -211,7 +213,7 @@ function ExecuteModal({ open, onClose, b }: { open: boolean; onClose: () => void
   useEffect(() => {
     if (!open) return;
     // Photo des ordres à l'ouverture : un rafraîchissement des cours ne doit pas écraser ce que tu saisis.
-    const list = b.plan?.orders ?? [];
+    const list = custom ?? b.plan?.orders ?? [];
     setOrders(list);
     setRows(list.map((o) => {
       const p = b.priceOf(o.coinId);
@@ -273,11 +275,15 @@ export function BasketSection() {
   const history = useStore((s) => s.basketExecutions);
   const addExec = useStore((s) => s.addBasketExecution);
   const removeExec = useStore((s) => s.removeBasketExecution);
+  const [editExec, setEditExec] = useState<BasketExecution | null>(null);
   const cdc = useCryptoCom(b.markets);
   const [editor, setEditor] = useState(false);
   const [exec, setExec] = useState(false);
   const [allHistory, setAllHistory] = useState(false);
+  const [custom, setCustom] = useState<PlannedOrder[] | null>(null);
+  const fng = useFearGreed(2);
   const cfg = useAiConfig();
+  const opt = useDcaOptimizer(b, cfg, fng.data?.[fng.data.length - 1]?.value ?? null);
   const [review, setReview] = useState<{ text: string; cost: string } | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
   const bk = b.basket;
@@ -369,7 +375,8 @@ export function BasketSection() {
             {plan.warnings.map((w) => <Banner key={w} tone="warn">{w}</Banner>)}
             {plan.notes.length > 0 && <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted">{plan.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
             {plan.excluded.length > 0 && <details className="text-xs text-muted"><summary className="cursor-pointer">Écartées aujourd’hui ({plan.excluded.length})</summary><ul className="mt-1 list-disc pl-5">{plan.excluded.map((e) => <li key={e.symbol}>{e.symbol} : {e.reason}</li>)}</ul></details>}
-            {cfg && plan.orders.length > 0 && (
+            {cfg && plan.orders.length > 0 && b.fullAuto && <OptimizePanel opt={opt} />}
+            {cfg && plan.orders.length > 0 && !b.fullAuto && (
               <div>
                 <Button size="sm" loading={reviewBusy} icon={<Sparkles className="size-3.5" />} onClick={() => void askReview()}>Avis de l’IA sur cet ordre</Button>
                 {review && <div className="mt-2 rounded-lg border border-line bg-surface-2 p-3 text-sm"><Markdown>{review.text}</Markdown>{review.cost && <p className="mt-1 text-xs text-muted">Coût de cette relecture {review.cost}</p>}</div>}
@@ -377,7 +384,8 @@ export function BasketSection() {
             )}
             {b.due && (
               <div className="flex flex-wrap gap-2 pt-1">
-                <Button variant="primary" icon={<Check className="size-4" />} onClick={() => setExec(true)}>{plan.orders.length ? 'J’ai passé ces ordres' : 'Mettre en réserve'}</Button>
+                <Button variant="primary" icon={<Check className="size-4" />} onClick={() => { setCustom(null); setExec(true); }}>{plan.orders.length ? 'J’ai passé ces ordres' : 'Mettre en réserve'}</Button>
+                {opt.result?.applied.changes.length ? <Button icon={<Sparkles className="size-4" />} onClick={() => { setCustom(opt.result!.applied.orders); setExec(true); }}>J’ai passé l’ordre optimisé</Button> : null}
                 <Button icon={<SkipForward className="size-4" />} onClick={skip}>Sauter cette échéance</Button>
               </div>
             )}
@@ -391,17 +399,164 @@ export function BasketSection() {
               {mine.map((e) => (
                 <li key={e.id} className="flex items-center justify-between gap-3 py-1.5">
                   <span className="min-w-0 truncate text-ink-2">{fmtDate(e.periodKey)} · {e.skipped ? 'sautée' : e.orders.length ? e.orders.map((o) => `${o.symbol.toUpperCase()} ${n2(o.usd)} (${fmtQty(o.quantity)})`).join(' + ') : 'mise en réserve'}</span>
-                  <span className="flex shrink-0 items-center gap-2"><span className="tnum text-xs text-muted">réserve {e.reserveDeltaUsd > 0 ? '+' : ''}{n2(e.reserveDeltaUsd)}</span><Button size="sm" variant="ghost" aria-label="Annuler cette échéance" icon={<Trash2 className="size-3.5" />} onClick={() => removeExec(e.id)} /></span>
+                  <span className="flex shrink-0 items-center gap-2"><span className="tnum text-xs text-muted">réserve {e.reserveDeltaUsd > 0 ? '+' : ''}{n2(e.reserveDeltaUsd)}</span>{!e.skipped && e.orders.length > 0 && <Button size="sm" variant="ghost" aria-label="Corriger cette échéance" icon={<Pencil className="size-3.5" />} onClick={() => setEditExec(e)} />}<Button size="sm" variant="ghost" aria-label="Annuler cette échéance" icon={<Trash2 className="size-3.5" />} onClick={() => removeExec(e.id)} /></span>
                 </li>
               ))}
             </ul>
             {mineAll.length > 6 && <button type="button" className="mt-1 text-xs font-medium text-accent hover:underline" onClick={() => setAllHistory((v) => !v)}>{allHistory ? 'Voir moins' : `Voir les ${mineAll.length} échéances`}</button>}
-            <p className="mt-1 text-xs text-muted">La corbeille supprime une échéance : ses achats sortent du journal et la réserve revient comme avant.</p>
+            <p className="mt-1 text-xs text-muted">Le crayon corrige une échéance (montant dépensé, quantité reçue) : ses transactions et ta réserve suivent. La corbeille la supprime : ses achats sortent du journal et la réserve revient comme avant.</p>
           </div>
         )}
       </Card>
       <BasketEditor open={editor} onClose={() => setEditor(false)} initial={bk} />
-      <ExecuteModal open={exec} onClose={() => setExec(false)} b={b} />
+      <ExecuteModal open={exec} onClose={() => setExec(false)} b={b} custom={custom} />
+      <EditExecutionModal exec={editExec} onClose={() => setEditExec(null)} />
     </>
+  );
+}
+
+// ------------------------------------------------------------------ DCA × IA
+
+interface OptimizeResult { advice: DcaAiAdvice; applied: AppliedAdvice; text: string; cost: string; at: string }
+
+const OPT_STORE = 'boussole-dca-ai';
+function readOpt(key: string): OptimizeResult | null {
+  try { return (JSON.parse(localStorage.getItem(OPT_STORE) ?? '{}') as Record<string, OptimizeResult>)[key] ?? null; } catch { return null; }
+}
+function writeOpt(key: string, r: OptimizeResult) {
+  try {
+    const all = JSON.parse(localStorage.getItem(OPT_STORE) ?? '{}') as Record<string, OptimizeResult>;
+    all[key] = r;
+    // On ne garde que les 12 dernières analyses : une par échéance suffit.
+    const keep = Object.entries(all).sort((a, b) => b[1].at.localeCompare(a[1].at)).slice(0, 12);
+    localStorage.setItem(OPT_STORE, JSON.stringify(Object.fromEntries(keep)));
+  } catch { /* stockage indisponible : l'analyse reste affichée pour cette session */ }
+}
+
+/**
+ * Couplage DCA × IA : l'ordre des règles + les candidates qui ont passé ces mêmes règles partent vers l'IA, qui garde
+ * ou remplace chaque ligne. Une analyse par ordre (mise en cache) ; lancée seule à l'échéance si l'option est active.
+ */
+function useDcaOptimizer(b: ReturnType<typeof useBasket>, cfg: ReturnType<typeof useAiConfig>, fearGreed: number | null) {
+  const plan = b.plan;
+  const bk = b.basket;
+  const pool = useMemo((): PoolCoin[] => (plan?.pool ?? []).map((p) => {
+    const m = b.markets.find((x) => x.id === p.coin.coinId);
+    return {
+      ...p.coin, image: p.coin.image ?? m?.image, side: p.side, score: p.score, rank: p.rank, change7d: p.change7d,
+      change30d: m?.price_change_percentage_30d_in_currency ?? null,
+      heldPct: b.ctx && b.ctx.totalValueUsd > 0 ? (p.heldUsd / b.ctx.totalValueUsd) * 100 : 0,
+    };
+  }), [plan, b.markets, b.ctx]);
+  // La clé change avec l'échéance ET avec l'ordre : un ordre recalculé (marché, réserve) mérite une nouvelle lecture.
+  const key = bk && plan ? `${bk.id}:${b.periodKey ?? (b.next ? isoDay(b.next) : 'prochaine')}:${plan.orders.map((o) => `${o.coinId}=${o.usd}`).join(',')}` : '';
+  const [result, setResult] = useState<OptimizeResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const tried = useRef('');
+  useEffect(() => { setResult(key ? readOpt(key) : null); setError(null); }, [key]);
+
+  async function run() {
+    if (!cfg || !plan || !plan.orders.length || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = dcaAiPayload({ orders: plan.orders, pool, temperature: b.temperature, fearGreed, notes: [...plan.notes, ...plan.warnings] });
+      const r = await runBasketOptimize(cfg, payload, [...plan.orders, ...pool.slice(0, 6)].flatMap((o) => [o.name, o.symbol]));
+      const advice = parseDcaAiReply(r.data);
+      if (!advice) throw new Error('L’IA n’a pas rendu de décision lisible : l’ordre des règles reste valable tel quel.');
+      const res: OptimizeResult = {
+        advice,
+        applied: applyDcaAiAdvice(plan.orders, advice, pool),
+        text: r.text,
+        cost: r.usage.costKnown !== false ? `≈ ${r.usage.costUsd.toFixed(4)} $` : `${r.usage.inputTokens + r.usage.outputTokens} jetons`,
+        at: new Date().toISOString(),
+      };
+      writeOpt(key, res);
+      setResult(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Optimisation impossible.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Échéance du jour + option active : l'analyse part seule, une fois par ordre.
+  useEffect(() => {
+    if (!bk?.aiOptimize || !b.fullAuto || !b.due || !cfg || !plan?.orders.length || result || busy || !key || tried.current === key) return;
+    tried.current = key;
+    void run();
+  });
+
+  return { result, busy, error, run, auto: !!bk?.aiOptimize };
+}
+
+function OptimizePanel({ opt }: { opt: ReturnType<typeof useDcaOptimizer> }) {
+  const r = opt.result;
+  return (
+    <div className="rounded-lg border border-line bg-surface-2 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Sparkles className="size-4 text-accent" />
+        <span className="font-medium text-ink">Optimisation par l’IA</span>
+        <span className="text-xs text-muted">les règles fixent les montants, l’IA peut changer une crypto parmi les candidates autorisées</span>
+        <Button size="sm" className="ml-auto" loading={opt.busy} onClick={() => void opt.run()}>{r ? 'Relancer' : 'Optimiser avec l’IA'}</Button>
+      </div>
+      {opt.error && <p className="mt-2 text-xs text-warn">{opt.error}</p>}
+      {!r && !opt.busy && !opt.error && <p className="mt-2 text-xs text-muted">{opt.auto ? 'Elle se lancera seule le jour de l’échéance.' : 'Active « Optimiser l’ordre avec l’IA à chaque échéance » dans le panier pour qu’elle se lance seule.'}</p>}
+      {r && (
+        <div className="mt-2 space-y-2">
+          {r.applied.changes.length ? (
+            <ul className="space-y-1">
+              {r.applied.changes.map((c) => (
+                <li key={c.from} className="text-ink-2"><b className="text-ink">{c.from} → {c.to}</b>{c.confidence != null ? ` (confiance ${c.confidence}/5)` : ''}{c.reason ? ` : ${c.reason}` : ''}</li>
+              ))}
+            </ul>
+          ) : <p className="text-ink-2">L’IA garde l’ordre des règles tel quel.</p>}
+          {r.advice.decisions.filter((d) => d.decision === 'garder' && d.reason).length > 0 && (
+            <details className="text-xs text-muted"><summary className="cursor-pointer">Pourquoi garder les autres lignes</summary>
+              <ul className="mt-1 list-disc pl-5">{r.advice.decisions.filter((d) => d.decision === 'garder' && d.reason).map((d) => <li key={d.symbol}>{d.symbol} : {d.reason}</li>)}</ul>
+            </details>
+          )}
+          {r.advice.summary && <p className="text-ink-2">{r.advice.summary}</p>}
+          {r.advice.mainRisk && <p className="text-xs text-warn">Risque principal : {r.advice.mainRisk}</p>}
+          {r.applied.rejected.length > 0 && (
+            <details className="text-xs text-muted"><summary className="cursor-pointer">Propositions écartées par tes règles ({r.applied.rejected.length})</summary>
+              <ul className="mt-1 list-disc pl-5">{r.applied.rejected.map((x) => <li key={x}>{x}</li>)}</ul>
+            </details>
+          )}
+          <p className="text-xs text-muted">Analyse du {fmtDate(r.at, true)} · {r.cost}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Corriger une échéance déjà enregistrée : ce que tu as vraiment dépensé et reçu, ligne par ligne. */
+function EditExecutionModal({ exec, onClose }: { exec: BasketExecution | null; onClose: () => void }) {
+  const update = useStore((s) => s.updateBasketExecution);
+  const [rows, setRows] = useState<{ usd: number | ''; qty: number | '' }[]>([]);
+  useEffect(() => {
+    if (exec) setRows(exec.orders.map((o) => ({ usd: o.usd, qty: o.quantity })));
+  }, [exec]);
+  if (!exec) return null;
+  const valid = rows.length === exec.orders.length && rows.every((r) => r.usd !== '' && r.usd > 0 && r.qty !== '' && r.qty > 0);
+  const total = rows.reduce((s, r) => s + (r.usd === '' ? 0 : r.usd), 0);
+  return (
+    <Modal open onClose={onClose} title={`Corriger l’échéance du ${fmtDate(exec.periodKey)}`}
+      footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button><Button variant="primary" disabled={!valid} onClick={() => { update(exec.id, rows.map((r) => ({ usd: Number(r.usd), quantity: Number(r.qty) }))); onClose(); }}>Enregistrer</Button></>}>
+      <div className="space-y-3">
+        {exec.orders.map((o, i) => (
+          <div key={o.coinId} className="rounded-lg border border-line p-3">
+            <p className="mb-2 flex items-center gap-2 text-sm font-medium text-ink"><CoinIcon src={o.image} symbol={o.symbol} size={20} />{o.name} <span className="text-muted">{o.symbol.toUpperCase()}</span></p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Montant dépensé (USDC)"><NumberInput value={rows[i]?.usd ?? ''} onChange={(v) => setRows(rows.map((r, j) => (j === i ? { ...r, usd: v } : r)))} /></Field>
+              <Field label={`Quantité reçue (${o.symbol.toUpperCase()})`}><NumberInput value={rows[i]?.qty ?? ''} onChange={(v) => setRows(rows.map((r, j) => (j === i ? { ...r, qty: v } : r)))} /></Field>
+            </div>
+            {rows[i] && rows[i].usd !== '' && rows[i].qty !== '' && Number(rows[i].qty) > 0 && <p className="mt-1 text-xs text-muted">Prix payé : {fmtMoney(Number(rows[i].usd) / Number(rows[i].qty), 'USD', 4)}</p>}
+          </div>
+        ))}
+        <p className="text-xs text-muted">Total : {n2(total)} USDC (avant : {n2(exec.investedUsd)}). L’écart est repris par ta réserve ; les achats et les sorties d’USDC du journal sont corrigés avec l’échéance.</p>
+      </div>
+    </Modal>
   );
 }

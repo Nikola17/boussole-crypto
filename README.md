@@ -21,7 +21,7 @@ La méthode s'inspire du projet open source [AI Berkshire](https://github.com/xb
 
 1. **Télécharge** l'installeur Windows ou l'APK Android depuis la [page des versions](https://github.com/Nikola17/boussole-crypto/releases/latest). Sous Windows, SmartScreen peut signaler un « éditeur inconnu » (l'application n'est pas signée par un certificat payant) : *Informations complémentaires → Exécuter quand même*. Sous Android, autorise l'installation.
 2. **Remplis ton profil investisseur** (2 minutes, 5 questions) : Boussole en déduit ton allocation cible et tes règles de risque.
-3. **Ajoute une clé IA** (facultatif) dans Réglages : [Nous Portal](https://portal.nousresearch.com) pour quelques centimes par jour (DeepSeek par défaut), ou [Claude](https://console.anthropic.com/settings/keys) si tu préfères Anthropic. Une clé [CoinGecko « Demo »](https://www.coingecko.com/fr/api/pricing) gratuite accélère les pages.
+3. **Ajoute une clé IA** (facultatif) dans Réglages : [Nous Portal](https://portal.nousresearch.com) pour quelques centimes par jour (DeepSeek par défaut), [Mistral AI](https://console.mistral.ai/api-keys) (tous les modèles de ton compte, lus en direct), ou [Claude](https://console.anthropic.com/settings/keys) si tu préfères Anthropic. Une clé [CoinGecko « Demo »](https://www.coingecko.com/fr/api/pricing) gratuite accélère les pages.
 
 À partir de la version 1.20, l'application se met à jour toute seule : le bandeau « Installer la mise à jour » télécharge et lance la nouvelle version, sur Windows comme sur Android.
 
@@ -35,7 +35,7 @@ Ce que tu peux faire ensuite, quand tu veux :
 | Besoin | Réponse de Boussole |
 |---|---|
 | « Que faire aujourd'hui ? » | Le Cockpit : température du marché 0-100, échéances DCA, paliers de vente atteints, éparpillement, brief IA du matin |
-| Investir sans se poser de questions | DCA automatique : un montant, tes jours d'achat, une part base / découverte, et Boussole te dit exactement quoi acheter (jusqu'à 3 cryptos du top 20 hors stablecoins + 3 découvertes) |
+| Investir sans se poser de questions | DCA automatique : un montant, tes jours d'achat, une part base / découverte, et Boussole te dit exactement quoi acheter (jusqu'à 3 cryptos du top 20 hors stablecoins + 3 découvertes) ; l'IA peut affiner l'ordre avec l'actualité, sans jamais sortir de tes règles |
 | Acheter sans se faire avoir | Scan de sécurité on-chain (honeypot, taxes, mint, concentration, liquidité) avant tout achat de petite crypto, score de pépite, délai anti-FOMO de 24 h |
 | Ne plus rater une vente | Paliers de vente par paliers (×2, ×3, ×5…), alertes de prix, notifications Telegram application fermée |
 | Savoir quoi penser | Comité de 4 analystes IA en parallèle, analyse rapide, « pourquoi ça bouge ? » |

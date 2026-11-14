@@ -3,9 +3,10 @@
 import type { AiModel, Settings } from '../types';
 import { MODEL_INFO, runClaude, type ChatTurn, type Effort, type RunResult } from './claude';
 import { NOUS_BASE_URL, runCompat } from './openai';
+import { MISTRAL_BASE_URL } from './mistral';
 
 export interface AiConfig {
-  provider: 'anthropic' | 'compat';
+  provider: 'anthropic' | 'compat' | 'mistral';
   apiKey: string;
   model: string;
   baseUrl: string;
@@ -63,12 +64,17 @@ export function buildAiConfig(s: Settings, name: string): AiConfig | null {
     if (!s.anthropicKey) return null;
     return { provider: 'anthropic', apiKey: s.anthropicKey, model: s.aiModel, baseUrl: '', webSearch: s.aiWebSearch, name };
   }
+  if (s.aiProvider === 'mistral') {
+    if (!s.mistralKey) return null;
+    // Même client que Nous Portal : l'API de Mistral est compatible OpenAI. Pas de recherche web (actualités injectées).
+    return { provider: 'mistral', apiKey: s.mistralKey, model: s.mistralModel || 'mistral-large-latest', baseUrl: MISTRAL_BASE_URL, webSearch: false, name };
+  }
   if (!s.compatKey) return null;
   return { provider: 'compat', apiKey: s.compatKey, model: s.compatModel, baseUrl: s.compatBaseUrl || NOUS_BASE_URL, webSearch: false, name };
 }
 
 export function aiReady(s: Settings): boolean {
-  return s.aiProvider === 'anthropic' ? !!s.anthropicKey : !!s.compatKey;
+  return s.aiProvider === 'anthropic' ? !!s.anthropicKey : s.aiProvider === 'mistral' ? !!s.mistralKey : !!s.compatKey;
 }
 
 /** Nom lisible d'un identifiant de modèle (« deepseek/deepseek-v4.1-flash » → « deepseek-v4.1-flash »). */
@@ -79,7 +85,7 @@ export function prettyModel(id: string): string {
 }
 
 export function aiLabel(s: Settings): string {
-  return s.aiProvider === 'anthropic' ? prettyModel(s.aiModel) : prettyModel(s.compatModel);
+  return s.aiProvider === 'anthropic' ? prettyModel(s.aiModel) : s.aiProvider === 'mistral' ? prettyModel(s.mistralModel) : prettyModel(s.compatModel);
 }
 
 /** Teste la connexion avec une requête minimale. */

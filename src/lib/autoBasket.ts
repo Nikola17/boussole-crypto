@@ -133,11 +133,17 @@ export function planAutoBasket(s: AutoBasketSettings, ctx: AutoBasketContext): B
     return held;
   };
 
+  const pool: NonNullable<BasketPlanResult['pool']> = [];
+  const remember = (list: AutoCandidate[], side: 'core' | 'discovery') => {
+    for (const c of list.slice(0, 8)) pool.push({ coin: c.coin, side, score: c.score, rank: c.rank, change7d: c.change7d, heldUsd: c.heldUsd });
+  };
+
   // 1. La découverte d'abord : ce qu'elle ne dépense pas revient à la base.
   let discOrders: PlannedOrder[] = [];
   if (discWanted > 0.005 && s.maxDiscoveryLines > 0) {
-    const pool = keepOpen(screen(ctx.discovery, 'discovery'), ctx.canOpenDiscovery, 'Découverte');
-    discOrders = split(pool, Math.min(AUTO_MAX_LINES, s.maxDiscoveryLines), discWanted, s.minOrderUsd, 'discovery', (c) =>
+    const discPool = keepOpen(screen(ctx.discovery, 'discovery'), ctx.canOpenDiscovery, 'Découverte');
+    remember(discPool, 'discovery');
+    discOrders = split(discPool, Math.min(AUTO_MAX_LINES, s.maxDiscoveryLines), discWanted, s.minOrderUsd, 'discovery', (c) =>
       `Découverte · score du scan ${c.score ?? '—'}/100${c.heldUsd > 0 ? ' · tu en détiens déjà' : ''}`);
     if (!discOrders.length) notes.push(discWanted < Math.max(s.minOrderUsd, 0.01) ? `Part découverte (${usdc(discWanted)}) sous le minimum de ${usdc(s.minOrderUsd)} : elle revient à la base.` : 'Aucune découverte ne passe les règles aujourd’hui : le montant revient à la base.');
   } else if (discWanted > 0.005) notes.push('Aucune ligne découverte demandée : le montant revient à la base.');
@@ -156,8 +162,9 @@ export function planAutoBasket(s: AutoBasketSettings, ctx: AutoBasketContext): B
 
   let baseOrders: PlannedOrder[] = [];
   if (base > 0.005) {
-    const pool = keepOpen(screen(ctx.base, 'base'), ctx.canOpenBase, 'Base');
-    baseOrders = split(pool, Math.min(AUTO_MAX_LINES, s.maxBaseLines), base, s.minOrderUsd, 'core', (c) => {
+    const basePool = keepOpen(screen(ctx.base, 'base'), ctx.canOpenBase, 'Base');
+    remember(basePool, 'core');
+    baseOrders = split(basePool, Math.min(AUTO_MAX_LINES, s.maxBaseLines), base, s.minOrderUsd, 'core', (c) => {
       const sig = c.score != null ? ` · signal investisseur « ${investorLabel(c.score)} » (${signed(c.score)})` : ' · signal indisponible';
       return `${c.rank != null ? `Rang ${c.rank} (20 premières hors stablecoins)` : '20 premières hors stablecoins'}${sig}${c.heldUsd > 0 ? ' · tu en détiens déjà' : ''}`;
     });
@@ -167,5 +174,5 @@ export function planAutoBasket(s: AutoBasketSettings, ctx: AutoBasketContext): B
   const orders = [...baseOrders, ...discOrders];
   if (orders.length > 1) notes.push('Le montant de chaque côté est partagé à parts égales entre les cryptos retenues.');
   const invest = round2(orders.reduce((sum, o) => sum + o.usd, 0));
-  return { baseUsd: amount, investUsd: invest, reserveDeltaUsd: round2(amount - invest), multiplier: mult, discoveryShare: 1 - basePart, orders, notes, warnings, excluded };
+  return { baseUsd: amount, investUsd: invest, reserveDeltaUsd: round2(amount - invest), multiplier: mult, discoveryShare: 1 - basePart, orders, notes, warnings, excluded, pool };
 }

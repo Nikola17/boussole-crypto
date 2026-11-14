@@ -10,6 +10,7 @@ import { defaultProfile, rulesOf } from '../lib/profile';
 import { DEFAULT_ENVELOPE } from '../lib/envelope';
 import { uid } from '../lib/format';
 import { DEFAULT_COMPAT_MODEL, NOUS_BASE_URL } from '../ai/openai';
+import { DEFAULT_MISTRAL_MODEL } from '../ai/mistral';
 import { BACKUP_KEYS, DATA_VERSION } from '../lib/backup';
 import { guardedStorage, migrateState, STORE_KEY, systemStorage, useStorageStatus } from './persistence';
 import { saveSecrets, secretsSealed, stripSecrets } from '../lib/secure';
@@ -97,6 +98,10 @@ export interface AppState {
   /** Enregistre une échéance du panier et met à jour la réserve d'USDC. */
   addBasketExecution: (e: BasketExecution, txs?: Transaction[]) => void;
   removeBasketExecution: (id: string) => void;
+  /** Corrige une échéance du panier (montant dépensé, quantité reçue par ligne) : ses transactions et la réserve suivent. */
+  updateBasketExecution: (id: string, rows: { usd: number; quantity: number }[]) => void;
+  /** Corrige une échéance d'un plan DCA avancé : sa transaction d'achat suit. */
+  updateDcaExecution: (id: string, patch: { amount: number; price: number; quantity: number }) => void;
   toggleCdcSeen: (coinId: string) => void;
   toggleExitDone: (coinId: string, multiple: number) => void;
   /** Note qu'une tranche du cœur vient d'être vendue (démarre le délai avant la suivante). */
@@ -125,6 +130,8 @@ export const defaultSettings: Settings = {
   compatKey: '',
   compatBaseUrl: NOUS_BASE_URL,
   compatModel: DEFAULT_COMPAT_MODEL,
+  mistralKey: '',
+  mistralModel: DEFAULT_MISTRAL_MODEL,
   briefingAuto: false,
   coingeckoKey: '',
   notifications: true,
@@ -350,6 +357,40 @@ export const useStore = create<AppState>()(
           ...bump(s, 'basket'),
         };
       }),
+      updateBasketExecution: (id, rows) => set((s) => {
+        const e = s.basketExecutions.find((x) => x.id === id);
+        if (!e || e.skipped || rows.length !== e.orders.length) return {};
+        const r2 = (x: number) => Math.round(x * 100) / 100;
+        const orders = e.orders.map((o, i) => ({ ...o, usd: rows[i].usd, quantity: rows[i].quantity, price: rows[i].quantity > 0 ? rows[i].usd / rows[i].quantity : o.price }));
+        const invested = r2(orders.reduce((sum, o) => sum + o.usd, 0));
+        // La réserve absorbe l'écart : ce qui n'a pas été dépensé y retourne, ce qui a été dépensé en plus en sort.
+        const reserveDeltaUsd = r2(e.reserveDeltaUsd + (e.investedUsd - invested));
+        // Les transactions de l'échéance vont par paires, dans l'ordre des lignes : l'achat, puis la sortie d'USDC.
+        const ids = e.txIds ?? [];
+        const patch = new Map<string, Partial<Transaction>>();
+        orders.forEach((o, i) => {
+          const buy = s.transactions.find((t) => t.id === ids[2 * i] && t.type === 'buy' && t.coinId === o.coinId)
+            ?? s.transactions.find((t) => ids.includes(t.id) && t.type === 'buy' && t.coinId === o.coinId);
+          const usdc = s.transactions.find((t) => t.id === ids[2 * i + 1] && t.type === 'sell');
+          if (buy) patch.set(buy.id, { quantity: o.quantity, price: o.quantity > 0 ? o.usd / o.quantity : buy.price });
+          if (usdc) patch.set(usdc.id, { quantity: o.usd });
+        });
+        return {
+          basketExecutions: s.basketExecutions.map((x) => (x.id === id ? touch({ ...x, orders, investedUsd: invested, reserveDeltaUsd }) : x)),
+          transactions: patch.size ? s.transactions.map((t) => (patch.has(t.id) ? touch({ ...t, ...patch.get(t.id) }) : t)) : s.transactions,
+          basket: s.basket && s.basket.id === e.basketId ? { ...touch(s.basket), reserveUsd: Math.max(0, r2(s.basket.reserveUsd + (reserveDeltaUsd - e.reserveDeltaUsd))) } : s.basket,
+          ...bump(s, 'basket'),
+        };
+      }),
+      updateDcaExecution: (id, p) => set((s) => {
+        const e = s.dcaExecutions.find((x) => x.id === id);
+        if (!e || e.skipped) return {};
+        const buyId = (e.txIds ?? [])[0];
+        return {
+          dcaExecutions: s.dcaExecutions.map((x) => (x.id === id ? touch({ ...x, amount: p.amount, price: p.price, quantity: p.quantity }) : x)),
+          transactions: buyId ? s.transactions.map((t) => (t.id === buyId ? touch({ ...t, quantity: p.quantity, price: p.price }) : t)) : s.transactions,
+        };
+      }),
       setEnvelope: (patch) => set((s) => ({ envelope: { ...s.envelope, ...patch }, ...bump(s, 'envelope') })),
       upsertPaperTrade: (t) => set((s) => ({ paperTrades: upsert(s.paperTrades, touch(t)) })),
       removePaperTrade: (id) => set((s) => ({ paperTrades: s.paperTrades.filter((x) => x.id !== id), ...dropped(s, `paperTrades/${id}`) })),
@@ -424,7 +465,7 @@ export function exportBackup(includeKeys = false): string {
   const s = useStore.getState();
   const data: Record<string, unknown> = { app: 'boussole-crypto', version: DATA_VERSION, exportedAt: new Date().toISOString() };
   for (const k of BACKUP_KEYS) data[k] = s[k];
-  if (!includeKeys) data.settings = { ...s.settings, anthropicKey: '', compatKey: '', coingeckoKey: '' };
+  if (!includeKeys) data.settings = { ...s.settings, anthropicKey: '', compatKey: '', mistralKey: '', coingeckoKey: '' };
   data.settings = { ...(data.settings as Settings), syncToken: '', syncPassphrase: '' };
   return JSON.stringify(data, null, 2);
 }

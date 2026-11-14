@@ -14,7 +14,7 @@ import {
 import { DcaPlanModal } from '../components/forms';
 import { BasketSection } from '../components/Basket';
 import { LineChart } from '../components/LineChart';
-import type { DcaPlan, Transaction } from '../types';
+import type { DcaExecution, DcaPlan, Transaction } from '../types';
 
 export default function Dca() {
   const plans = useStore((s) => s.dcaPlans);
@@ -29,6 +29,7 @@ export default function Dca() {
   const [edit, setEdit] = useState<DcaPlan | null>(null);
   const [create, setCreate] = useState(false);
   const [buy, setBuy] = useState<DcaStatus | null>(null);
+  const [fixExec, setFixExec] = useState<DcaExecution | null>(null);
 
   const totals = useMemo(() => {
     const byPlan = new Map<string, { invested: number; qty: number; count: number }>();
@@ -117,7 +118,7 @@ export default function Dca() {
                   <Td>{e.skipped ? '—' : fmtPrice(e.price, currency)}</Td>
                   <Td>{e.skipped ? '—' : fmtNum(e.quantity, 8)}</Td>
                   <Td className="text-ink-2">×{fmtNum(e.multiplier, 2)}</Td>
-                  <Td><Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} aria-label="Supprimer" onClick={() => removeExec(e.id)} /></Td>
+                  <Td><span className="inline-flex">{!e.skipped && <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} aria-label="Corriger" onClick={() => setFixExec(e)} />}<Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} aria-label="Supprimer" onClick={() => removeExec(e.id)} /></span></Td>
                 </tr>
               );
             })}
@@ -129,6 +130,7 @@ export default function Dca() {
 
       <DcaPlanModal open={create || !!edit} initial={edit} onClose={() => { setCreate(false); setEdit(null); }} />
       <BuyModal status={buy} onClose={() => setBuy(null)} />
+      <FixExecutionModal exec={fixExec} onClose={() => setFixExec(null)} />
     </div>
   );
 }
@@ -267,5 +269,39 @@ function Backtest() {
         </div>
       )}
     </Card>
+  );
+}
+
+/** Corriger un achat DCA déjà enregistré : montant, prix payé, quantité reçue — sa transaction du journal suit. */
+function FixExecutionModal({ exec, onClose }: { exec: DcaExecution | null; onClose: () => void }) {
+  const update = useStore((s) => s.updateDcaExecution);
+  const currency = useStore((s) => s.settings.currency);
+  const [amount, setAmount] = useState<number | ''>('');
+  const [price, setPrice] = useState<number | ''>('');
+  const [qty, setQty] = useState<number | ''>('');
+  const [lastId, setLastId] = useState<string | null>(null);
+  if (exec && lastId !== exec.id) {
+    setLastId(exec.id);
+    setAmount(exec.amount);
+    setPrice(exec.price);
+    setQty(exec.quantity);
+  }
+  if (!exec) {
+    if (lastId) setLastId(null);
+    return null;
+  }
+  const valid = amount !== '' && amount > 0 && price !== '' && price > 0 && qty !== '' && qty > 0;
+  return (
+    <Modal open onClose={onClose} title={`Corriger l’achat du ${fmtDate(exec.date)}`}
+      footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button><Button variant="primary" disabled={!valid} onClick={() => { update(exec.id, { amount: Number(amount), price: Number(price), quantity: Number(qty) }); onClose(); }}>Enregistrer</Button></>}>
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-3">
+          <Field label={`Montant (${currency === 'EUR' ? '€' : '$'})`}><NumberInput value={amount} onChange={setAmount} /></Field>
+          <Field label="Prix payé"><NumberInput value={price} onChange={setPrice} /></Field>
+          <Field label="Quantité reçue"><NumberInput value={qty} onChange={setQty} /></Field>
+        </div>
+        <p className="text-xs text-muted">La transaction correspondante du journal (portefeuille, prix de revient, fiscalité) est corrigée avec l’achat.</p>
+      </div>
+    </Modal>
   );
 }

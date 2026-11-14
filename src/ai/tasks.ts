@@ -261,6 +261,25 @@ export async function runBasketReview(
   return single(cfg, { prompt, effort: 'low', searches: 2, maxTokens: 700, step: 'Relecture de l’ordre du jour…', signal, topics });
 }
 
+// ------------------------------------------------------------------ DCA × IA : optimisation de l'ordre du jour
+
+export const DCA_OPTIMIZE_TASK = `Tu optimises l'ORDRE DU JOUR d'un DCA en USDC. Les règles de l'utilisateur ont déjà choisi les cryptos et fixé les montants (température du marché, réserve, anti-FOMO, plafonds). Ton rôle : apporter ce que les règles ne voient pas — actualité récente, catalyseurs ou risques propres au projet, redondance entre deux lignes, cohérence avec le reste du portefeuille.
+
+Pour CHAQUE ligne de l'ordre, décide :
+- « garder » (choix par défaut : ne remplace que pour une raison concrète et vérifiable) ;
+- « remplacer » par UNE crypto de « alternativesAutorisees » du MÊME côté (base ou decouverte). Jamais une crypto hors de cette liste, jamais un autre montant.
+
+Réponds en français, 150 mots maximum, puis termine par un bloc \`\`\`json exactement de cette forme :
+{"ordres":[{"jeton":"SOL","decision":"garder|remplacer","par":"SYMBOLE si remplacer","confiance":1-5,"raison":"une phrase"}],"synthese":"une phrase sur l'ordre final","risque_principal":"une phrase"}
+N'invente aucune donnée ni actualité.`;
+
+export async function runBasketOptimize(cfg: AiConfig, payload: Record<string, unknown>, topics: string[], signal?: AbortSignal): Promise<RunResult & { data: unknown }> {
+  const prompt = [DCA_OPTIMIZE_TASK, toJsonBlock('dossier_dca', payload)].join('\n\n');
+  const r = await single(cfg, { prompt, effort: 'low', searches: 3, maxTokens: 1500, step: 'Optimisation de l’ordre du jour…', signal, topics });
+  const { data, markdown } = extractJson(r.text);
+  return { ...r, text: markdown, data };
+}
+
 // ------------------------------------------------------------------ Résumé du bilan de la semaine
 
 export const WEEKLY_TASK = `Voici le bilan de la semaine d'un investisseur qui fait du DCA avec un panier en USDC. Résume-le en 3 phrases maximum, puis donne UNE seule action concrète pour la semaine prochaine. Appuie-toi uniquement sur les données fournies, n'invente rien et reste factuel et bienveillant. Réponds en français.`;

@@ -386,7 +386,7 @@ function Transactions({ onImport }: { onImport: () => void }) {
       <div className="space-y-2 md:hidden">
         {list.map((t) => (
           <div key={t.id} className="rounded-xl border border-line bg-surface p-3">
-            <div className="flex items-center gap-3">
+            <div className="flex cursor-pointer items-center gap-3" role="button" tabIndex={0} aria-label={`Modifier la transaction ${t.symbol.toUpperCase()} du ${fmtDate(t.date)}`} onClick={() => setEdit(t)} onKeyDown={(e) => { if (e.key === 'Enter') setEdit(t); }}>
               <CoinIcon src={t.image} symbol={t.symbol} size={28} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-sm font-medium text-ink">{t.symbol.toUpperCase()} <Badge tone={t.type === 'transfer' ? 'neutral' : t.type === 'buy' || t.type === 'deposit' || t.type === 'reward' ? 'up' : 'down'}>{typeLabel[t.type]}</Badge></div>
@@ -399,7 +399,7 @@ function Transactions({ onImport }: { onImport: () => void }) {
             </div>
             {(t.fee > 0 || t.source) && <div className="mt-1.5 flex justify-between text-xs text-muted"><span>{t.fee > 0 ? `Frais : ${fmtMoney(t.fee, t.currency)}` : ''}</span>{t.source ? <span>Source : {t.source === 'manual' ? 'saisie' : t.source}</span> : null}</div>}
             <div className="mt-2 flex justify-end gap-1">
-              <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} aria-label="Modifier" onClick={() => setEdit(t)} />
+              <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} onClick={() => setEdit(t)}>Modifier</Button>
               <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} aria-label="Supprimer" onClick={() => remove(t.id)} />
             </div>
           </div>

@@ -8,6 +8,7 @@ import { backupNow, canAutoBackup, noteManualBackup, useLastBackup } from '../ho
 import { MODEL_INFO } from '../ai/claude';
 import { buildAiConfig, testConnection } from '../ai/run';
 import { NOUS_BASE_URL } from '../ai/openai';
+import { listMistralModels, MISTRAL_SUGGESTED } from '../ai/mistral';
 import { useCompatModels } from '../hooks/useAiModels';
 import { backupFolderLabel, ensureNotificationPermission, isElectron, isNative, lockAvailable, openBackupFolder, openExternal, platformLabel, saveTextFile } from '../lib/platform';
 import { useAiContext } from '../ai/context';
@@ -39,6 +40,51 @@ const RECOMMENDED: { id: string; label: string; note: string }[] = [
 ];
 const CUSTOM = '__custom__';
 
+/** Réglages Mistral AI : clé, puis tous les modèles de conversation du compte, lus en direct. */
+function MistralFields({ show, onToggleShow }: { show: boolean; onToggleShow: () => void }) {
+  const key = useStore((s) => s.settings.mistralKey);
+  const model = useStore((s) => s.settings.mistralModel);
+  const set = useStore((s) => s.setSettings);
+  const [custom, setCustom] = useState(false);
+  const live = useQuery({ queryKey: ['mistral-models', key.slice(-6)], queryFn: () => listMistralModels(key), enabled: key.length > 10, staleTime: 60 * 60_000, retry: 0 });
+  const options = live.data?.length
+    ? live.data.map((m) => ({ id: m.id, label: `${m.name !== m.id ? `${m.name} · ` : ''}${m.id}${m.aliases.length ? ` (${m.aliases.join(', ')})` : ''}${m.deprecation ? ' — bientôt retiré' : ''}` }))
+    : MISTRAL_SUGGESTED.map((m) => ({ id: m.id, label: m.label }));
+  const known = options.some((o) => o.id === model);
+  const current = live.data?.find((m) => m.id === model);
+  return (
+    <>
+      <Field label="Clé API Mistral" hint={<>Crée-la sur <button type="button" className="text-accent underline" onClick={() => openExternal('https://console.mistral.ai/api-keys')}>console.mistral.ai</button>. Elle est chiffrée par le système sur cet appareil, n’est envoyée qu’à api.mistral.ai et n’est jamais incluse dans les sauvegardes ni la synchronisation.</>}>
+        <div className="flex gap-2">
+          <Input type={show ? 'text' : 'password'} value={key} onChange={(e) => set({ mistralKey: e.target.value.trim() })} placeholder="Ta clé Mistral" autoComplete="off" spellCheck={false} />
+          <Button variant="ghost" icon={show ? <EyeOff className="size-4" /> : <Eye className="size-4" />} aria-label={show ? 'Masquer' : 'Afficher'} onClick={onToggleShow} />
+        </div>
+      </Field>
+      <Field
+        label="Modèle"
+        hint={live.isFetching ? 'Lecture des modèles de ton compte…'
+          : live.error ? (live.error as Error).message
+          : live.data ? `${live.data.length} modèles de conversation disponibles sur ton compte (Mistral et autres éditeurs).${current?.description ? ` ${current.description}` : ''}`
+          : MISTRAL_SUGGESTED.find((m) => m.id === model)?.note ?? 'Saisis ta clé : la liste complète de tes modèles apparaîtra ici.'}
+      >
+        <Select value={known && !custom ? model : CUSTOM} onChange={(e) => { if (e.target.value === CUSTOM) setCustom(true); else { setCustom(false); set({ mistralModel: e.target.value }); } }}>
+          {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          <option value={CUSTOM}>Autre identifiant…</option>
+        </Select>
+      </Field>
+      {(custom || !known) && (
+        <Field label="Identifiant du modèle" hint="Tel qu’il apparaît dans la documentation ou la console Mistral.">
+          <Input value={model} onChange={(e) => set({ mistralModel: e.target.value.trim() })} spellCheck={false} />
+        </Field>
+      )}
+      <Banner tone="info" title="Pas de recherche web avec Mistral">
+        L’app lui fournit les derniers titres de CoinDesk, Cointelegraph, Decrypt et The Block, et lui interdit d’inventer une actualité. Le coût n’étant pas renvoyé par Mistral, il s’affiche en jetons consommés.
+      </Banner>
+    </>
+  );
+}
+
+
 /** Android : la surveillance des alertes application fermée tourne-t-elle vraiment ? (dernier contrôle réussi, ou ce qui l'empêche). */
 function RunnerStatusLine() {
   const q = useQuery({ queryKey: ['runner-status'], queryFn: readRunnerStatus, refetchInterval: 60_000, staleTime: 0, enabled: isNative });
@@ -54,6 +100,7 @@ export default function Settings() {
   const resetAll = useStore((s) => s.resetAll);
   const name = useStore((s) => s.profile.name);
   const compat = settings.aiProvider === 'compat';
+  const mistral = settings.aiProvider === 'mistral';
   const catalog = useCompatModels(settings.compatBaseUrl);
   const inShortlist = RECOMMENDED.some((r) => r.id === settings.compatModel);
   const [customOpen, setCustomOpen] = useState(false);
@@ -151,10 +198,12 @@ export default function Settings() {
             <Segmented<AiProvider>
               value={settings.aiProvider}
               onChange={(v) => { set({ aiProvider: v }); setTestMsg(null); }}
-              options={[{ value: 'compat', label: 'Nous Portal · économique' }, { value: 'anthropic', label: 'Claude' }]}
+              options={[{ value: 'compat', label: 'Nous Portal' }, { value: 'mistral', label: 'Mistral AI' }, { value: 'anthropic', label: 'Claude' }]}
             />
 
-            {compat ? (
+            {mistral ? (
+              <MistralFields show={show} onToggleShow={() => setShow(!show)} />
+            ) : compat ? (
               <>
                 <Field label="Clé API Nous Portal" hint={<>Crée-la sur <button type="button" className="text-accent underline" onClick={() => openExternal('https://portal.nousresearch.com')}>portal.nousresearch.com</button>. Elle est conservée uniquement dans le stockage local de cette application, n’est envoyée qu’à l’adresse de l’API ci-dessous et n’est jamais incluse dans les sauvegardes.</>}>
                   <div className="flex gap-2">
@@ -211,10 +260,10 @@ export default function Settings() {
               <Button icon={<Eye className="size-4" />} onClick={() => setCtxOpen(true)}>Voir ce qui part vers l’IA</Button>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <Button disabled={!(compat ? settings.compatKey : settings.anthropicKey)} loading={testing} onClick={() => void test()}>Tester la connexion</Button>
+              <Button disabled={!(mistral ? settings.mistralKey : compat ? settings.compatKey : settings.anthropicKey)} loading={testing} onClick={() => void test()}>Tester la connexion</Button>
               {testMsg && <span className={`text-sm ${testMsg.ok ? 'text-up' : 'text-down'}`}>{testMsg.text}</span>}
             </div>
-            <p className="text-xs text-muted">{compat ? 'Le coût réel de chaque analyse (renvoyé par le fournisseur) est affiché sur le rapport.' : 'Ordre de grandeur avec Opus 5.5 : ~0,15 à 0,40 $ par brief, ~0,60 à 1,50 $ par comité des sages. Le coût réel de chaque analyse est affiché sur le rapport.'}</p>
+            <p className="text-xs text-muted">{mistral ? 'Chaque rapport affiche les jetons consommés ; le tarif de ton modèle est sur console.mistral.ai.' : compat ? 'Le coût réel de chaque analyse (renvoyé par le fournisseur) est affiché sur le rapport.' : 'Ordre de grandeur avec Opus 5.5 : ~0,15 à 0,40 $ par brief, ~0,60 à 1,50 $ par comité des sages. Le coût réel de chaque analyse est affiché sur le rapport.'}</p>
           </div>
         </Card>
 
@@ -431,7 +480,7 @@ function SyncCard() {
 /** Transparence : montre exactement le dossier envoyé au fournisseur IA, selon les réglages actuels. */
 function AiContextModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ctx = useAiContext();
-  const provider = useStore((s) => (s.settings.aiProvider === 'compat' ? 'Nous Portal (adresse configurée plus haut)' : 'Anthropic (Claude)'));
+  const provider = useStore((s) => (s.settings.aiProvider === 'compat' ? 'Nous Portal (adresse configurée plus haut)' : s.settings.aiProvider === 'mistral' ? 'Mistral AI (api.mistral.ai)' : 'Anthropic (Claude)'));
   const anonymous = useStore((s) => s.settings.aiAnonymous);
   const dossier = ctx.ready ? {
     profil: ctx.profile(),

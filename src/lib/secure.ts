@@ -7,7 +7,7 @@ import type { Settings } from '../types';
 import { isElectron } from './platform';
 
 /** Les valeurs qui ne doivent jamais trainer en clair dans le stockage de l'application. */
-export const SECRET_KEYS = ['anthropicKey', 'compatKey', 'coingeckoKey', 'syncToken', 'syncPassphrase'] as const;
+export const SECRET_KEYS = ['anthropicKey', 'compatKey', 'mistralKey', 'coingeckoKey', 'syncToken', 'syncPassphrase'] as const;
 export type SecretKey = (typeof SECRET_KEYS)[number];
 
 const SEALED_KEY = 'boussole-sealed';

@@ -6,8 +6,8 @@ import type { BtcScriptChoice } from './lib/xpub';
 
 export type ThemeMode = 'system' | 'dark' | 'light';
 export type AiModel = 'claude-opus-5-5' | 'claude-sonnet-5-5' | 'claude-haiku-5-5';
-/** `compat` = API compatible OpenAI (Nous Portal par défaut) ; `anthropic` = Claude en direct. */
-export type AiProvider = 'compat' | 'anthropic';
+/** `compat` = API compatible OpenAI (Nous Portal par défaut) ; `anthropic` = Claude en direct ; `mistral` = Mistral AI (La Plateforme). */
+export type AiProvider = 'compat' | 'anthropic' | 'mistral';
 
 export interface Settings {
   currency: Currency;
@@ -21,6 +21,10 @@ export interface Settings {
   compatKey: string;
   compatBaseUrl: string;
   compatModel: string;
+  /** Clé API Mistral (console.mistral.ai) : chiffrée par le système, jamais synchronisée ni exportée. */
+  mistralKey: string;
+  /** Modèle Mistral choisi (catalogue lu en direct avec la clé). */
+  mistralModel: string;
   briefingAuto: boolean;
   coingeckoKey: string;
   notifications: boolean;
@@ -456,6 +460,8 @@ export interface BasketPlan {
   maxDiscoveryLines?: number;
   /** Mode auto : où chercher les découvertes — pépites (petites capis), milieu de classement (rangs 21-250), ou les deux. */
   discoverySource?: 'gems' | 'mid' | 'both';
+  /** Mode auto : l'IA relit et affine l'ordre du jour dès qu'une échéance arrive (sans jamais changer les montants). */
+  aiOptimize?: boolean;
   core: BasketCoin[];
   /** Liste « découverte » : 5 cryptos au plus, une seule achetée par échéance. */
   discovery: CoinRef[];

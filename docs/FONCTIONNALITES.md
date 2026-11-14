@@ -238,6 +238,12 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Correctif** : la page Papier plantait (« Maximum update depth exceeded ») à cause d’un sélecteur qui recréait une liste à chaque lecture.
 - **Plus orientée public** : plus de thèses (écriture, vérification par l’IA, règle « thèse cassée »), plus de checklist avant achat, plus de pont Grok ; « Thèses fantômes » devient « Achats fantômes » ; le Copilote ne cite plus de modèle ; plus de mention de fichiers ou de comptes personnels (dépôt de synchronisation à renseigner soi-même).
 
+### v1.22.0 — Mistral AI, DCA × IA, transactions modifiables partout
+
+- **Mistral AI comme fournisseur d’IA** (Réglages → Intelligence artificielle) : une clé de console.mistral.ai, et tous les modèles de conversation de ton compte sont lus en direct (Mistral Large, Medium, Small, Magistral… et les modèles d’autres éditeurs que Mistral propose), sans liste figée. Même client que Nous Portal (API compatible OpenAI, appels directs depuis l’application, CORS vérifié). La clé est chiffrée par le système comme les autres et n’est jamais exportée ni synchronisée. Mistral ne renvoyant pas de coût, les rapports affichent les jetons consommés.
+- **DCA × IA** : en mode automatique, « Optimiser avec l’IA » envoie l’ordre calculé par tes règles ET les autres candidates qui ont passé ces mêmes règles ; l’IA garde chaque ligne ou la remplace par une candidate du même côté, avec l’actualité et le contexte du projet. Elle ne change jamais un montant ; toute proposition hors liste, d’un autre côté, en doublon ou peu sûre (confiance < 3/5) est écartée et affichée. Option « Optimiser l’ordre avec l’IA à chaque échéance » : l’analyse part seule le jour de l’échéance, une fois par ordre (mise en cache). « J’ai passé l’ordre optimisé » enregistre la version de l’IA.
+- **Transactions modifiables partout** : les échéances du panier (montant dépensé, quantité reçue par ligne) et des plans avancés (montant, prix, quantité) se corrigent ; leurs transactions du journal et la réserve d’USDC suivent. Sur téléphone, toute la carte d’une transaction s’ouvre pour la modifier. Une transaction dont on change la date prend le taux EUR/USD de sa nouvelle date.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

@@ -48,7 +48,9 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
   const livePrice = usePriceOf(coin?.coinId);
   const cycle = useCycle();
   // Une opération passée reçoit le taux EUR/USD de SON jour (et non celui d'aujourd'hui) : sinon son coût en euros est faux.
-  const eurUsdHistory = useEurUsdHistory(open && !initial && date !== isoDay());
+  // Une transaction modifiée garde son taux, sauf si sa date change : elle prend alors celui de sa nouvelle date.
+  const dateChanged = !initial || date !== initial.date;
+  const eurUsdHistory = useEurUsdHistory(open && dateChanged && date !== isoDay());
   const fxForDate = date === isoDay() ? fx : eurPerUsdOn(date, eurUsdHistory.data, fx);
   const reserveUsd = useStore((s) => s.basket?.reserveUsd ?? null);
 
@@ -163,14 +165,14 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
       price: Number(price),
       currency,
       fee: Number(fee || 0),
-      fxEurPerUsd: initial?.fxEurPerUsd ?? fxForDate,
+      fxEurPerUsd: initial && !dateChanged ? initial.fxEurPerUsd : fxForDate,
       fromFiat: type === 'buy' || type === 'deposit' ? fiat : undefined,
       toFiat: type === 'sell' ? fiat : undefined,
       portfolioValueEur: type === 'sell' && fiat && pv !== '' ? Number(pv) : undefined,
       source: initial?.source ?? 'manual',
       note: note.trim() || undefined,
       // Horodatage de toute saisie du jour : l'ordre des opérations d'une même journée (achat avant vente) en dépend.
-      time: initial?.time ?? (date === isoDay() ? new Date().toISOString() : undefined),
+      time: initial && !dateChanged ? initial.time : (date === isoDay() ? new Date().toISOString() : undefined),
       accountId: account || undefined,
       toAccountId: type === 'transfer' ? toAccount : undefined,
     };

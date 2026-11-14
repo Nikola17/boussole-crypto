@@ -104,6 +104,8 @@ export interface BasketPlanResult {
   notes: string[];
   warnings: string[];
   excluded: { symbol: string; reason: string }[];
+  /** Mode automatique : toutes les candidates qui ont passé les règles, retenues ou non (l'IA ne choisit que parmi elles). */
+  pool?: { coin: CoinRef; side: 'core' | 'discovery'; score: number | null; rank: number | null; change7d: number | null; heldUsd: number }[];
 }
 
 const pct = (x: number) => `${String(Math.round(x * 10) / 10).replace('.', ',')} %`;
