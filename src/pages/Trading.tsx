@@ -1,13 +1,13 @@
 import { Bell, Bot, Calculator, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useFx, useMarkets } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { positionSize, tradePnl, tradeR, tradeStats } from '../lib/risk';
-import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice } from '../lib/format';
+import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, isoDay, uid } from '../lib/format';
 import { setQuery, useHashPath } from '../router';
 import {
-  Badge, Banner, Button, Card, Empty, Field, NumberInput, PageHeader, Segmented, Select, Stat, Table, Td,
+  Badge, Banner, Button, Card, Empty, Field, Modal, NumberInput, PageHeader, Segmented, Select, Stat, Table, Td, Textarea,
 } from '../components/ui';
 import { AlertModal, TradeModal } from '../components/forms';
 import { LineChart } from '../components/LineChart';
@@ -161,11 +161,13 @@ function Alerts() {
   const alerts = useStore((s) => s.alerts);
   const remove = useStore((s) => s.removeAlert);
   const upsert = useStore((s) => s.upsertAlert);
+  const notes = useStore((s) => s.hotNotes);
   const currency = useStore((s) => s.settings.currency);
   const fx = useFx();
   const rate = currency === 'EUR' ? fx : 1;
   const markets = useMarkets();
   const [open, setOpen] = useState(false);
+  const [noteFor, setNoteFor] = useState<null | { alertId?: string; coinId?: string; symbol: string }>(null);
   return (
     <div className="space-y-4">
       <Button variant="primary" icon={<Bell className="size-4" />} onClick={() => setOpen(true)}>Nouvelle alerte</Button>
@@ -185,7 +187,12 @@ function Alerts() {
                   <Td>{a.triggeredAt ? <Badge tone="up">Déclenchée {fmtDate(a.triggeredAt)}</Badge> : a.active ? <Badge tone="accent">Active</Badge> : <Badge>Inactive</Badge>}</Td>
                   <Td>
                     <span className="inline-flex">
-                      {a.triggeredAt && <Button size="sm" variant="ghost" onClick={() => upsert({ ...a, triggeredAt: undefined, active: true })}>Réarmer</Button>}
+                      {a.triggeredAt && (
+                        <>
+                          <Button size="sm" variant="ghost" onClick={() => setNoteFor({ alertId: a.id, coinId: a.coinId, symbol: a.symbol })}>Noter</Button>
+                          <Button size="sm" variant="ghost" onClick={() => upsert({ ...a, triggeredAt: undefined, active: true })}>Réarmer</Button>
+                        </>
+                      )}
                       <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} aria-label="Supprimer" onClick={() => remove(a.id)} />
                     </span>
                   </Td>
@@ -196,7 +203,64 @@ function Alerts() {
         </Card>
       )}
       <p className="text-xs text-muted">Les alertes sont vérifiées toutes les 4 minutes tant que l’application est ouverte (notification système). Pour une surveillance 24 h/24, garde aussi des alertes sur ta plateforme d’échange.</p>
+      {notes.length > 0 && (
+        <Card title="Journal à chaud — ce que tu as fait, et pourquoi" subtitle={`${notes.length} note${notes.length > 1 ? 's' : ''} · la discipline se juge au moment de l'alerte, pas après coup`}>
+          <ul className="divide-y divide-line">
+            {notes.slice(0, 8).map((n) => (
+              <li key={n.id} className="py-2">
+                <div className="text-sm text-ink">
+                  <Badge tone={n.action === 'buy' ? 'up' : n.action === 'sell' ? 'down' : n.action === 'wait' ? 'accent' : 'neutral'}>{ACTION_LABEL[n.action]}</Badge>
+                  {n.symbol ? <span className="ml-2 font-medium">{n.symbol.toUpperCase()}</span> : null}
+                  <span className="ml-2 text-xs text-muted">{fmtDate(n.date)}</span>
+                </div>
+                {n.note && <p className="mt-1 text-sm text-ink-2">{n.note}</p>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <AlertModal open={open} onClose={() => setOpen(false)} />
+      <HotNoteModal for={noteFor} onClose={() => setNoteFor(null)} />
     </div>
+  );
+}
+
+const ACTION_LABEL: Record<'nothing' | 'buy' | 'sell' | 'partial' | 'wait', string> = {
+  nothing: 'Rien fait', buy: 'Acheté', sell: 'Vendu', partial: 'Partiel', wait: 'Attendu',
+};
+
+/** Le journal à chaud : une alerte vient de se déclencher — note tout de suite ce que tu as fait et pourquoi. */
+function HotNoteModal({ for: target, onClose }: { for: { alertId?: string; coinId?: string; symbol: string } | null; onClose: () => void }) {
+  const upsertNote = useStore((s) => s.upsertHotNote);
+  const [action, setAction] = useState<'nothing' | 'buy' | 'sell' | 'partial' | 'wait'>('wait');
+  const [note, setNote] = useState('');
+  useEffect(() => { setAction('wait'); setNote(''); }, [target]);
+  if (!target) return null;
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Journal à chaud — ${target.symbol.toUpperCase()}`}
+      footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button><Button variant="primary" onClick={() => {
+        upsertNote({ id: uid(), alertId: target.alertId, coinId: target.coinId, symbol: target.symbol, date: isoDay(), action, note: note.trim(), createdAt: new Date().toISOString() });
+        onClose();
+      }}>Noter</Button></>}
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-ink-2">L'alerte vient de sonner : note maintenant ce que tu en as fait. C'est cette note-là, pas ta mémoire de demain, qui dira si tu suis ton plan.</p>
+        <Field label="Ce que j'ai fait">
+          <Segmented value={action} onChange={setAction} options={[
+            { value: 'wait', label: 'Attendu' },
+            { value: 'buy', label: 'Acheté' },
+            { value: 'sell', label: 'Vendu' },
+            { value: 'partial', label: 'Partiel' },
+            { value: 'nothing', label: 'Rien' },
+          ]} />
+        </Field>
+        <Field label="Pourquoi" hint="Libre — ce que tu ressens compte aussi : c'est le journal, pas un examen.">
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="J'ai attendu parce que…" />
+        </Field>
+      </div>
+    </Modal>
   );
 }

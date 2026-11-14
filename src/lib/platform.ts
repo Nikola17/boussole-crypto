@@ -7,6 +7,7 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import type { BasketPlan, DcaPlan } from '../types';
 import { nextOccurrences } from './dca';
+import { isoDay } from './format';
 import { nextBasketOccurrences } from './basket';
 import { requestRunnerPermission } from './runnerSync';
 import { backupFileName, backupsToPrune, KEEP, saveLastBackup } from './autoBackup';
@@ -94,10 +95,11 @@ export async function cancelDcaReminders() {
   }
 }
 
-/** Programme les rappels DCA et du panier sur Android (déclenchés même application fermée). */
-export async function scheduleDcaReminders(plans: DcaPlan[], currencySymbol: string, basket: BasketPlan | null = null) {
+/** Programme les rappels DCA et du panier sur Android (déclenchés même application fermée). Jours de vacances exclus. */
+export async function scheduleDcaReminders(plans: DcaPlan[], currencySymbol: string, basket: BasketPlan | null = null, vacationUntil?: string) {
   if (!isNative) return;
   try {
+    const onVacation = (d: Date): boolean => !!vacationUntil && isoDay(d) <= vacationUntil;
     const pending = await LocalNotifications.getPending();
     const ours = pending.notifications.filter((n) => n.id >= 1000 && n.id < 2000);
     if (ours.length) await LocalNotifications.cancel({ notifications: ours.map((n) => ({ id: n.id })) });
@@ -108,7 +110,7 @@ export async function scheduleDcaReminders(plans: DcaPlan[], currencySymbol: str
     for (const p of plans.filter((x) => x.active && x.reminder)) {
       for (const d of nextOccurrences(p, now, 6)) {
         const at = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0, 0);
-        if (at <= now || id >= 1490) continue;
+        if (at <= now || id >= 1490 || onVacation(d)) continue;
         notifications.push({
           id: id++,
           title: `DCA ${p.symbol.toUpperCase()} aujourd'hui`,
@@ -123,7 +125,7 @@ export async function scheduleDcaReminders(plans: DcaPlan[], currencySymbol: str
       let bid = 1500;
       for (const d of nextBasketOccurrences(basket, now, 8)) {
         const at = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0, 0);
-        if (at <= now || bid >= 1590) continue;
+        if (at <= now || bid >= 1590 || onVacation(d)) continue;
         notifications.push({
           id: bid++,
           title: 'Panier DCA aujourd’hui',

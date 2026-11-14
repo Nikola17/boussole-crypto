@@ -16,7 +16,7 @@ import { GrokBridge } from './GrokBridge';
 import { Markdown } from './Markdown';
 import { useAiConfig } from './AiBlocks';
 import { runBasketReview } from '../ai/tasks';
-import { Badge, Banner, Button, Card, CoinIcon, Empty, ErrorNote, Field, Input, Modal, NumberInput, Select, Spinner, Toggle } from './ui';
+import { Badge, Banner, Button, Card, CoinIcon, Empty, ErrorNote, Field, Input, Modal, NumberInput, Segmented, Select, Spinner, Toggle } from './ui';
 
 const SHORT = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const BTC: CoinRef = { coinId: 'bitcoin', symbol: 'btc', name: 'Bitcoin' };
@@ -85,6 +85,20 @@ export function BasketEditor({ open, onClose, initial }: { open: boolean; onClos
           <div className="mt-2"><CoinPicker value={null} onChange={addCore} placeholder="Ajouter une crypto au cœur…" /></div>
         </div>
         <div>
+          <p className="mb-1 text-xs font-medium text-ink-2">Découverte : qui choisit la crypto ?</p>
+          <Segmented
+            value={d.discoveryMode === 'auto' ? 'auto' : 'manual'}
+            onChange={(v) => set({ discoveryMode: v })}
+            options={[{ value: 'manual', label: 'Moi (ma liste)' }, { value: 'auto', label: 'Boussole (automatique)' }]}
+          />
+          <p className="mt-1.5 text-xs text-muted">
+            {d.discoveryMode === 'auto'
+              ? 'Rien à choisir : à chaque échéance, Boussole pioche parmi les pépites du scan (celles de « Petites capis »), tes règles filtrent, et une seule est achetée. Tu ne règles que la part, ci-dessus.'
+              : 'Ta liste à toi : une seule est achetée par échéance, la mieux placée selon tes règles.'}
+          </p>
+        </div>
+        {d.discoveryMode !== 'auto' && (
+        <div>
           <p className="mb-1 text-xs font-medium text-ink-2">Liste « découverte » ({d.discovery.length}/{MAX_DISCOVERY}) : une seule est achetée par échéance</p>
           <div className="flex flex-wrap gap-2">
             {d.discovery.map((c) => (
@@ -96,6 +110,7 @@ export function BasketEditor({ open, onClose, initial }: { open: boolean; onClos
           </div>
           {d.discovery.length < MAX_DISCOVERY && <div className="mt-2"><CoinPicker value={null} onChange={addDisc} placeholder="Ajouter une crypto à étudier…" /></div>}
         </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           {accounts.length > 0 && (
             <Field label="Compte où tu passes les ordres">
@@ -236,7 +251,7 @@ export function BasketSection() {
     <>
       <Card
         title={<span className="inline-flex items-center gap-2"><Sparkles className="size-4 text-accent" />{bk.name}</span>}
-        subtitle={`${dayList(bk)} · ${n2(bk.amountUsd)} USDC par échéance · cœur ${bk.core.map((c) => `${c.symbol.toUpperCase()} ${Math.round(c.weight)} %`).join(' / ')} · découverte ≤ ${Math.round(bk.discoveryMaxPct)} %`}
+        subtitle={`${dayList(bk)} · ${n2(bk.amountUsd)} USDC par échéance · cœur ${bk.core.map((c) => `${c.symbol.toUpperCase()} ${Math.round(c.weight)} %`).join(' / ')} · découverte ≤ ${Math.round(bk.discoveryMaxPct)} %${bk.discoveryMode === 'auto' ? ' (choisie par Boussole)' : ''}`}
         actions={<><Button size="sm" icon={<ClipboardPaste className="size-3.5" />} onClick={() => setGrok(true)}>Grok</Button><Button size="sm" variant="ghost" aria-label="Modifier le panier" icon={<Pencil className="size-3.5" />} onClick={() => setEditor(true)} /></>}
       >
         <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
@@ -249,6 +264,14 @@ export function BasketSection() {
         {b.loading && <Spinner label="Calcul de l’ordre du jour (marché, portefeuille, disponibilité Crypto.com)…" />}
         {b.loadError && !b.ready && <ErrorNote error={b.loadError} onRetry={b.retry} />}
         {b.missingCoins && <Banner tone="warn">Les cours de certaines cryptos du panier n’ont pas pu être chargés (CoinGecko limite les requêtes : ajoute une clé « Demo » gratuite dans Réglages). Les règles qui dépendent de ces cours (anti-FOMO, prix indicatif) sont alors moins précises.</Banner>}
+        {bk.discoveryMode === 'auto' && b.autoCandidates.length > 0 && (
+          <details className="mb-1 text-xs text-muted">
+            <summary className="cursor-pointer">Découverte automatique : {b.autoCandidates.length} candidates du scan, une seule sera achetée</summary>
+            <ul className="mt-1 list-disc pl-5">
+              {b.autoCandidates.map((p) => (<li key={p.coin.coinId}>{p.coin.symbol.toUpperCase()} — {p.reason}</li>))}
+            </ul>
+          </details>
+        )}
         {plan && (
           <div className="space-y-3">
             <p className="text-xs font-medium text-ink-2">{b.due ? 'Ordre du jour' : 'Aperçu pour la prochaine échéance'}</p>

@@ -1,4 +1,5 @@
-import { BookOpen, CheckCircle2, ClipboardCheck, Compass, RotateCcw, UserRound } from 'lucide-react';
+import { BookOpen, CheckCircle2, ClipboardCheck, Compass, Palmtree, RotateCcw, UserRound } from 'lucide-react';
+import { fmtDate } from '../lib/format';
 import { useState } from 'react';
 import { clsx } from 'clsx';
 import { useStore } from '../store/useStore';
@@ -112,6 +113,8 @@ export function ProfileTab() {
           <Button variant="primary" className="mt-4 w-full" icon={<CheckCircle2 className="size-4" />} onClick={validate}>Valider ce profil</Button>
         </Card>
         {profile.completed && <TargetEditor />}
+        {profile.completed && <ProfileHistoryCard />}
+        {profile.completed && <VacationCard />}
       </div>
     </div>
   );
@@ -143,6 +146,46 @@ function TargetEditor() {
         <Field label="Ligne minimale (%)" hint="Poids du portefeuille"><NumberInput value={rulesOf(profile).minLinePct} onChange={(v) => setProfile({ rules: { ...rulesOf(profile), minLinePct: v === '' ? 0 : v } })} /></Field>
         <Field label="Lignes découverte max"><NumberInput value={rulesOf(profile).maxDiscoveryLines} onChange={(v) => setProfile({ rules: { ...rulesOf(profile), maxDiscoveryLines: v === '' ? 0 : v } })} /></Field>
       </div>
+    </Card>
+  );
+}
+
+/** Mode vacances : la veille critique reste (alertes de prix, paliers), le bruit s'arrête — sans rien manquer. */
+function VacationCard() {
+  const profile = useStore((s) => s.profile);
+  const setProfile = useStore((s) => s.setProfile);
+  const until = profile.vacationUntil ?? '';
+  const active = !!until && until >= new Date().toISOString().slice(0, 10);
+  return (
+    <Card title={<span className="inline-flex items-center gap-2"><Palmtree className="size-4 text-accent" />Mode vacances</span>} subtitle="Partir sans couper la veille critique">
+      <div className="flex flex-wrap items-end gap-4">
+        <Field label="Jusqu'au (AAAA-MM-JJ)" hint="Laisse vide pour désactiver.">
+          <Input type="date" value={until} onChange={(e) => setProfile({ vacationUntil: e.target.value || undefined })} />
+        </Field>
+        {active ? (
+          <Banner tone="info">En vacances jusqu'au {until} : rappels d'échéances et veille presse en pause. Les alertes de prix et les paliers de vente, eux, continuent — c'est la veille critique.</Banner>
+        ) : (
+          <p className="text-sm text-muted">Activé, ce mode n'arrêtera que le calendrier et les actus : ton serveur garde les yeux ouverts sur tes prix et tes paliers de vente.</p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** L'historique de tes réglages : ce qui a changé, quand — la mémoire des décisions de profil. */
+function ProfileHistoryCard() {
+  const history = useStore((s) => s.profileHistory);
+  if (!history.length) return null;
+  return (
+    <Card title="Historique de tes réglages" subtitle="Chaque modification de profil ou de règle, datée">
+      <ul className="divide-y divide-line">
+        {history.slice(0, 12).map((h) => (
+          <li key={h.id} className="py-2">
+            <span className="text-xs text-muted">{fmtDate(h.at, true)}</span>
+            <p className="mt-0.5 text-sm text-ink-2">{h.summary}</p>
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }

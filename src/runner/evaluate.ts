@@ -24,6 +24,8 @@ export interface WatchData {
   smartWallets: SmartWallet[];
   /** Tokens suivis des DEX (pépites) : l'autre liste qui importe au smart money. */
   watchedTokens: WatchedToken[];
+  /** Mode vacances du profil : veille critique uniquement jusqu'à cette date (AAAA-MM-JJ, null : aucun). */
+  vacationUntil: string | null;
 }
 
 /** Extrait les listes utiles d'un faisceau de synchronisation (déjà déchiffré). */
@@ -35,7 +37,9 @@ export function watchOf(bundle: SyncBundle): WatchData {
   const paper = (paperRaw && typeof paperRaw === 'object' && !Array.isArray(paperRaw))
     ? paperRaw as PaperConfig
     : null;
-  return { alerts: list<PriceAlert>('alerts'), transactions: list<Transaction>('transactions'), theses: list<Thesis>('theses'), exitDone, paperTrades: list<PaperTrade>('paperTrades'), paper, smartWallets: list<SmartWallet>('smartWallets'), watchedTokens: list<WatchedToken>('watchedTokens') };
+  const profileRaw = stamps.profile as { vacationUntil?: unknown } | undefined;
+  const vacationUntil = profileRaw && typeof profileRaw === 'object' && typeof profileRaw.vacationUntil === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(profileRaw.vacationUntil) ? profileRaw.vacationUntil : null;
+  return { alerts: list<PriceAlert>('alerts'), transactions: list<Transaction>('transactions'), theses: list<Thesis>('theses'), exitDone, paperTrades: list<PaperTrade>('paperTrades'), paper, smartWallets: list<SmartWallet>('smartWallets'), watchedTokens: list<WatchedToken>('watchedTokens'), vacationUntil };
 }
 
 export const alertKey = (id: string): string => `alert:${id}`;

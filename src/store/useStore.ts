@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
-  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, PaperConfig, PaperTrade, PriceAlert, Profile, Settings, SmartWallet, SyncDeletion, Thesis,
+  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, HotNote, PaperConfig, PaperTrade, PriceAlert, Profile, ProfileChange, Settings, SmartWallet, SyncDeletion, Thesis,
   TradeEntry, Transaction, WalletAddress, WatchedToken,
 } from '../types';
 import { defaultProfile, rulesOf } from '../lib/profile';
@@ -43,6 +43,8 @@ export interface AppState {
   paperTrades: PaperTrade[];
   paper: PaperConfig;
   smartWallets: SmartWallet[];
+  hotNotes: HotNote[];
+  profileHistory: ProfileChange[];
   /** Cryptos que tu as confirmé voir dans l'application Crypto.com. */
   cdcSeen: string[];
   /** Suppressions à propager à l'autre appareil (`collection/identifiant` → date). */
@@ -57,6 +59,8 @@ export interface AppState {
   removeWatchedToken: (id: string) => void;
   addSmartWallet: (w: SmartWallet) => void;
   removeSmartWallet: (id: string) => void;
+  upsertHotNote: (n: HotNote) => void;
+  removeHotNote: (id: string) => void;
   upsertTransaction: (tx: Transaction) => void;
   removeTransaction: (id: string) => void;
   /** Ajoute plusieurs transactions en une seule écriture (regroupement, échanges…). */
@@ -164,12 +168,27 @@ const MAX_CHAT = 60;
 /** Seuls les rapports les plus récents gardent le détail de chaque analyste du comité. */
 const KEEP_PARTS = 6;
 
+/** Résumé d'une valeur de profil pour l'historique : court, lisible, jamais un objet entier. */
+const short = (v: unknown): string => {
+  if (v == null) return '—';
+  if (typeof v === 'object') {
+    try {
+      const e = Object.entries(v as Record<string, unknown>).filter(([, x]) => x !== null && x !== undefined && x !== '' && !(Array.isArray(x) && !x.length));
+      const shown = (e.length > 3 ? `${e.length} réglages` : e.map(([k]) => k).slice(0, 3).join(', '));
+      return shown || '—';
+    } catch { return '—'; }
+  }
+  return String(v).slice(0, 40);
+};
+
 const initialData = () => ({
   settings: { ...defaultSettings },
   profile: defaultProfile(),
   watchlist: ['bitcoin', 'ethereum', 'solana'],
   watchedTokens: [] as WatchedToken[],
   smartWallets: [] as SmartWallet[],
+  hotNotes: [] as HotNote[],
+  profileHistory: [] as ProfileChange[],
   transactions: [] as Transaction[],
   wallets: [] as WalletAddress[],
   dcaPlans: [] as DcaPlan[],
@@ -209,12 +228,24 @@ export const useStore = create<AppState>()(
         set((s) => ({ settings: { ...s.settings, ...patch } }));
         saveSecrets(useStore.getState().settings);
       },
-      setProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch }, ...bump(s, 'profile') })),
+      setProfile: (patch) => set((s) => {
+        const changes: string[] = [];
+        for (const [k, v] of Object.entries(patch)) {
+          const before = (s.profile as unknown as Record<string, unknown>)[k];
+          if (JSON.stringify(before) !== JSON.stringify(v)) changes.push(`${k} : ${short(before)} → ${short(v)}`);
+        }
+        const history = changes.length
+          ? [touch({ id: uid(), at: new Date().toISOString(), summary: changes.join(' ; ').slice(0, 400) }), ...s.profileHistory].slice(0, 120)
+          : s.profileHistory;
+        return { profile: { ...s.profile, ...patch }, profileHistory: history, ...bump(s, 'profile') };
+      }),
       toggleWatch: (coinId) => set((s) => ({ watchlist: s.watchlist.includes(coinId) ? s.watchlist.filter((x) => x !== coinId) : [...s.watchlist, coinId], ...bump(s, 'watchlist') })),
       addWatchedToken: (t) => set((s) => ({ watchedTokens: [touch(t), ...s.watchedTokens.filter((x) => x.id !== t.id)] })),
       removeWatchedToken: (id) => set((s) => ({ watchedTokens: s.watchedTokens.filter((x) => x.id !== id), ...dropped(s, `watchedTokens/${id}`) })),
       addSmartWallet: (w) => set((s) => ({ smartWallets: [touch(w), ...s.smartWallets.filter((x) => x.id !== w.id)] })),
       removeSmartWallet: (id) => set((s) => ({ smartWallets: s.smartWallets.filter((x) => x.id !== id), ...dropped(s, `smartWallets/${id}`) })),
+      upsertHotNote: (n) => set((s) => ({ hotNotes: upsert(s.hotNotes, touch(n)) })),
+      removeHotNote: (id) => set((s) => ({ hotNotes: s.hotNotes.filter((x) => x.id !== id), ...dropped(s, `hotNotes/${id}`) })),
       upsertTransaction: (tx) => set((s) => ({ transactions: upsert(s.transactions, touch(tx)) })),
       removeTransaction: (id) => set((s) => ({ transactions: s.transactions.filter((x) => x.id !== id), ...dropped(s, `transactions/${id}`) })),
       addTransactions: (txs) => set((s) => ({ transactions: [...txs.map(touch), ...s.transactions] })),

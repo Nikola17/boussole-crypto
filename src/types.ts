@@ -85,6 +85,36 @@ export interface Profile {
   archetype: Archetype;
   target: Record<Bucket, number>;
   rules: ProfileRules;
+  /** Mode vacances : veille critique uniquement (alertes de prix et paliers) jusqu'à cette date (AAAA-MM-JJ). */
+  vacationUntil?: string;
+}
+
+/** Journal à chaud : ce que j'ai fait et pourquoi, pris juste après une alerte — la mémoire du vécu, pas la théorie. */
+export interface HotNote {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
+  id: string;
+  /** L'alerte qui a déclenché la note, si la note en part d'une. */
+  alertId?: string;
+  coinId?: string;
+  symbol?: string;
+  /** AAAA-MM-JJ : le jour du mouvement décrit. */
+  date: string;
+  /** Ce que j'ai fait face à l'alerte. */
+  action: 'nothing' | 'buy' | 'sell' | 'partial' | 'wait';
+  /** Pourquoi — libre, une phrase ou une page. */
+  note: string;
+  createdAt: string;
+}
+
+/** Une modification datée du profil (ou de ses règles) : l'historique de ce qui a changé, et quand. */
+export interface ProfileChange {
+  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
+  id: string;
+  at: string;
+  /** Ce qui a changé (« règles.maxLines : 8 → 12 », « archetype : Prudent → Équilibré »). */
+  summary: string;
 }
 
 export interface CoinRef {
@@ -392,6 +422,8 @@ export interface BasketPlan {
   startDate: string;
   /** Part maximale du budget qui peut aller à la ligne « découverte » (en %). */
   discoveryMaxPct: number;
+  /** « manual » : tu choisis ta liste (à la barre de recherche) ; « auto » : Boussole choisit pour toi. */
+  discoveryMode?: 'manual' | 'auto';
   core: BasketCoin[];
   /** Liste « découverte » : 5 cryptos au plus, une seule achetée par échéance. */
   discovery: CoinRef[];

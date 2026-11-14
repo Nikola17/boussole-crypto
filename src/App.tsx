@@ -147,10 +147,13 @@ function AppEffects() {
     });
   }, [alerts, exit.coins, notifications, upsertAlert, cgKeySetting, currency, rate]);
 
-  // Rappels DCA programmés (Android)
+  // Rappels DCA programmés (Android) — en vacances, seuls les jours au retour sont rappelés.
+  const vacationUntil = useStore((s) => s.profile.vacationUntil);
   useEffect(() => {
-    if (notifications) void scheduleDcaReminders(plans, currency === 'EUR' ? '€' : '$', basket);
-  }, [plans, basket, notifications, currency]);
+    if (!notifications) return;
+    const today = new Date().toISOString().slice(0, 10);
+    void scheduleDcaReminders(plans, currency === 'EUR' ? '€' : '$', basket, vacationUntil && vacationUntil >= today ? vacationUntil : undefined);
+  }, [plans, basket, notifications, currency, vacationUntil]);
 
   // Bouton retour Android : navigation arrière, puis fermeture
   useEffect(() => {

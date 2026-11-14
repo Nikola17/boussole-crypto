@@ -195,3 +195,46 @@ describe('ordre du jour : règles contre l\'éparpillement', () => {
     }
   });
 });
+
+describe('découverte automatique', () => {
+  it('mode auto : la candidate vient du scan, la raison le dit, et c’est la mieux notée', () => {
+    const b = basket({ discoveryMode: 'auto', discovery: [] });
+    const c = ctx({
+      autoDiscovery: [coin('pika'), coin('zorp'), coin('wyna')],
+      scores: { pika: 42, zorp: 15, wyna: 8 },
+      cdc: { bitcoin: 'exchange', ethereum: 'exchange', pika: 'exchange', zorp: 'exchange', wyna: 'exchange' },
+      change7d: {},
+      discoveryLinesOpen: 0,
+    });
+    const r = planBasketOrder(b, c);
+    const disc = r.orders.find((o) => o.kind === 'discovery');
+    expect(disc).toBeTruthy();
+    expect(disc!.coinId).toBe('pika');
+    expect(disc!.reason).toContain('Découverte automatique');
+    // Ta liste manuelle vide n'est plus un souci en mode auto : la note l'explique ou n'apparaît pas.
+    expect(r.notes.some((n) => n.includes('Liste découverte vide'))).toBe(false);
+  });
+
+  it('mode auto sans candidate (scan indisponible) : le montant revient au cœur, message clair', () => {
+    const b = basket({ discoveryMode: 'auto', discovery: [] });
+    const r = planBasketOrder(b, ctx({ autoDiscovery: [], cdc: null, discoveryLinesOpen: 0 }));
+    expect(r.orders).toHaveLength(1);
+    expect(r.orders[0].kind).toBe('core');
+    expect(r.orders[0].usd).toBe(25); // le budget entier va au cœur (réserve non puisée en marché neutre)
+    expect(r.notes.some((n) => n.includes('Découverte automatique') )).toBe(true);
+  });
+
+  it('mode auto : les règles restent la barrière (FOMO 7 j écarte une candidate)', () => {
+    const b = basket({ discoveryMode: 'auto', discovery: [] });
+    const r = planBasketOrder(b, ctx({
+      autoDiscovery: [coin('moon'), coin('calm')],
+      scores: { moon: 80, calm: 40 },
+      change7d: { moon: 90, calm: 4 },
+      cdc: { bitcoin: 'exchange', ethereum: 'exchange', moon: 'exchange', calm: 'exchange' },
+      discoveryLinesOpen: 0,
+    }));
+    const disc = r.orders.find((o) => o.kind === 'discovery');
+    expect(disc!.coinId).toBe('calm'); // pas le meilleur score : le FOMO l'a écarté
+    expect(r.excluded.some((e) => e.symbol === 'MOON' && e.reason.includes('FOMO'))).toBe(true);
+  });
+});
