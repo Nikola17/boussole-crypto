@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Généré par scripts/make-icons.cjs : ne pas modifier à la main. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <group android:pivotX="512" android:pivotY="512" android:scaleX="0.86" android:scaleY="0.86">
+        <path android:pathData="M836.3,478.8 A326,326 0 1 1 703.7,248.3" android:strokeColor="#FFFFFFFF" android:strokeWidth="84" android:strokeLineCap="round" android:fillColor="#00000000"/>
+        <path android:pathData="M336,636 L446,526 L532,612 L650.3,493.7" android:strokeColor="#FFFFFFFF" android:strokeWidth="92" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"/>
+        <path android:pathData="M887.9,256.1 L572.5,430 L643.3,500.7 Z" android:fillColor="#FFFFFFFF"/>
+        <path android:pathData="M887.9,256.1 L714,571.5 L643.3,500.7 Z" android:fillColor="#FFFFFFFF"/>
+    </group>
+</vector>

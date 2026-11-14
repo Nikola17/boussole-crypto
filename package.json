@@ -71,6 +71,8 @@
       "dist/**/*",
       "electron/**/*",
       "build/icon.png",
+      "build/tray.png",
+      "build/tray@2x.png",
       "package.json",
       "!node_modules/**/*"
     ],
@@ -97,8 +99,12 @@
           ]
         }
       ],
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "signAndEditExecutable": true
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.finance"
     },
     "nsis": {
       "oneClick": false,

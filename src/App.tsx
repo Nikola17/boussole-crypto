@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
-import { Compass, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
 import { SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { useStore } from './store/useStore';
@@ -200,7 +200,7 @@ function Welcome() {
     <div className="flex min-h-full items-center justify-center p-4">
       <div className="w-full max-w-lg rounded-2xl border border-line bg-surface p-6 sm:p-8">
         <div className="flex items-center gap-3">
-          <span className="flex size-12 items-center justify-center rounded-2xl bg-accent text-white"><Compass className="size-7" /></span>
+          <img src="./icon.svg" alt="" className="size-12" />
           <div>
             <h1 className="text-xl font-semibold text-ink">Bienvenue dans Boussole</h1>
             <p className="text-sm text-muted">Ton copilote d’investissement crypto</p>
