@@ -868,6 +868,7 @@ function nextBasketOccurrences(b, from, count = 4) {
 }
 
 // src/lib/paper.ts
+var liveTrades = (trades) => trades.filter((t) => !t.ghost);
 function paperPositions(trades, prices) {
   const agg = /* @__PURE__ */ new Map();
   for (const t of trades) {
@@ -896,6 +897,7 @@ function paperPositions(trades, prices) {
   };
 }
 function paperStatus(startingUsd, trades, prices) {
+  trades = liveTrades(trades);
   let cash = startingUsd;
   for (const t of trades) {
     const fee = t.feeUsd ?? 0;
@@ -924,6 +926,64 @@ function paperStatus(startingUsd, trades, prices) {
     positions,
     unpriced: base.unpriced
   };
+}
+function ghostTheses(trades, prices) {
+  const ghosts = trades.filter((t) => t.ghost);
+  const byCoin = /* @__PURE__ */ new Map();
+  for (const t of ghosts) {
+    const list2 = byCoin.get(t.coinId) ?? [];
+    list2.push(t);
+    byCoin.set(t.coinId, list2);
+  }
+  const out = [];
+  for (const [coinId, list2] of byCoin) {
+    const first = list2[0];
+    let investedUsd = 0;
+    let realizedUsd = 0;
+    let openQty = 0;
+    let fullyPricedBasis = true;
+    for (const t of list2) {
+      const fee = t.feeUsd ?? 0;
+      if (t.type === "buy") {
+        if (!(t.priceUsd > 0) || !Number.isFinite(t.priceUsd)) {
+          fullyPricedBasis = false;
+          continue;
+        }
+        investedUsd += t.quantity * t.priceUsd + fee;
+        openQty += t.quantity;
+      } else {
+        if (!(t.priceUsd > 0)) continue;
+        realizedUsd += t.quantity * t.priceUsd - fee;
+        openQty = Math.max(0, openQty - t.quantity);
+      }
+    }
+    const price = prices.get(coinId);
+    const priced = price != null && Number.isFinite(price) && price > 0;
+    const openValueUsd = priced ? openQty * price : null;
+    const firstAt = list2.reduce((min, t) => (t.time ?? t.date) < min ? t.time ?? t.date : min, first.time ?? first.date);
+    const pnlUsd = fullyPricedBasis && (openQty <= 0 || openValueUsd != null) ? realizedUsd + (openValueUsd ?? 0) - investedUsd : null;
+    out.push({
+      coinId,
+      symbol: first.symbol,
+      name: first.name,
+      investedUsd,
+      realizedUsd,
+      openQty,
+      priceUsd: priced ? price : null,
+      openValueUsd,
+      pnlUsd,
+      pnlPct: null,
+      firstAt,
+      closed: openQty <= 1e-12
+    });
+  }
+  for (const g of out) {
+    if (g.pnlUsd == null || !Number.isFinite(g.pnlUsd) || !(g.investedUsd > 0)) continue;
+    g.pnlUsd = Math.round(g.pnlUsd * 100) / 100;
+    g.pnlPct = Math.round(g.pnlUsd / g.investedUsd * 100 * 100) / 100;
+  }
+  out.sort((a, b) => a.closed === b.closed ? b.firstAt.localeCompare(a.firstAt) : a.closed ? -1 : 1);
+  return out;
 }
 
 // src/lib/macro.ts
@@ -1092,6 +1152,11 @@ function buildBrief(i) {
       const badge = st.pnlUsd >= 0 ? "+" : "";
       lines.push(`Papier (exp\xE9rimentations) : ${fmtPrice(st.totalUsd, "USD")} (${badge}${st.pnlPct.toFixed(1).replace(".", ",")} %)${st.unpriced ? `${st.unpriced} ligne${st.unpriced > 1 ? "s" : ""} sans prix` : ""}`);
     }
+  }
+  const ghosts = ghostTheses(watch.paperTrades, usd);
+  if (ghosts.length) {
+    const verdicts = ghosts.slice(0, 4).map((g) => `${g.symbol.toUpperCase()} ${g.pnlPct != null ? `${g.pnlPct >= 0 ? "+" : ""}${g.pnlPct.toFixed(0)} %` : "sans prix"}${g.closed ? " (close)" : ""}`);
+    lines.push(`Th\xE8ses fant\xF4mes (envies not\xE9es, pas achet\xE9es) : ${verdicts.join(", ")}${ghosts.length > 4 ? `\u2026 ${ghosts.length} lignes` : ""}`);
   }
   const plans = list(i.bundle.data.dcaPlans).filter((p) => p.active);
   const dcaExecs = list(i.bundle.data.dcaExecutions);
