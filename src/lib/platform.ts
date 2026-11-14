@@ -16,6 +16,34 @@ export const isNative = Capacitor.isNativePlatform();
 export const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
 export const platformLabel = isNative ? 'Android' : isElectron ? 'Windows' : 'Navigateur';
 
+/** Verrou biométrique Android : la fenêtre système d'empreinte/code de l'appareil (plugin maison BoussoleLock). */
+type LockBridge = { available?: () => Promise<{ available: boolean }>; authenticate?: () => Promise<{ ok: boolean; reason?: string }> };
+
+function lockPlugin(): LockBridge | null {
+  if (typeof window === 'undefined') return null; // hors navigateur (tests Node) : pas de plugin natif
+  const cap = (window as unknown as { Capacitor?: { isPluginAvailable?: (n: string) => boolean; Plugins?: Record<string, LockBridge | undefined> } }).Capacitor;
+  const lock = cap?.Plugins?.['BoussoleLock'];
+  return cap?.isPluginAvailable?.('BoussoleLock') && lock ? lock : null;
+}
+
+export async function lockAvailable(): Promise<boolean> {
+  try {
+    const r = await lockPlugin()?.available?.();
+    return !!r?.available;
+  } catch {
+    return false;
+  }
+}
+
+/** Demande le déverrouillage : true seulement après une authentification réussie. */
+export async function unlockApp(): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    return await lockPlugin()?.authenticate?.() ?? { ok: false, reason: 'verrou indisponible' };
+  } catch {
+    return { ok: false, reason: 'verrou indisponible' };
+  }
+}
+
 interface DesktopApi {
   get: () => Promise<{ background: boolean; autoStart: boolean }>;
   set: (patch: { background?: boolean; autoStart?: boolean }) => Promise<{ background: boolean; autoStart: boolean }>;

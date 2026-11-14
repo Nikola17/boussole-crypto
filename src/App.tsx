@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
 import { SystemBars, SystemBarsStyle } from '@capacitor/core';
@@ -6,6 +6,7 @@ import { useStore } from './store/useStore';
 import { matchRoute, useHashPath } from './router';
 import { Layout } from './components/Layout';
 import { Button, Spinner } from './components/ui';
+import { Compass } from 'lucide-react';
 import { setCoinGeckoKey } from './api/coingecko';
 import { setCoinGeckoKeyPresent } from './api/http';
 import { useFx, useMarkets, usePrices } from './hooks/useMarket';
@@ -13,7 +14,7 @@ import { useToday } from './hooks/useClock';
 import { aiReady } from './ai/run';
 import { alertCoinsToFetch, checkPriceAlerts } from './lib/alerts';
 import { useBriefing } from './hooks/useBriefing';
-import { cancelDcaReminders, ensureNotificationPermission, isNative, notify, scheduleDcaReminders, syncDesktop } from './lib/platform';
+import { cancelDcaReminders, ensureNotificationPermission, isNative, notify, scheduleDcaReminders, syncDesktop, unlockApp } from './lib/platform';
 import { useSmartAlerts } from './hooks/useSmartAlerts';
 import { useExitPlan } from './hooks/useExitPlan';
 import { EMPTY_WATCH, syncRunner, watchAlerts } from './lib/runnerSync';
@@ -21,6 +22,8 @@ import { fmtPrice, isoDay } from './lib/format';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAutoBackup } from './hooks/useBackup';
 import { useSyncLifecycle } from './hooks/useSync';
+import { useLatestVersion } from './hooks/useUpdate';
+import { openExternal } from './lib/platform'
 import { loadSecrets, saveSecrets, secretsSealed } from './lib/secure';
 import Dashboard from './pages/Dashboard';
 
@@ -224,6 +227,49 @@ function Welcome() {
   );
 }
 
+/** Android : verrou biométrique à l'ouverture — l'application reste masquée tant que tu ne t'es pas authentifié. */
+function LockGate() {
+  const appLock = useStore((s) => s.settings.appLock);
+  const [locked, setLocked] = useState(!appLock || !isNative);
+  const [attempt, setAttempt] = useState<number>(0);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!locked) return;
+    setError(null);
+    void unlockApp().then((r) => {
+      if (r.ok) setLocked(false);
+      else setError(r.reason ?? 'authentification échouée');
+    });
+  }, [locked, attempt]);
+  if (!locked) return null;
+  return (
+    <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-bg p-6">
+      <span className="flex size-14 items-center justify-center rounded-2xl bg-accent text-white"><Compass className="size-8" /></span>
+      <div className="text-center">
+        <h1 className="text-lg font-semibold text-ink">Boussole est verrouillée</h1>
+        <p className="mt-1 text-sm text-muted">Ouvre avec ton empreinte, ton visage ou le code de l'appareil.</p>
+        {error && <p className="mt-2 text-sm text-warn">{error} — réessaie.</p>}
+      </div>
+      <Button variant="primary" onClick={() => setAttempt((n) => n + 1)}>Déverrouiller</Button>
+    </div>
+  );
+}
+
+/** Nouvelle version disponible (détectée via le dépôt de synchronisation) : un bandeau, un bouton, rien d'automatique. */
+function UpdateBanner() {
+  const version = useLatestVersion();
+  const [dismissed, setDismissed] = useState(false);
+  if (!version || dismissed) return null;
+  return (
+    <div className="mb-3 flex items-center gap-3 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-ink-2">
+      <Compass className="size-5 shrink-0 text-accent" />
+      <p className="flex-1">Boussole {version} est disponible — les nouveautés sont sur la page de la release.</p>
+      <Button size="sm" variant="primary" onClick={() => openExternal('https://github.com/Nikola17/boussole-crypto/releases/latest')}>Télécharger</Button>
+      <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>Plus tard</Button>
+    </div>
+  );
+}
+
 export default function App() {
   const accepted = useStore((s) => s.settings.disclaimerAccepted);
   const autoBrief = useStore((s) => s.settings.briefingAuto && aiReady(s.settings));
@@ -232,9 +278,11 @@ export default function App() {
   return (
     <Layout>
       <AppEffects />
+      <LockGate />
       {autoBrief && <AutoBrief />}
       <ErrorBoundary scope="page" resetKey={path}>
         <Suspense fallback={<Spinner label="Chargement…" />}>
+          <UpdateBanner />
           <Routes />
         </Suspense>
       </ErrorBoundary>

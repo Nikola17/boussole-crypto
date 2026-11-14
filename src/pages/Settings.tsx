@@ -1,5 +1,5 @@
 import { CandlestickChart, Download, ExternalLink, Eye, EyeOff, FolderOpen, Gem, KeyRound, RefreshCw, RotateCcw, Save, Upload } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { useStore, exportBackup } from '../store/useStore';
 import { countsOf, importableSettings, validateBackup, type BackupCheck } from '../lib/backup';
@@ -9,7 +9,7 @@ import { MODEL_INFO } from '../ai/claude';
 import { buildAiConfig, testConnection } from '../ai/run';
 import { NOUS_BASE_URL } from '../ai/openai';
 import { useCompatModels } from '../hooks/useAiModels';
-import { backupFolderLabel, ensureNotificationPermission, isElectron, isNative, openBackupFolder, openExternal, platformLabel, saveTextFile } from '../lib/platform';
+import { backupFolderLabel, ensureNotificationPermission, isElectron, isNative, lockAvailable, openBackupFolder, openExternal, platformLabel, saveTextFile } from '../lib/platform';
 import { Link } from '../router';
 import { useAiContext } from '../ai/context';
 import { checkPassphrase } from '../lib/sync/crypto';
@@ -256,6 +256,7 @@ export default function Settings() {
             </Field>
             <Toggle checked={settings.notifications} onChange={async (v) => { if (v) await ensureNotificationPermission(); set({ notifications: v }); }} label="Notifications" hint="Alertes de prix, paliers de vente, échéances du panier, changement de zone du marché, bilan du dimanche." />
             {settings.notifications && <RunnerStatusLine />}
+            <AppLockToggle />
             {isElectron && (
               <>
                 <Toggle checked={settings.closeToTray} onChange={(v) => set({ closeToTray: v })} label="Rester actif en arrière-plan" hint="Fermer la fenêtre garde Boussole dans la zone de notification : les alertes continuent d’arriver. « Quitter » dans le menu de son icône l’arrête vraiment." />
@@ -342,6 +343,31 @@ export default function Settings() {
         <p className="text-sm text-ink-2">Toutes tes données locales (transactions, wallets, plans DCA, journal, thèses, rapports IA, réglages) seront supprimées de cet appareil. Exporte une sauvegarde avant si besoin.</p>
       </Modal>
     </div>
+  );
+}
+
+/** Android : verrou biométrique (empreinte/visage/code de l'appareil) à l'ouverture de l'application. */
+function AppLockToggle() {
+  const appLock = useStore((st) => st.settings.appLock);
+  const set = useStore((st) => st.setSettings);
+  const [supported, setSupported] = useState<boolean | null>(null);
+  const [warn, setWarn] = useState<string | null>(null);
+  useEffect(() => {
+    if (isNative) void lockAvailable().then(setSupported);
+  }, []);
+  if (!isNative) return null;
+  return (
+    <>
+      <Toggle checked={appLock} label="Verrou à l'ouverture" hint={supported === false ? 'Aucun verrou biométrique ni code trouvé sur ce téléphone : configure-en un dans les réglages Android d’abord.' : 'Empreinte, visage ou code de l’appareil, à chaque ouverture de Boussole. Réglage propre à ce téléphone.'} onChange={async (v) => {
+        if (v) {
+          const ok = await lockAvailable();
+          if (!ok) { setWarn('Configure d’abord un code ou une empreinte dans les réglages Android.'); return; }
+        }
+        setWarn(null);
+        set({ appLock: v });
+      }} />
+      {warn && <p className="-mt-2 text-xs text-warn">{warn}</p>}
+    </>
   );
 }
 

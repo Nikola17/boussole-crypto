@@ -35,6 +35,9 @@ export interface PaperStatus {
  * Ventes : réduisent la quantité et le coût au prorata du prix de vente (pas de plus-value là-dessus,
  * elle est portée par la valorisation des positions restantes et le cash).
  */
+/** Les ordres comptés dans le portefeuille papier : les thèses fantômes vivent à part. */
+const liveTrades = (trades: PaperTrade[]): PaperTrade[] => trades.filter((t) => !t.ghost);
+
 export function paperPositions(trades: PaperTrade[], prices: ReadonlyMap<string, number>): { positions: Omit<PaperPosition, 'priceUsd' | 'valueUsd' | 'pnlUsd' | 'pnlPct'>[]; unpriced: number } {
   const agg = new Map<string, { coinId: string; symbol: string; name: string; quantity: number; costUsd: number }>();
   for (const t of trades) {
@@ -63,6 +66,7 @@ export function paperPositions(trades: PaperTrade[], prices: ReadonlyMap<string,
 
 /** Bilan du portefeuille papier : cash, positions valorisées aux prix réels du moment, P&L. */
 export function paperStatus(startingUsd: number, trades: PaperTrade[], prices: ReadonlyMap<string, number>): PaperStatus {
+  trades = liveTrades(trades);
   let cash = startingUsd;
   for (const t of trades) {
     const fee = t.feeUsd ?? 0;
@@ -129,4 +133,94 @@ export function btcBenchmark(trades: PaperTrade[], btcPricesByDay: ReadonlyMap<s
   if (!(investedUsd > 0)) return null;
   const nowUsd = btcQty * btcPriceNow;
   return { investedUsd, nowUsd, pct: ((nowUsd / investedUsd) - 1) * 100 };
+}
+
+// ---------------------------------------------------------------- thèses fantômes
+
+export interface GhostThesis {
+  coinId: string;
+  symbol: string;
+  name: string;
+  /** Ce que le « j'aurais acheté » représentait (USD, frais compris). */
+  investedUsd: number;
+  /** Ce qui a été revendu en fantôme (USD net, le jour de la clôture). */
+  realizedUsd: number;
+  /** Quantité encore ouverte (jamais vendue en fantôme). */
+  openQty: number;
+  /** Prix réel du moment ; null : ligne sans prix connu. */
+  priceUsd: number | null;
+  /** Valeur de la part encore ouverte, aux prix réels du moment. */
+  openValueUsd: number | null;
+  /** Bilan complet : réalisé + part ouverte valorisée − investi. Null tant qu'une part sans prix reste ouverte. */
+  pnlUsd: number | null;
+  pnlPct: number | null;
+  /** La plus ancienne attestation « j'aurais acheté » (pour trier la liste). */
+  firstAt: string;
+  /** Vrai si tout a été revendu (la thèse est close). */
+  closed: boolean;
+}
+
+/**
+ * Les thèses fantômes (« j'aurais acheté X ici ») : ce que tu n'as PAS fait, chiffré aux prix réels.
+ * Elles ne consomment pas le cash papier — elles vivent leur vie, ligne par ligne, pour répondre
+ * à « et si j'avais suivi mon envie ? » avec des chiffres plutôt qu'avec un souvenir complaisant.
+ */
+export function ghostTheses(trades: PaperTrade[], prices: ReadonlyMap<string, number>): GhostThesis[] {
+  const ghosts = trades.filter((t) => t.ghost);
+  const byCoin = new Map<string, PaperTrade[]>();
+  for (const t of ghosts) {
+    const list = byCoin.get(t.coinId) ?? [];
+    list.push(t);
+    byCoin.set(t.coinId, list);
+  }
+  const out: GhostThesis[] = [];
+  for (const [coinId, list] of byCoin) {
+    const first = list[0];
+    let investedUsd = 0;
+    let realizedUsd = 0;
+    let openQty = 0;
+    let fullyPricedBasis = true; // achats sans prix : le bilan ne peut pas être affirmé
+    for (const t of list) {
+      const fee = t.feeUsd ?? 0;
+      if (t.type === 'buy') {
+        if (!(t.priceUsd > 0) || !Number.isFinite(t.priceUsd)) { fullyPricedBasis = false; continue; }
+        investedUsd += t.quantity * t.priceUsd + fee;
+        openQty += t.quantity;
+      } else {
+        if (!(t.priceUsd > 0)) continue;
+        realizedUsd += t.quantity * t.priceUsd - fee;
+        openQty = Math.max(0, openQty - t.quantity);
+      }
+    }
+    const price = prices.get(coinId);
+    const priced = price != null && Number.isFinite(price) && price > 0;
+    const openValueUsd = priced ? openQty * price : null;
+    const firstAt = list.reduce((min, t) => (t.time ?? t.date) < min ? (t.time ?? t.date) : min, first.time ?? first.date);
+    // Bilan affirmable seulement si les achats ont un prix connu ET que la part ouverte est valorisable.
+    const pnlUsd: number | null = fullyPricedBasis && (openQty <= 0 || openValueUsd != null)
+      ? realizedUsd + (openValueUsd ?? 0) - investedUsd
+      : null;
+    out.push({
+      coinId,
+      symbol: first.symbol,
+      name: first.name,
+      investedUsd,
+      realizedUsd,
+      openQty,
+      priceUsd: priced ? price : null,
+      openValueUsd,
+      pnlUsd,
+      pnlPct: null,
+      firstAt,
+      closed: openQty <= 1e-12,
+    });
+  }
+  // Le pourcentage attends un investissement réel ; les thèses closes passent en tête (verdict rendu).
+  for (const g of out) {
+    if (g.pnlUsd == null || !Number.isFinite(g.pnlUsd) || !(g.investedUsd > 0)) continue;
+    g.pnlUsd = Math.round(g.pnlUsd * 100) / 100;
+    g.pnlPct = Math.round(((g.pnlUsd / g.investedUsd) * 100) * 100) / 100;
+  }
+  out.sort((a, b) => (a.closed === b.closed ? b.firstAt.localeCompare(a.firstAt) : a.closed ? -1 : 1));
+  return out;
 }

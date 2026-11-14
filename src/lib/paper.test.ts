@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { PaperTrade } from '../types';
-import { btcBenchmark, checkPaperOrder, paperPositions, paperStatus } from './paper';
+import { btcBenchmark, checkPaperOrder, ghostTheses, paperPositions, paperStatus } from './paper';
 
 const trade = (over: Partial<PaperTrade> = {}): PaperTrade => ({
   id: 't1', coinId: 'solana', symbol: 'sol', name: 'Solana', date: '2026-01-10', type: 'buy',
@@ -60,5 +60,38 @@ describe('portefeuille papier', () => {
     const base = paperPositions([trade({ quantity: 10, priceUsd: 50 })], new Map());
     expect(base.positions[0]).toMatchObject({ quantity: 10, costUsd: 500 });
     expect(base.unpriced).toBe(1);
+  });
+});
+
+describe('thèses fantômes — ce que tu n’as pas fait, chiffré', () => {
+  const prices = new Map<string, number>([['solana', 4]]);
+  const envy: PaperTrade = { id: 'g1', coinId: 'solana', symbol: 'sol', name: 'Solana', date: '2026-11-01', time: '2026-11-01T10:00:00Z', type: 'buy', quantity: 10, priceUsd: 2, feeUsd: 0.1, ghost: true };
+
+  it('une thèse fantôme ne consomme ni le cash ni les positions du papier', () => {
+    const st = paperStatus(1000, [envy], prices);
+    expect(st.cashUsd).toBe(1000);
+    expect(st.positions).toEqual([]);
+    expect(st.pnlUsd).toBe(0);
+  });
+
+  it('le bilan d’une envie ouverte : mis, valeur du jour, écart', () => {
+    const [t] = ghostTheses([envy], prices);
+    expect(t).toMatchObject({ coinId: 'solana', investedUsd: 20.1, openQty: 10, openValueUsd: 40, closed: false });
+    expect(t.pnlPct).toBeCloseTo(99.0, 0); // +19,9 $ sur 20,1 $ mis
+  });
+
+  it('clôturée au prix du jour, la thèse rend son verdict', () => {
+    const close: PaperTrade = { ...envy, id: 'g2', type: 'sell', quantity: 10, priceUsd: 4, feeUsd: 0.1, time: '2026-11-20T10:00:00Z' };
+    const [t] = ghostTheses([envy, close], prices);
+    expect(t.closed).toBe(true);
+    expect(t.realizedUsd).toBeCloseTo(39.9, 2);
+    expect(t.pnlUsd).toBeCloseTo(19.8, 2);
+  });
+
+  it('sans prix connu, le bilan ne s’invente pas', () => {
+    const [t] = ghostTheses([envy], new Map());
+    expect(t.openValueUsd).toBeNull();
+    expect(t.pnlUsd).toBeNull();
+    expect(t.pnlPct).toBeNull();
   });
 });

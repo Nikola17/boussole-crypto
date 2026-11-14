@@ -28,6 +28,8 @@ export interface Settings {
   closeToTray: boolean;
   /** Windows : démarrer avec la session. */
   autoStart: boolean;
+  /** Android : demander l'empreinte/le code de l'appareil à l'ouverture (réglage de CET appareil, jamais synchronisé). */
+  appLock: boolean;
   disclaimerAccepted: boolean;
   taxRatePct: number;
   scanSize: 50 | 100;
@@ -341,6 +343,8 @@ export interface PaperTrade extends CoinRef {
   /** Frais simulés (USDC) : les vraies plateformes en prennent, le papier aussi. */
   feeUsd?: number;
   note?: string;
+  /** Thèse fantôme : « j'aurais acheté ici » — comptée à part, jamais dans le cash ni laPosition papier. */
+  ghost?: true;
 }
 
 /** Réglages du portefeuille papier : solde de départ et date du dernier reset. */

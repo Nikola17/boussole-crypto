@@ -43,3 +43,22 @@ const sums = path.join(releaseDir, `SHA256-${pkg.version}.txt`);
 fs.writeFileSync(sums, `${lines.join('\n')}\n`);
 console.log(`\n=== 4/4 Empreintes SHA-256 (${path.relative(root, sums)})\n${lines.join('\n')}`);
 console.log(`\n✅ Version ${pkg.version} prête dans release/`);
+
+// 5/5 Annonce de la version dans le depot de synchronisation : les applications ouvertes verront une
+// banniere de mise a jour (latestVersion.json, fichier en clair, aucun secret). Best effort : si le
+// depot de sync n'est pas joignable, la publication des fichiers reste reussie.
+const SYNC_REPO = process.env.BOUSSOLE_SYNC_REPO || 'Nikola17/boussole-sync';
+try {
+  const versionInfo = JSON.stringify({ version: pkg.version, tag: `v${pkg.version}`, releasedAt: new Date().toISOString() });
+  const content = Buffer.from(versionInfo, 'utf8').toString('base64');
+  let sha = '';
+  try {
+    sha = execSync(`gh api "repos/${SYNC_REPO}/contents/latestVersion.json" --jq .sha`, { stdio: ['ignore', 'pipe', 'ignore'], env }).toString().trim();
+  } catch {
+    sha = ''; // le fichier n'existe pas encore : premiere annonce
+  }
+  execSync(`gh api -X PUT "repos/${SYNC_REPO}/contents/latestVersion.json" -f message="Boussole : annonce de la version ${pkg.version}" -f content="${content}"${sha ? ` -f sha="${sha}"` : ''}`, { stdio: 'inherit', env });
+  console.log(`Annonce de la version ${pkg.version} ecrite dans ${SYNC_REPO} : l'application proposera la mise a jour.`);
+} catch {
+  console.log(`Attention : latestVersion.json non ecrit dans ${SYNC_REPO} - la banniere de mise a jour ne s'affichera pas. Verifie gh auth.`);
+}

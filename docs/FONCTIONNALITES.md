@@ -209,6 +209,12 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **Œil du gardien (supervision du VPS)** : le runner pousse toutes les 10 min un petit fichier non chiffré `heartbeat.json` (« j’existe ») dans le dépôt de sync. Une GitHub Action du dépôt de code le relit toutes les 20 min : 45 min de silence → message Telegram « le serveur veilleur n’a plus donné signe de vie » (au plus une fois toutes les 2 h), puis « il est de retour » à la reprise. Le VPS peut tomber : c’est GitHub qui veille sur lui.
 - **Dans l’application (Réglages → Synchronisation)** : une ligne « Serveur veilleur » affiche le dernier pointage du VPS et passe en orange au-delà de 45 min.
 
+### v1.19.0 — Rapidité (lot 20)
+
+- **Thèses fantômes** : « j’aurais acheté X ici » se note en deux champs (crypto, montant d’envie) sur la page Papier. Valorisation aux prix réels à chaque relevé, bilan en pourcentage, clôture en un bouton — sans toucher au cash papier ni aux positions. Le brief du matin en récite les verdicts. FOMO tué par les chiffres.
+- **Verrou biométrique (Android)** : Réglages → « Verrou à l’ouverture » — empreinte, visage ou code de l’appareil exigé à chaque ouverture de Boussole. Réglage propre à chaque téléphone, jamais synchronisé. Masque complet de l’appli tant que l’authentification n’est pas réussie.
+- **Détection de mise à jour (PC et Android)** : chaque publication écrit latestVersion.json dans le dépôt de synchronisation ; l’application ouverte affiche un bandeau « Boussole X.Y.Z est disponible » avec un bouton Télécharger qui ouvre la page des releases (À partir de la 1.19.0 ; un dépôt privé ne permet pas le téléchargement silencieux sans embarquer un jeton — le bouton reste le chemin le plus court).
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

@@ -9,7 +9,7 @@ import { isBasketDay, nextBasketOccurrences } from '../lib/basket';
 import { isScheduledDay, nextOccurrences, periodKey } from '../lib/dca';
 import { buildPositions } from '../lib/portfolio';
 import { fmtDate, fmtPct, fmtPrice, isoDay } from '../lib/format';
-import { paperStatus } from '../lib/paper';
+import { ghostTheses, paperStatus } from '../lib/paper';
 import type { CoinPrice } from './market';
 import type { RatedNews } from './news';
 import type { RunnerConfig } from './config';
@@ -144,6 +144,13 @@ export function buildBrief(i: BriefInputs): string {
       const badge = st.pnlUsd >= 0 ? '+' : '';
       lines.push(`Papier (expérimentations) : ${fmtPrice(st.totalUsd, 'USD')} (${badge}${st.pnlPct.toFixed(1).replace('.', ',')} %)${st.unpriced ? `${st.unpriced} ligne${st.unpriced > 1 ? 's' : ''} sans prix` : ''}`);
     }
+  }
+
+  // Thèses fantômes (« j'aurais acheté ici ») : le verdict chiffré de ce qu'on n'a pas fait.
+  const ghosts = ghostTheses(watch.paperTrades, usd);
+  if (ghosts.length) {
+    const verdicts = ghosts.slice(0, 4).map((g) => `${g.symbol.toUpperCase()} ${g.pnlPct != null ? `${g.pnlPct >= 0 ? '+' : ''}${g.pnlPct.toFixed(0)} %` : 'sans prix'}${g.closed ? ' (close)' : ''}`);
+    lines.push(`Thèses fantômes (envies notées, pas achetées) : ${verdicts.join(', ')}${ghosts.length > 4 ? `… ${ghosts.length} lignes` : ''}`);
   }
 
   // Échéances du jour : panier puis plans DCA simples ; sinon, la prochaine à venir.

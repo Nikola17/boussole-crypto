@@ -128,6 +128,7 @@ export const defaultSettings: Settings = {
   notifications: true,
   closeToTray: true,
   autoStart: false,
+  appLock: false,
   disclaimerAccepted: false,
   taxRatePct: 31.4,
   scanSize: 50,
