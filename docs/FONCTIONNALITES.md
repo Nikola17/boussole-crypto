@@ -229,6 +229,15 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **« Verrou indisponible » à chaque essai** : le plugin ouvrait la fenêtre d’empreinte hors du fil de l’interface, ce qu’Android refuse ; il bascule maintenant sur le fil principal et renvoie la vraie raison d’un échec.
 - **Jamais enfermé** : si le téléphone n’a plus aucun code ni empreinte, Boussole s’ouvre au lieu de rester bloquée.
 
+### v1.21.0 — DCA automatique, Trading et Pépites de retour, appli plus publique
+
+- **DCA automatique** : un montant, tes jours d’achat, une part base / découverte, et c’est tout. À chaque échéance, Boussole dit exactement quoi acheter et combien : jusqu’à 3 cryptos parmi les 20 premières hors stablecoins (classées par signal investisseur ; « Alléger » écartée) et jusqu’à 3 découvertes (pépites, milieu de classement ou les deux). Garde-fous conservés : modulation par la température du marché et réserve d’USDC, découverte réduite puis coupée en marché chaud, anti-FOMO, disponibilité Crypto.com, plafond par pépite, pas de nouvelle ligne au-delà de ton maximum. Le mode personnalisé (cœur + liste) reste disponible.
+- **Supprimer un DCA** : « Modifier ou supprimer » → « Supprimer ce DCA ». Ses échéances partent avec lui ; ses achats restent au journal (ils ont eu lieu), sauf si tu demandes leur retrait. Toutes les échéances sont visibles et supprimables une à une.
+- **Wallets recommandés** (Smart money) : dix adresses publiques vérifiées (étiquette Etherscan ou nom ENS) — Fondation Ethereum, Vitalik Buterin, Uniswap, Wintermute, Jump, DWF Labs, a16z, Justin Sun, Machi — classées selon ce que tu détiens, en un clic. Aucune adresse Solana ou Base n’a pu être attribuée de façon fiable : la liste n’en devine pas.
+- **Pépites et Trading reviennent dans le menu.** Trading : le calculateur se remplit depuis une crypto (cours, stop sous le support ou à 2 × la volatilité, objectif à 2 R) et ouvre le trade dans le journal ; les positions ouvertes sont suivies au cours du moment (résultat latent, R, stop franchi, objectif atteint, clôture au cours) ; nouvelles statistiques : pire série de pertes et baisse maximale.
+- **Correctif** : la page Papier plantait (« Maximum update depth exceeded ») à cause d’un sélecteur qui recréait une liste à chaque lecture.
+- **Plus orientée public** : plus de thèses (écriture, vérification par l’IA, règle « thèse cassée »), plus de checklist avant achat, plus de pont Grok ; « Thèses fantômes » devient « Achats fantômes » ; le Copilote ne cite plus de modèle ; plus de mention de fichiers ou de comptes personnels (dépôt de synchronisation à renseigner soi-même).
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

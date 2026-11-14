@@ -40,7 +40,7 @@ function Fallback({ error, scope, onRetry }: { error: Error; scope: 'app' | 'pag
             <button type="button" className="text-xs text-muted underline" onClick={() => setConfirmReset(true)}>Dernier recours : tout réinitialiser…</button>
           ) : (
             <div className="space-y-2 text-sm text-ink-2">
-              <p><b className="text-ink">Cela efface toutes tes données</b> (transactions, plans, thèses…). Exporte-les d’abord.</p>
+              <p><b className="text-ink">Cela efface toutes tes données</b> (transactions, plans, wallets…). Exporte-les d’abord.</p>
               <div className="flex gap-2">
                 <button type="button" className={btn} onClick={() => setConfirmReset(false)}>Annuler</button>
                 <button type="button" className={`${btn} border-critical/60 text-critical`} onClick={() => { useStore.getState().resetAll(); onRetry(); }}>Tout effacer</button>

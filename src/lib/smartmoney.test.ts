@@ -119,7 +119,7 @@ describe('messages et brief', () => {
     const text = smartMessage(sell);
     expect(text).toContain('Fonds Test VEND ABC');
     expect(text).toContain('12.50 ABC');
-    expect(text).toContain('thèse de sortie');
+    expect(text).toContain('plan de sortie');
   });
 
   it('l\'achat reste prudent : imiter n\'est pas acheter tout d\'un coup', () => {

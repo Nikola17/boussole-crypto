@@ -109,7 +109,7 @@ export function ExitPlanCard() {
               );
             })}
             {c.rungs.some((r) => r.done) && <button type="button" className="mt-1 text-xs text-muted hover:text-ink" onClick={() => c.rungs.filter((r) => r.done).forEach((r) => toggle(c.coinId, r.multiple))}>Réinitialiser les paliers vendus</button>}
-            {!c.hasThesis && <p className="mt-1 text-xs text-muted">Paliers par défaut (×2, ×3, ×5 à 25 % chacun). Écris une thèse sur la fiche de {c.symbol} pour les personnaliser.</p>}
+            {!c.hasThesis && <p className="mt-1 text-xs text-muted">Paliers par défaut (×2, ×3, ×5 à 25 % chacun).</p>}
           </div>
         ))}
         {watchAlts.length > 0 && (
@@ -133,7 +133,7 @@ export function ExitPlanCard() {
                 );
               })}
             </ul>
-            <p className="mt-1 text-xs text-muted">Paliers par défaut : ×2, ×3 et ×5 à 25 % de la position chacun. Écris une thèse sur la fiche d’une crypto pour personnaliser ses paliers.</p>
+            <p className="mt-1 text-xs text-muted">Paliers par défaut : ×2, ×3 et ×5 à 25 % de la position chacun.</p>
           </div>
         )}
         {tinyLines.length > 0 && <p className="text-xs text-muted">Trop petites pour des paliers de sortie ({tinyLines.map((c) => c.symbol).join(', ')}) : regroupe-les vers Bitcoin (carte « Consolider ») ou renforce-les si tu y crois vraiment.</p>}

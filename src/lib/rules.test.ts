@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brokenThesisCoins, impulseVerdict, isTinyLine, lagsBitcoin, outsideDcaCheck, trimStatus } from './rules';
+import { impulseVerdict, isTinyLine, lagsBitcoin, outsideDcaCheck, trimStatus } from './rules';
 import { rebalance, rebalanceAction } from './portfolio';
 import { exitLadder, pendingRungs, DEFAULT_LADDER } from './exit';
 import { ARCHETYPES } from './profile';
@@ -76,12 +76,6 @@ describe('plan de sortie : montants minimaux et délai entre tranches', () => {
 });
 
 describe('règles de STRATEGIE.md traduites en avertissements', () => {
-  it('« thèse cassée = sortie »', () => {
-    const t = (coinId: string, statuses: ('ok' | 'weak' | 'broken' | 'dead')[], verdict?: string) => ({
-      coinId, hypotheses: statuses.map((status, i) => ({ id: String(i), label: 'h', status })), lastCheck: verdict ? { date: 'x', verdict } : undefined,
-    });
-    expect(brokenThesisCoins([t('a', ['ok', 'weak']), t('b', ['ok', 'broken']), t('c', ['dead']), t('d', ['ok'], 'cassée'), t('e', ['ok'], 'intacte')])).toEqual(['b', 'c', 'd']);
-  });
   it('« 6 mois sous Bitcoin sans progrès » : 10 points d’écart sur 200 jours', () => {
     expect(lagsBitcoin(-20, 15)).toBe(true);
     expect(lagsBitcoin(10, 15)).toBe(false); // 5 points : pas assez

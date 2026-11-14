@@ -58,7 +58,7 @@ export function dustPlan(
     if (pct >= opts.minLinePct || opts.coreIds.has(h.coinId) || opts.thesisIds.has(h.coinId) || h.valueUsd <= 0) continue;
     const base = { coinId: h.coinId, symbol: h.symbol, name: h.name, image: h.image, quantity: h.quantity, valueUsd: h.valueUsd, priceUsd: h.priceUsd, pct };
     if (opts.discoveryIds.has(h.coinId)) reinforce.push({ ...base, advice: 'reinforce', why: 'Dans ta liste découverte : le panier la renforce avant d’en ouvrir une autre.' });
-    else merge.push({ ...base, advice: 'merge', why: 'Sans thèse ni place dans ton panier : à ce poids, même un ×10 ne change presque rien.' });
+    else merge.push({ ...base, advice: 'merge', why: 'Hors de ton panier : à ce poids, même un ×10 ne change presque rien.' });
   }
   merge.sort((a, b) => b.valueUsd - a.valueUsd);
   reinforce.sort((a, b) => b.valueUsd - a.valueUsd);

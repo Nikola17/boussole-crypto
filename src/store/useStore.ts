@@ -92,6 +92,8 @@ export interface AppState {
   upsertAccount: (a: Account) => void;
   removeAccount: (id: string) => void;
   setBasket: (b: BasketPlan | null) => void;
+  /** Supprime le panier et ses échéances ; `purgeTransactions` retire aussi du journal les achats qu'elles avaient créés. */
+  removeBasket: (opts: { purgeTransactions: boolean }) => void;
   /** Enregistre une échéance du panier et met à jour la réserve d'USDC. */
   addBasketExecution: (e: BasketExecution, txs?: Transaction[]) => void;
   removeBasketExecution: (id: string) => void;
@@ -133,7 +135,7 @@ export const defaultSettings: Settings = {
   taxRatePct: 31.4,
   scanSize: 50,
   syncEnabled: false,
-  syncRepo: 'Nikola17/boussole-sync',
+  syncRepo: '',
   syncToken: '',
   syncPassphrase: '',
   syncLastAt: 0,
@@ -310,6 +312,23 @@ export const useStore = create<AppState>()(
         ...dropped(s, `accounts/${id}`),
       })),
       setBasket: (b) => set((s) => ({ basket: b, ...bump(s, 'basket') })),
+      removeBasket: ({ purgeTransactions }) => set((s) => {
+        if (!s.basket) return {};
+        const id = s.basket.id;
+        const execs = s.basketExecutions.filter((e) => e.basketId === id);
+        const gone = new Set(purgeTransactions ? execs.flatMap((e) => e.txIds ?? []) : []);
+        let deletions = s.deletions;
+        const drop = (key: string) => { deletions = [...deletions.filter((d) => d.key !== key), { key, at: nowIso() }]; };
+        for (const e of execs) drop(`basketExecutions/${e.id}`);
+        for (const tid of gone) drop(`transactions/${tid}`);
+        return {
+          basket: null,
+          basketExecutions: s.basketExecutions.filter((e) => e.basketId !== id),
+          transactions: gone.size ? s.transactions.filter((t) => !gone.has(t.id)) : s.transactions,
+          deletions,
+          ...bump(s, 'basket'),
+        };
+      }),
       addBasketExecution: (e, txs) => set((s) => ({
         // La réserve d'USDC vit dans le panier : l'écrire avec l'échéance la date aussi.
         basketExecutions: [txs?.length ? { ...touch(e), txIds: txs.map((t) => t.id) } : touch(e), ...s.basketExecutions.filter((x) => x.id !== e.id)],

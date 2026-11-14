@@ -47,7 +47,7 @@ export default function Dca() {
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="DCA — investissement programmé"
-        subtitle="Le panier est ton parcours principal : il répartit ton budget entre le cœur (Bitcoin, Ethereum…) et une ligne de découverte, en suivant tes règles. Les plans à une seule crypto, pour les cas particuliers, restent en « avancé »."
+        subtitle="Le panier est ton parcours principal : en mode automatique, tu règles le montant, les jours et la part base / découverte, et Boussole te dit quoi acheter. Les plans à une seule crypto, pour les cas particuliers, restent en « avancé »."
       />
 
       <BasketSection />

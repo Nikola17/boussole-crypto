@@ -1,11 +1,13 @@
-import { Bell, Bot, Calculator, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Bell, Bot, Calculator, CircleAlert, LineChart as LineIcon, NotebookPen, Pencil, Plus, Target, Trash2, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { useFx, useMarkets } from '../hooks/useMarket';
+import { useCoinCandles, useCycle, useFx, useMarkets, usePrices } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
-import { positionSize, tradePnl, tradeR, tradeStats } from '../lib/risk';
+import { openTradeStatus, positionSize, tradePnl, tradeR, tradeStats } from '../lib/risk';
+import { analyze } from '../lib/signals';
+import { CoinPicker } from '../components/CoinPicker';
 import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, isoDay, uid } from '../lib/format';
-import { setQuery, useHashPath } from '../router';
+import { navigate, setQuery, useHashPath } from '../router';
 import {
   Badge, Banner, Button, Card, Empty, Field, Modal, NumberInput, PageHeader, Segmented, Select, Stat, Table, Td, Textarea,
 } from '../components/ui';
@@ -14,7 +16,7 @@ import { LineChart } from '../components/LineChart';
 import { AiProgress, NeedKey, ReportView, useAiConfig, useAiRunner } from '../components/AiBlocks';
 import { useAiContext } from '../ai/context';
 import { runJournalReview } from '../ai/tasks';
-import type { TradeEntry } from '../types';
+import type { CoinRef, TradeEntry } from '../types';
 
 type Tab = 'calc' | 'journal' | 'alertes';
 
@@ -23,7 +25,11 @@ export default function Trading() {
   const tab = (query.get('tab') as Tab) || 'calc';
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader title="Trading" subtitle="Calcule la bonne taille de position, tiens ton journal et fais-toi coacher par l’IA. Règle n°1 : chaque trade a un stop. (Les setups détectés sont dans Signaux.)" />
+      <PageHeader
+        title="Trading"
+        subtitle="Calcule la bonne taille de position à partir d’une crypto, suis tes positions ouvertes en direct, tiens ton journal et fais-toi coacher par l’IA. Règle n°1 : chaque trade a un stop."
+        actions={<Button size="sm" variant="ghost" icon={<LineIcon className="size-3.5" />} onClick={() => navigate('/marche')}>Setups détectés</Button>}
+      />
       <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[
         { value: 'calc', label: 'Calculateur' },
         { value: 'journal', label: 'Journal' },
@@ -40,6 +46,8 @@ function SizeCalculator() {
   const pf = usePortfolio();
   const rules = useStore((s) => s.profile.rules);
   const currency = useStore((s) => s.settings.currency);
+  const markets = useMarkets();
+  const cycle = useCycle();
   const [capital, setCapital] = useState<number | ''>(Math.round(pf.totals.value) || 1000);
   const [risk, setRisk] = useState<number | ''>(rules.riskPerTradePct);
   const [side, setSide] = useState<'long' | 'short'>('long');
@@ -47,23 +55,62 @@ function SizeCalculator() {
   const [stop, setStop] = useState<number | ''>('');
   const [tp, setTp] = useState<number | ''>('');
   const [lev, setLev] = useState<number | ''>(1);
+  const [coin, setCoin] = useState<CoinRef | null>(null);
+  const [journal, setJournal] = useState(false);
+
+  // Une crypto choisie : son cours du moment et son analyse technique (ATR, support) remplissent le calcul.
+  const extra = usePrices(coin && !(markets.data ?? []).some((m) => m.id === coin.coinId) ? [coin.coinId] : []);
+  const livePrice = coin ? (markets.data ?? []).find((m) => m.id === coin.coinId)?.current_price ?? extra.data?.[coin.coinId]?.usd ?? null : null;
+  const candles = useCoinCandles(coin && livePrice ? { id: coin.coinId, symbol: coin.symbol.toLowerCase(), priceUsd: livePrice } : null, '1d');
+  const analysis = useMemo(() => (candles.data?.candles.length ? analyze(candles.data.candles, { temperature: cycle.data?.temperature }) : null), [candles.data, cycle.data]);
+  const round = (x: number) => Math.round(x * 1e6) / 1e6;
+
+  function fillFromPlan() {
+    if (!livePrice) return;
+    const atr = analysis?.plan?.atr ?? null;
+    setEntry(round(livePrice));
+    if (side === 'long') {
+      const st = analysis?.plan?.stop ?? (atr ? livePrice - 2 * atr : null);
+      if (st != null) { setStop(round(st)); setTp(round(livePrice + 2 * (livePrice - st))); }
+    } else if (atr) {
+      const st = livePrice + 2 * atr;
+      setStop(round(st));
+      setTp(round(livePrice - 2 * (st - livePrice)));
+    }
+  }
+
   const r = positionSize({ capital: Number(capital), riskPct: Number(risk), entry: Number(entry), stop: Number(stop), takeProfit: tp === '' ? undefined : Number(tp), leverage: Number(lev || 1), side });
+  const qty = r ? round(r.quantity) : null;
+  // Mémorisé : un objet recréé à chaque rendu réinitialiserait le formulaire du journal pendant que tu le remplis.
+  const preset = useMemo((): Partial<TradeEntry> | null => (qty && coin ? { coinId: coin.coinId, symbol: coin.symbol, side, entryPrice: Number(entry), stopLoss: Number(stop), takeProfit: tp === '' ? undefined : Number(tp), quantity: qty, leverage: Number(lev || 1) } : null), [qty, coin, side, entry, stop, tp, lev]);
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card title={<span className="inline-flex items-center gap-2"><Calculator className="size-4 text-accent" />Taille de position</span>} subtitle="Combien acheter pour ne risquer qu’un petit pourcentage de ton capital si le stop est touché">
+        <div className="mb-3 space-y-2 rounded-lg bg-surface-2 p-3">
+          <Field label="Crypto (facultatif)"><CoinPicker value={coin} onChange={setCoin} /></Field>
+          {coin && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-ink-2">
+              <span>Cours : <b className="text-ink">{livePrice ? fmtPrice(livePrice, 'USD') : '…'}</b></span>
+              {analysis && <span>· trader : <b className="text-ink">{analysis.trader.label}</b> · volatilité {fmtNum(analysis.atrPct, 1)} %/jour</span>}
+              <Button size="sm" icon={<Wand2 className="size-3.5" />} disabled={!livePrice} onClick={fillFromPlan}>Remplir entrée, stop et objectif</Button>
+            </div>
+          )}
+          {coin && analysis && side === 'long' && analysis.trader.tone !== 'up' && <p className="text-xs text-warn">Le signal trader n’est pas haussier : le stop proposé vient de la volatilité, pas d’un setup. Attends peut-être un meilleur moment.</p>}
+          {coin && <p className="text-xs text-muted">Stop sous le dernier support (ou à 2 × la volatilité moyenne), objectif à 2 R. Ajuste-les à ta lecture du graphique.</p>}
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={`Capital (${currency === 'EUR' ? '€' : '$'})`}><NumberInput value={capital} onChange={setCapital} /></Field>
           <Field label="Risque par trade (%)" hint={`Ton profil : ${rules.riskPerTradePct} %`}><NumberInput value={risk} onChange={setRisk} /></Field>
           <Field label="Sens"><Select value={side} onChange={(e) => setSide(e.target.value as 'long' | 'short')}><option value="long">Long (achat)</option><option value="short">Short</option></Select></Field>
           <Field label="Levier"><NumberInput value={lev} onChange={setLev} /></Field>
-          <Field label="Prix d’entrée"><NumberInput value={entry} onChange={setEntry} /></Field>
-          <Field label="Stop loss"><NumberInput value={stop} onChange={setStop} /></Field>
-          <Field label="Objectif (facultatif)" className="col-span-2"><NumberInput value={tp} onChange={setTp} /></Field>
+          <Field label="Prix d’entrée ($)"><NumberInput value={entry} onChange={setEntry} /></Field>
+          <Field label="Stop loss ($)"><NumberInput value={stop} onChange={setStop} /></Field>
+          <Field label="Objectif ($, facultatif)" className="col-span-2"><NumberInput value={tp} onChange={setTp} /></Field>
         </div>
       </Card>
       <Card title="Résultat">
-        {!r ? <p className="text-sm text-muted">Renseigne un prix d’entrée et un stop cohérents (sous l’entrée pour un long, au-dessus pour un short).</p> : (
+        {!r ? <p className="text-sm text-muted">Renseigne un prix d’entrée et un stop cohérents (sous l’entrée pour un long, au-dessus pour un short), ou choisis une crypto et clique sur « Remplir ».</p> : (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <Stat label="Quantité à acheter" value={fmtNum(r.quantity, 6)} />
@@ -73,12 +120,65 @@ function SizeCalculator() {
             </div>
             {r.liquidationPrice != null && <p className="text-sm text-ink-2">Prix de liquidation estimé : <span className="tnum font-medium text-ink">{fmtNum(r.liquidationPrice, 6)}</span></p>}
             <p className="text-xs text-muted">Frais estimés (0,1 % par côté) : {fmtMoney(r.fees, currency, 2)}</p>
+            {r.rr != null && r.rr < 1.5 && <Banner tone="warn">Moins de 1,5 R de gain potentiel pour 1 R de risque : avec un taux de réussite ordinaire, ce trade ne paie pas sur la durée.</Banner>}
             {r.warnings.map((w, i) => <Banner key={i} tone="warn">{w}</Banner>)}
+            {preset
+              ? <Button variant="primary" icon={<NotebookPen className="size-4" />} onClick={() => setJournal(true)}>Ouvrir ce trade dans le journal</Button>
+              : <p className="text-xs text-muted">Choisis une crypto pour pouvoir enregistrer ce trade dans ton journal en un clic.</p>}
             <Banner tone="info">Avec 1 % de risque par trade, il faut 10 pertes d’affilée pour perdre ~10 % du capital. C’est ce qui permet de durer.</Banner>
           </div>
         )}
       </Card>
+      <TradeModal open={journal} preset={preset} onClose={() => setJournal(false)} />
     </div>
+  );
+}
+
+/** Positions ouvertes du journal, valorisées au cours du moment : où en est chacune par rapport à son stop et à son objectif. */
+function OpenPositions({ trades }: { trades: TradeEntry[] }) {
+  const upsert = useStore((s) => s.upsertTrade);
+  const markets = useMarkets();
+  const open = trades.filter((t) => t.status === 'open');
+  const outside = open.map((t) => t.coinId).filter((id) => id && !(markets.data ?? []).some((m) => m.id === id));
+  const extra = usePrices(outside);
+  const priceOf = (id: string): number | null => (markets.data ?? []).find((m) => m.id === id)?.current_price ?? extra.data?.[id]?.usd ?? null;
+  if (!open.length) return null;
+  const closeAt = (t: TradeEntry, price: number) => upsert({ ...t, status: 'closed', exitPrice: Math.round(price * 1e6) / 1e6, exitDate: isoDay() });
+  return (
+    <Card title={<span className="inline-flex items-center gap-2"><Target className="size-4 text-accent" />Positions ouvertes</span>} subtitle="Au cours du moment : résultat latent, distance au stop et à l’objectif">
+      <ul className="divide-y divide-line">
+        {open.map((t) => {
+          const price = priceOf(t.coinId);
+          const st = price != null ? openTradeStatus(t, price) : null;
+          return (
+            <li key={t.id} className="flex flex-wrap items-center gap-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-ink">
+                  {t.symbol.toUpperCase()}
+                  <Badge tone={t.side === 'long' ? 'up' : 'down'}>{t.side === 'long' ? 'Long' : 'Short'}{t.leverage > 1 ? ` ×${t.leverage}` : ''}</Badge>
+                  {st?.stopHit && <Badge tone="down" icon={<CircleAlert className="size-3" />}>Stop franchi</Badge>}
+                  {st?.targetHit && <Badge tone="up" icon={<Target className="size-3" />}>Objectif atteint</Badge>}
+                  {t.stopLoss == null && <Badge tone="warn">Sans stop</Badge>}
+                </div>
+                <div className="text-xs text-muted">
+                  Entrée {fmtNum(t.entryPrice, 6)} · cours {price != null ? fmtNum(price, 6) : '—'}
+                  {st?.toStopPct != null && ` · stop à ${fmtNum(st.toStopPct, 1)} %`}
+                  {st?.toTargetPct != null && ` · objectif à ${fmtNum(st.toTargetPct, 1)} %`}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className={`tnum text-sm font-semibold ${st == null ? 'text-muted' : st.pnl >= 0 ? 'text-up' : 'text-down'}`}>{st ? fmtMoney(st.pnl, 'USD', 0) : '—'}</div>
+                <div className="tnum text-xs text-muted">{st?.r != null ? `${st.r >= 0 ? '+' : ''}${fmtNum(st.r, 2)} R` : ''}</div>
+              </div>
+              {price != null && <Button size="sm" variant="ghost" onClick={() => closeAt(t, price)}>Clôturer au cours</Button>}
+            </li>
+          );
+        })}
+      </ul>
+      {open.some((t) => { const p = priceOf(t.coinId); return p != null && openTradeStatus(t, p)?.stopHit; }) && (
+        <Banner tone="warn" title="Un stop est franchi">Respecte ton plan : coupe la position sur ta plateforme, puis clôture-la ici. Déplacer un stop après coup est l’erreur qui coûte le plus cher.</Banner>
+      )}
+    </Card>
   );
 }
 
@@ -109,11 +209,14 @@ function Journal() {
       {runner.running && <AiProgress progress={runner.progress} onCancel={runner.cancel} />}
       {runner.error && <Banner tone="warn">{runner.error}</Banner>}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <OpenPositions trades={trades} />
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <Stat label="Trades clôturés" value={stats.closed} hint={`${stats.open} ouvert(s)`} />
         <Stat label="Taux de réussite" value={`${fmtNum(stats.winRate, 0)} %`} hint={`${stats.wins} gagnants / ${stats.losses} perdants`} />
         <Stat label="P&L total ($)" value={<span className={stats.totalPnl >= 0 ? 'text-up' : 'text-down'}>{fmtMoney(stats.totalPnl, 'USD', 0)}</span>} hint={`espérance ${fmtMoney(stats.expectancy, 'USD', 0)}/trade`} />
         <Stat label="R moyen · profit factor" value={`${stats.avgR != null ? fmtNum(stats.avgR, 2) : '—'} · ${stats.profitFactor != null ? fmtNum(stats.profitFactor, 2) : '—'}`} />
+        <Stat label="Pire série · baisse max" value={`${stats.maxLosingStreak} · ${fmtMoney(-stats.maxDrawdown, 'USD', 0)}`} hint="pertes d’affilée · depuis un sommet" />
       </div>
       {stats.equity.length > 1 && (
         <Card title="Courbe de résultats cumulés ($)">

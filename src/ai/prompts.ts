@@ -42,7 +42,7 @@ Structure exacte :
 ## 🎯 Ce que je ferais aujourd'hui à ta place
 Commence par reprendre TELLES QUELLES les « actionsDuJour » et les ordres du « panierDca » du bloc <ordre_du_jour> (mêmes lignes, mêmes montants en USDC : ne les recalcule pas, ne les contredis pas). Tu peux ensuite ajouter 1 à 3 avis ou risques (« ne rien faire » est souvent la bonne décision), avec pourquoi et priorité. Règles intangibles : ne conseille jamais de vendre du Bitcoin ou de l'Ethereum hors euphorie (température ≥ 80) ; un excès de Bitcoin se corrige en orientant le DCA, pas en vendant. Si le bloc contient un « avertissement » (wallet non lu), dis-le en premier et ne tire aucune conclusion sur la valeur ou l'allocation.
 ## 💼 Ton portefeuille
-Points d'attention : concentration, écarts à l'allocation cible, positions à sécuriser, positions dont la thèse est fragilisée. Si le portefeuille est vide, propose un plan de démarrage adapté au profil.
+Points d'attention : concentration, écarts à l'allocation cible, positions à sécuriser, positions dont le scénario d'investissement s'est dégradé. Si le portefeuille est vide, propose un plan de démarrage adapté au profil.
 ## 🔭 Opportunités à étudier
 2 à 4 idées issues des signaux, de la watchlist ou des narratives chaudes — formulées « à étudier », avec le risque principal.
 ## ⚠️ Risques et agenda
@@ -93,7 +93,7 @@ export const COMMITTEE: Persona[] = [
     name: 'L’Avocat du diable',
     inspiration: 'Charlie Munger',
     focus: 'Concurrence & inversion',
-    brief: `Ton rôle est de démolir la thèse, honnêtement :
+    brief: `Ton rôle est de démolir le scénario d'investissement, honnêtement :
 1. Concurrents directs et indirects, forks possibles, barrières à l'entrée réelles.
 2. « Dis-moi où je vais mourir » : les 3 scénarios les plus probables de destruction de valeur.
 3. Signaux d'alerte : équipe anonyme, insiders qui vendent, volumes artificiels, marketing > produit, rendements intenables, dépendance à un seul acteur.
@@ -141,19 +141,17 @@ Une phrase avec un verdict parmi : ACCUMULER, ACHETER PROGRESSIVEMENT, ATTENDRE,
 Tableau : dimension | analyste | note ★ | jugement clé. Puis la note globale /5.
 ## Données clés
 Petit tableau (prix, capitalisation, FDV, variation 30 j, tendance technique, signal investisseur/trader de l'app).
-## Thèse haussière vs baissière
+## Arguments pour et contre
 🟢 5 arguments pour, 🔴 5 arguments contre.
-## Checklist avant achat
-8 points marqués ✅ / ❌ / ❓.
 ## Plan d'action
 - Zones d'achat en $ : agressive, modérée, prudente (en t'appuyant sur les niveaux techniques fournis).
 - Taille de position recommandée selon le profil (en % du portefeuille et en montant), sans dépasser ses limites.
-- Invalidation : niveau de prix et conditions qui annulent la thèse.
+- Invalidation : niveau de prix et conditions qui annulent le scénario.
 - Prises de profits par paliers.
 ## Signaux à surveiller
 3 signaux de renforcement, 3 signaux d'allègement.
-## Test du miroir
-La thèse résumée en quelques phrases claires, sans jargon. S’il y a des zones de flou, nomme-les honnêtement.
+## En résumé
+Le scénario résumé en quelques phrases claires, sans jargon. S’il y a des zones de flou, nomme-les honnêtement.
 ## Conclusion
 100 mots maximum.
 
@@ -189,7 +187,7 @@ Tableau : date | événement | source | lien avec le mouvement (fort/moyen/faibl
 ## Nature du mouvement
 Fondamental, sentiment/spéculation, flux techniques, ou simple bêta du marché ? Durable ou passager ?
 ## Faut-il réagir ?
-Pour un détenteur et pour un acheteur potentiel : quoi faire, quoi surveiller. Indique si la thèse d'investissement doit être réexaminée.
+Pour un détenteur et pour un acheteur potentiel : quoi faire, quoi surveiller. Indique si le scénario d'investissement doit être réexaminé.
 300 à 450 mots.`;
 }
 
@@ -215,21 +213,6 @@ Les setups ou habitudes à garder.
 ## Tes 5 règles pour le mois prochain
 Concrètes et mesurables.
 Si le journal contient peu de trades, dis-le et donne une méthode pour le tenir correctement. 400 mots maximum.`;
-
-export function thesisTask(coinLabel: string): string {
-  return `Vérifie si la THÈSE D'INVESTISSEMENT de l'utilisateur sur ${coinLabel} tient toujours, avec les données de l'application et des recherches web récentes.
-## Verdict
-« Thèse intacte », « Thèse fragilisée » ou « Thèse cassée » + une phrase.
-## Hypothèses
-Tableau : hypothèse | statut (🟢 tient · 🟡 s'affaiblit · 🔴 abîmée · ⚫ cassée) | preuve récente.
-## Lignes rouges
-Une ligne rouge est-elle franchie ou en passe de l'être ?
-## Ce qui a changé
-Distingue bien : changement des FAITS (fondamentaux) vs simple changement du PRIX.
-## Action
-Conserver, renforcer, alléger ou vendre — et pourquoi.
-Termine par un bloc \`\`\`json : {"verdict": "intacte|fragilisée|cassée", "statuses": ["ok|weak|broken|dead", ...] (dans l'ordre des hypothèses)}`;
-}
 
 export function gemTask(label: string): string {
   return `Évalue rapidement ce token découvert on-chain : ${label}. Utilise les données JSON fournies (liquidité, volume, acheteurs/vendeurs, scan de sécurité si présent) et 2 à 3 recherches web (site, réseaux sociaux, équipe, signalements d'arnaque).

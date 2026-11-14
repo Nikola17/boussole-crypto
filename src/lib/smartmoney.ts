@@ -183,7 +183,7 @@ export function smartMessage(e: SmartEvent, nowMs = Date.now()): string {
     return [
       `Smart money — ${e.walletLabel} VEND ${tok}`,
       `${qtyLabel(e)}${when ? `, ${when}` : ''}. Un wallet que tu suis pour ses résultats se décharge de ce token.`,
-      `C'est le signal pour relire ta thèse de sortie : garde, allège, ou sors — mais décide à froid.`,
+      `C'est le signal pour relire ton plan de sortie : garde, allège, ou sors — mais décide à froid.`,
     ].join('\n');
   }
   return [

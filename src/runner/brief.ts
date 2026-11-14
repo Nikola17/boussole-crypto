@@ -150,7 +150,7 @@ export function buildBrief(i: BriefInputs): string {
   const ghosts = ghostTheses(watch.paperTrades, usd);
   if (ghosts.length) {
     const verdicts = ghosts.slice(0, 4).map((g) => `${g.symbol.toUpperCase()} ${g.pnlPct != null ? `${g.pnlPct >= 0 ? '+' : ''}${g.pnlPct.toFixed(0)} %` : 'sans prix'}${g.closed ? ' (close)' : ''}`);
-    lines.push(`Thèses fantômes (envies notées, pas achetées) : ${verdicts.join(', ')}${ghosts.length > 4 ? `… ${ghosts.length} lignes` : ''}`);
+    lines.push(`Achats fantômes (envies notées, pas achetées) : ${verdicts.join(', ')}${ghosts.length > 4 ? `… ${ghosts.length} lignes` : ''}`);
   }
 
   // Échéances du jour : panier puis plans DCA simples ; sinon, la prochaine à venir.

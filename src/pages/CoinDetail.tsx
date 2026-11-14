@@ -1,5 +1,5 @@
 import {
-  ArrowLeft, Bell, BookOpenCheck, CandlestickChart, CheckCircle2, CircleAlert, ExternalLink, MinusCircle, Plus, Repeat,
+  ArrowLeft, Bell, CandlestickChart, CheckCircle2, CircleAlert, ExternalLink, MinusCircle, Plus, Repeat,
   Sparkles, Star, Users, XCircle, Zap,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -10,21 +10,19 @@ import { usePortfolio } from '../hooks/usePortfolio';
 import { analyze, type Factor, type SignalResult } from '../lib/signals';
 import { bucketOf } from '../lib/portfolio';
 import { fmtCompact, fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtQty } from '../lib/format';
-import { readThesisStatuses } from '../lib/reportData';
 import { openExternal } from '../lib/platform';
-import { navigate } from '../router';
 import type { Interval } from '../api/binance';
 import {
   Badge, Banner, Button, Card, CoinIcon, Delta, ErrorNote, InfoTip, PageHeader, Segmented, SignalBadge, Spinner, Stars,
 } from '../components/ui';
 import { PriceChart, type ChartLevel } from '../components/PriceChart';
-import { AlertModal, DcaPlanModal, ThesisModal, TradeModal, TransactionModal } from '../components/forms';
+import { AlertModal, DcaPlanModal, TradeModal, TransactionModal } from '../components/forms';
 import { CdcBadge } from '../components/CdcBadge';
 import { CriteriaCard } from '../components/CriteriaCard';
 import { useCryptoCom } from '../hooks/useCryptoCom';
 import { AiProgress, CostHint, NeedKey, ReportView, useAiConfig, useAiRunner } from '../components/AiBlocks';
 import { summarizeAnalysis, useAiContext } from '../ai/context';
-import { runCommittee, runPulse, runQuick, runThesisCheck } from '../ai/tasks';
+import { runCommittee, runPulse, runQuick } from '../ai/tasks';
 import type { CoinRef } from '../types';
 
 function VoteIcon({ vote }: { vote: number }) {
@@ -62,8 +60,6 @@ export default function CoinDetail({ id }: { id: string }) {
   const profile = useStore((s) => s.profile);
   const reports = useStore((s) => s.reports);
   const removeReport = useStore((s) => s.removeReport);
-  const theses = useStore((s) => s.theses);
-  const upsertThesis = useStore((s) => s.upsertThesis);
   const fx = useFx();
   const rate = currency === 'EUR' ? fx : 1;
   const markets = useMarkets();
@@ -74,7 +70,7 @@ export default function CoinDetail({ id }: { id: string }) {
   const cfg = useAiConfig();
   const runner = useAiRunner();
   const [tf, setTf] = useState<Interval>('1d');
-  const [modal, setModal] = useState<null | 'tx' | 'dca' | 'alert' | 'trade' | 'thesis'>(null);
+  const [modal, setModal] = useState<null | 'tx' | 'dca' | 'alert' | 'trade'>(null);
 
   const m = markets.data?.find((x) => x.id === id);
   const c = coinQ.data;
@@ -114,7 +110,6 @@ export default function CoinDetail({ id }: { id: string }) {
       pnlPct: cost > 0 ? (pnl / cost) * 100 : undefined,
     };
   }, [pf.holdings, id]);
-  const thesis = theses.find((t) => t.coinId === id) ?? null;
   const coinReports = reports.filter((r) => r.coinId === id);
   const bucket = bucketOf(id, symbol, m?.market_cap_rank ?? c?.market_cap_rank);
   const maxPct = bucket === 'small' ? profile.rules.maxPerGemPct : bucket === 'btc' || bucket === 'eth' ? 100 : profile.rules.maxPerAltPct;
@@ -148,7 +143,7 @@ export default function CoinDetail({ id }: { id: string }) {
   const techCtx = () => ({ ...summarizeAnalysis(analysis), facteursInvestisseur: analysis?.investor.factors.map((f) => f.detail), facteursTrader: analysis?.trader.factors.map((f) => f.detail) });
   const label = `${name} (${symbol})`;
 
-  const run = (kind: 'quick' | 'committee' | 'pulse' | 'thesis') => {
+  const run = (kind: 'quick' | 'committee' | 'pulse') => {
     if (!cfg) return;
     void runner.run(async (onP, signal) => {
       const base = { coin: coinCtx(), technical: techCtx(), market: ctx.market(), portfolio: ctx.portfolio(), profile: ctx.profile() };
@@ -156,16 +151,6 @@ export default function CoinDetail({ id }: { id: string }) {
       if (kind === 'pulse') {
         const move = `${fmtPct(m?.price_change_percentage_24h ?? 0)} sur 24 h, ${fmtPct(m?.price_change_percentage_7d_in_currency ?? 0)} sur 7 jours`;
         return runPulse(cfg, label, id, move, { coin: base.coin, market: base.market }, onP, signal);
-      }
-      if (kind === 'thesis' && thesis) {
-        const report = await runThesisCheck(cfg, label, id, { thesis: { phrases: thesis.sentences, hypotheses: thesis.hypotheses.map((h) => h.label), lignesRouges: thesis.redLines, prixDeReference: thesis.buyPrice }, coin: base.coin, technical: base.technical }, onP, signal);
-        const statuses = readThesisStatuses(report.data?.statuses);
-        upsertThesis({
-          ...thesis,
-          hypotheses: thesis.hypotheses.map((h, i) => ({ ...h, status: (['ok', 'weak', 'broken', 'dead'].includes(statuses[i]) ? statuses[i] : h.status) as typeof h.status })),
-          lastCheck: { date: new Date().toISOString(), verdict: String(report.data?.verdict ?? 'vérifiée'), reportId: report.id },
-        });
-        return report;
       }
       return runQuick(cfg, label, id, base, onP, signal);
     });
@@ -225,7 +210,7 @@ export default function CoinDetail({ id }: { id: string }) {
                 <div className="col-span-2 rounded-lg bg-surface-2 p-3">
                   <div className="text-xs text-muted">Zone d’accumulation long terme (autour de la MM200)</div>
                   <div className="tnum font-medium text-ink">{fmtPrice(analysis.accumulation.low * rate, currency)} – {fmtPrice(analysis.accumulation.high * rate, currency)}</div>
-                  <div className="text-xs text-ink-2">{analysis.price <= analysis.accumulation.high ? 'Le prix est dans ou sous la zone : DCA renforcé pertinent si la thèse tient.' : `Le prix est ${fmtPct(((analysis.price / analysis.accumulation.high) - 1) * 100)} au-dessus de la zone.`}</div>
+                  <div className="text-xs text-ink-2">{analysis.price <= analysis.accumulation.high ? 'Le prix est dans ou sous la zone : DCA renforcé pertinent si le projet tient ses promesses.' : `Le prix est ${fmtPct(((analysis.price / analysis.accumulation.high) - 1) * 100)} au-dessus de la zone.`}</div>
                 </div>
               )}
               {analysis.plan && analysis.trader.tone === 'up' && (
@@ -251,13 +236,6 @@ export default function CoinDetail({ id }: { id: string }) {
                 <li>Ta position : {fmtQty(holding.quantity)} {symbol} = <span className="font-medium text-ink">{fmtMoney(holding.value, currency, 0)}</span> {holding.pnlPct != null && <>(<Delta value={holding.pnlPct} />)</>} · {portfolioValue > 0 ? `${fmtNum((holding.value / portfolioValue) * 100, 1)} % du portefeuille` : ''}</li>
               )}
               {(m?.price_change_percentage_7d_in_currency ?? 0) > 50 && <li><Banner tone="warn">+{Math.round(m!.price_change_percentage_7d_in_currency!)} % en 7 jours : risque de FOMO. Attends un repli ou réduis la taille.</Banner></li>}
-              <li className="flex flex-wrap gap-2 pt-1">
-                {thesis ? (
-                  <Badge tone="accent" icon={<BookOpenCheck className="size-3.5" />}>Thèse écrite{thesis.lastCheck ? ` · ${thesis.lastCheck.verdict}` : ''}</Badge>
-                ) : <Badge tone="warn">Pas encore de thèse écrite</Badge>}
-                <Button size="sm" variant="ghost" onClick={() => setModal('thesis')}>{thesis ? 'Modifier ma thèse' : 'Écrire ma thèse'}</Button>
-                <Button size="sm" variant="ghost" onClick={() => navigate('/guide?tab=checklist')}>Checklist avant achat</Button>
-              </li>
             </ul>
           </Card>
         </div>
@@ -272,7 +250,6 @@ export default function CoinDetail({ id }: { id: string }) {
               <Button variant="primary" icon={<Zap className="size-4" />} disabled={runner.running || !dataReady} onClick={() => run('quick')}>Analyse rapide</Button>
               <Button icon={<Users className="size-4" />} disabled={runner.running || !dataReady} onClick={() => run('committee')}>Comité des 4 sages</Button>
               <Button icon={<CircleAlert className="size-4" />} disabled={runner.running || !dataReady} onClick={() => run('pulse')}>Pourquoi ça bouge ?</Button>
-              {thesis && <Button icon={<BookOpenCheck className="size-4" />} disabled={runner.running || !dataReady} onClick={() => run('thesis')}>Vérifier ma thèse</Button>}
             </div>
             {!dataReady && (markets.error || cycle.error)
               ? <ErrorNote error={(markets.error ?? cycle.error) as Error} onRetry={() => void markets.refetch()} />
@@ -314,18 +291,6 @@ export default function CoinDetail({ id }: { id: string }) {
             <li><button type="button" className="inline-flex items-center gap-1.5 text-accent hover:underline" onClick={() => openExternal(`https://tokenomist.ai/${id}`)}><ExternalLink className="size-3.5" />Déblocages de tokens</button></li>
             <li><button type="button" className="inline-flex items-center gap-1.5 text-accent hover:underline" onClick={() => openExternal(`https://www.tradingview.com/symbols/${symbol}USD/`)}><ExternalLink className="size-3.5" />TradingView</button></li>
           </ul>
-          {thesis && (
-            <div className="mt-5 border-t border-line pt-4">
-              <p className="mb-2 text-sm font-medium text-ink">Ma thèse</p>
-              <ol className="list-decimal space-y-1 pl-4 text-xs text-ink-2">{thesis.sentences.filter(Boolean).map((s, i) => <li key={i}>{s}</li>)}</ol>
-              {thesis.hypotheses.length > 0 && (
-                <ul className="mt-2 space-y-1 text-xs">
-                  {thesis.hypotheses.map((h) => <li key={h.id} className="flex items-center gap-1.5 text-ink-2"><span>{h.status === 'ok' ? '🟢' : h.status === 'weak' ? '🟡' : h.status === 'broken' ? '🔴' : '⚫'}</span>{h.label}</li>)}
-                </ul>
-              )}
-              {thesis.lastCheck && <p className="mt-2 text-xs text-muted">Dernier contrôle : {fmtDate(thesis.lastCheck.date)} — thèse {thesis.lastCheck.verdict}</p>}
-            </div>
-          )}
           <div className="mt-4"><Stars value={analysis ? Math.round((analysis.investor.score + 100) / 40) : 0} /> <span className="text-xs text-muted">note technique long terme</span></div>
         </Card>
       </div>
@@ -334,7 +299,6 @@ export default function CoinDetail({ id }: { id: string }) {
       <DcaPlanModal open={modal === 'dca'} onClose={() => setModal(null)} presetCoin={coinRef} />
       <AlertModal open={modal === 'alert'} onClose={() => setModal(null)} presetCoin={coinRef} />
       <TradeModal open={modal === 'trade'} onClose={() => setModal(null)} preset={analysis?.plan && analysis.trader.tone === 'up' ? { coinId: id, symbol: symbol.toLowerCase(), entryPrice: Math.round(analysis.plan.entry * 1e6) / 1e6, stopLoss: Math.round(analysis.plan.stop * 1e6) / 1e6, takeProfit: Math.round(analysis.plan.tp1 * 1e6) / 1e6 } : { coinId: id, symbol: symbol.toLowerCase() }} />
-      <ThesisModal open={modal === 'thesis'} onClose={() => setModal(null)} coin={coinRef} initial={thesis} />
     </div>
   );
 }

@@ -1,12 +1,12 @@
 // Tâches IA de haut niveau : brief quotidien, comité des sages, analyse rapide, « pourquoi ça bouge »,
-// éclaireur d'airdrops, coach de trading, vérification de thèse, avis sur une pépite, conseiller (chat).
+// éclaireur d'airdrops, coach de trading, avis sur une pépite, conseiller (chat).
 // Fonctionne avec n'importe quel fournisseur (Claude ou API compatible OpenAI) via `runAi`.
 
 import { extractJson, type Effort, type RunResult } from './claude';
 import { runAi, type AiConfig } from './run';
 import {
   AIRDROP_SCOUT_TASK, BRIEFING_TASK, COMMITTEE, JOURNAL_TASK, NO_WEB_ADDENDUM, analystTask, gemTask, presidentTask,
-  pulseTask, quickTask, systemCore, thesisTask,
+  pulseTask, quickTask, systemCore,
 } from './prompts';
 import { toJsonBlock } from './context';
 import { getNews } from '../api/news';
@@ -210,12 +210,6 @@ export async function runJournalReview(cfg: AiConfig, ctx: { stats: unknown; tra
   return makeReport('journal', 'Revue du journal de trading', r);
 }
 
-export async function runThesisCheck(cfg: AiConfig, coinLabel: string, coinId: string, ctx: { thesis: unknown; coin: unknown; technical: unknown }, onProgress?: (p: Progress) => void, signal?: AbortSignal): Promise<AiReport> {
-  const prompt = [thesisTask(coinLabel), toJsonBlock('these', ctx.thesis), toJsonBlock('donnees_crypto', ctx.coin), toJsonBlock('analyse_technique', ctx.technical)].join('\n\n');
-  const r = await single(cfg, { prompt, effort: 'medium', searches: 4, step: 'Vérification de la thèse…', onProgress, signal, topics: topicsOf(coinLabel) });
-  return makeReport('thesis', `Contrôle de thèse — ${coinLabel}`, r, { coinId });
-}
-
 export async function runGem(cfg: AiConfig, label: string, ctx: { token: unknown; security: unknown; profile: unknown }, onProgress?: (p: Progress) => void, signal?: AbortSignal): Promise<AiReport> {
   const prompt = [gemTask(label), toJsonBlock('token', ctx.token), toJsonBlock('scan_securite', ctx.security), toJsonBlock('profil', ctx.profile)].join('\n\n');
   const r = await single(cfg, { prompt, effort: 'low', searches: 3, step: 'Enquête sur le token…', onProgress, signal });
@@ -247,24 +241,6 @@ ${toJsonBlock('plans_dca', ctx.dca)}${news.block ? `\n${news.block}` : ''}`;
     signal,
   });
   return { ...r, sources: r.sources.length ? r.sources : news.sources };
-}
-
-// ------------------------------------------------------------------ Extraction des ordres d'une réponse de Grok
-
-const GROK_EXTRACT_TASK = `Extrais de la réponse ci-dessous les ordres d'achat proposés. Réponds UNIQUEMENT par un bloc \`\`\`json de la forme {"ordres":[{"jeton":"BTC","type":"classique ou decouverte","montant_usdc":12.5,"raison":"…"}],"liste_decouverte":["SYMB"],"alertes":[],"non_verifie":[]}. N'invente rien : si le montant ou le type d'un ordre n'est pas indiqué, ne l'inclus pas.`;
-
-/** Demande à l'IA configurée d'extraire les ordres d'une réponse sans bloc JSON exploitable (≈ 0,003 $ avec DeepSeek V4.1 Flash). */
-export async function runGrokExtract(cfg: AiConfig, text: string, signal?: AbortSignal): Promise<string> {
-  const r = await runAi({
-    cfg,
-    system: 'Tu extrais des données structurées d’un texte. Tu ne commentes pas et tu n’inventes aucune donnée.',
-    prompt: `${GROK_EXTRACT_TASK}\n\n<reponse_grok>\n${text.slice(0, 12000)}\n</reponse_grok>`,
-    effort: 'low',
-    searches: 0,
-    maxTokens: 900,
-    signal,
-  });
-  return r.text;
 }
 
 // ------------------------------------------------------------------ Relecture de l'ordre du jour du panier

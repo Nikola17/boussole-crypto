@@ -6,7 +6,6 @@ import { useBriefing } from '../hooks/useBriefing';
 import { useAiConfig } from '../components/AiBlocks';
 import { useAiContext } from '../ai/context';
 import { runChat } from '../ai/tasks';
-import { aiLabel } from '../ai/run';
 import { fmtDate, fmtNum, uid } from '../lib/format';
 import { setQuery, useHashPath } from '../router';
 import { AiProgress, CostHint, NeedKey, ReportView } from '../components/AiBlocks';
@@ -17,19 +16,18 @@ import type { AiReportKind } from '../types';
 type Tab = 'brief' | 'chat' | 'historique';
 
 const KIND_LABEL: Record<AiReportKind, string> = {
-  briefing: 'Brief', committee: 'Comité', quick: 'Analyse rapide', pulse: 'Pourquoi ça bouge', airdrops: 'Airdrops', journal: 'Journal', thesis: 'Thèse', gem: 'Pépite',
+  briefing: 'Brief', committee: 'Comité', quick: 'Analyse rapide', pulse: 'Pourquoi ça bouge', airdrops: 'Airdrops', journal: 'Journal', thesis: 'Contrôle', gem: 'Pépite',
 };
 
 export default function Advisor() {
   const { query } = useHashPath();
   const tab = (query.get('tab') as Tab) || 'brief';
   const cfg = useAiConfig();
-  const label = useStore((s) => aiLabel(s.settings));
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Copilote IA"
-        subtitle={<>Ton conseiller personnel, propulsé par {label}. Il connaît ton profil, ton portefeuille, ton DCA et le marché du jour, et applique la méthode des grands investisseurs : faits sourcés, inversion, verdict clair.</>}
+        subtitle={<>Ton conseiller personnel. Il connaît ton profil, ton portefeuille, ton DCA et le marché du jour, et applique la méthode des grands investisseurs : faits sourcés, inversion, verdict clair.</>}
       />
       {!cfg && <NeedKey />}
       <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[

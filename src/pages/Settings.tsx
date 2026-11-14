@@ -1,4 +1,4 @@
-import { CandlestickChart, Download, ExternalLink, Eye, EyeOff, FolderOpen, Gem, KeyRound, RefreshCw, RotateCcw, Save, Upload } from 'lucide-react';
+import { Download, ExternalLink, Eye, EyeOff, FolderOpen, KeyRound, RefreshCw, RotateCcw, Save, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { useStore, exportBackup } from '../store/useStore';
@@ -10,7 +10,6 @@ import { buildAiConfig, testConnection } from '../ai/run';
 import { NOUS_BASE_URL } from '../ai/openai';
 import { useCompatModels } from '../hooks/useAiModels';
 import { backupFolderLabel, ensureNotificationPermission, isElectron, isNative, lockAvailable, openBackupFolder, openExternal, platformLabel, saveTextFile } from '../lib/platform';
-import { Link } from '../router';
 import { useAiContext } from '../ai/context';
 import { checkPassphrase } from '../lib/sync/crypto';
 import { fetchRaw } from '../lib/sync/github';
@@ -219,14 +218,6 @@ export default function Settings() {
           </div>
         </Card>
 
-        <Card title="Outils avancés" subtitle="Pépites et Trading sont sortis du menu principal : l’essentiel tient dans le panier DCA, les signaux et le portefeuille. Ces outils restent complets et toujours accessibles.">
-          <div className="flex flex-wrap gap-2">
-            <Link to="/pepites" className="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-ink hover:bg-surface-2"><Gem className="size-4 text-accent" />Pépites <span className="text-xs text-muted">petites capis, tokens on-chain, DeFi, narratives</span></Link>
-            <Link to="/trading" className="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-ink hover:bg-surface-2"><CandlestickChart className="size-4 text-accent" />Trading <span className="text-xs text-muted">taille de position, journal, alertes de prix</span></Link>
-          </div>
-          <p className="mt-3 text-xs text-muted">Les liens internes vers ces pages (Cockpit, fiche crypto…) continuent de fonctionner. Le scanner de setups reste dans Signaux, le comité des sages se lance depuis la fiche d’une crypto.</p>
-        </Card>
-
         <Card title="Données & affichage">
           <div className="space-y-4">
             <Field label="Devise d’affichage">
@@ -340,7 +331,7 @@ export default function Settings() {
       </Modal>
 
       <Modal open={confirmReset} onClose={() => setConfirmReset(false)} title="Tout effacer ?" footer={<><Button variant="ghost" onClick={() => setConfirmReset(false)}>Annuler</Button><Button variant="danger" onClick={() => { resetAll(); setConfirmReset(false); }}>Effacer définitivement</Button></>}>
-        <p className="text-sm text-ink-2">Toutes tes données locales (transactions, wallets, plans DCA, journal, thèses, rapports IA, réglages) seront supprimées de cet appareil. Exporte une sauvegarde avant si besoin.</p>
+        <p className="text-sm text-ink-2">Toutes tes données locales (transactions, wallets, plans DCA, journal, rapports IA, réglages) seront supprimées de cet appareil. Exporte une sauvegarde avant si besoin.</p>
       </Modal>
     </div>
   );
@@ -409,7 +400,7 @@ function SyncCard() {
       <div className="space-y-4">
         <Toggle checked={s.syncEnabled} onChange={(v) => { set({ syncEnabled: v }); if (v) setTimeout(() => void runSync(), 300); }} label="Synchroniser automatiquement" hint="Au lancement, après tes modifications (regroupées) et toutes les 15 minutes." />
         <Field label="Dépôt GitHub privé" hint={<>Crée sur GitHub un dépôt <b className="text-ink">privé</b> et vide (ex : <code>boussole-sync</code>). Il ne recevra qu'un seul fichier chiffré.</>}>
-          <Input value={s.syncRepo} onChange={(e) => set({ syncRepo: e.target.value.trim() })} placeholder="Nikola17/boussole-sync" spellCheck={false} />
+          <Input value={s.syncRepo} onChange={(e) => set({ syncRepo: e.target.value.trim() })} placeholder="ton-compte/boussole-sync" spellCheck={false} />
         </Field>
         <Field label="Jeton d'accès GitHub (fine-grained, limité à ce dépôt)" hint={<>Crée-le sur <button type="button" className="text-accent underline" onClick={() => openExternal('https://github.com/settings/personal-access-tokens/new')}>github.com/settings/personal-access-tokens/new</button> : « Only select repositories » → ton dépôt de synchronisation, puis permission « Contents : Read and write ». Il est conservé sur cet appareil uniquement.</>}>
           <div className="flex gap-2">
@@ -431,7 +422,7 @@ function SyncCard() {
           </span>
         </div>
         <HeartbeatLine />
-        <p className="text-xs text-muted">Ce qui part vers GitHub : tes transactions, comptes, wallets, plans DCA et panier, thèses, alertes, réglages de profil — chiffrés. Jamais : tes clés API (IA, CoinGecko), ni ce jeton, ni cette phrase, ni les rapports IA et conversations propres à chaque appareil.</p>
+        <p className="text-xs text-muted">Ce qui part vers GitHub : tes transactions, comptes, wallets, plans DCA et panier, alertes, réglages de profil — chiffrés. Jamais : tes clés API (IA, CoinGecko), ni ce jeton, ni cette phrase, ni les rapports IA et conversations propres à chaque appareil.</p>
       </div>
     </Card>
   );

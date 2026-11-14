@@ -1,19 +1,11 @@
 // Règles de docs/STRATEGIE.md traduites en fonctions pures : chacune produit un avertissement, jamais un ordre automatique.
 
-import type { Thesis } from '../types';
 import { LAG_VS_BTC_POINTS, MIN_DAYS_BETWEEN_TRIMS, OUTSIDE_DCA_MAX_TEMPERATURE } from './thresholds';
 
 /** « 6 mois sous Bitcoin sans progrès = bascule vers Bitcoin » : la variation sur 200 jours sert de mesure (≈ 6,5 mois). */
 export function lagsBitcoin(alt200dPct: number | null | undefined, btc200dPct: number | null | undefined, margin = LAG_VS_BTC_POINTS): boolean {
   if (alt200dPct == null || btc200dPct == null || !Number.isFinite(alt200dPct) || !Number.isFinite(btc200dPct)) return false;
   return alt200dPct < btc200dPct - margin;
-}
-
-/** « Thèse cassée = sortie » : identifiants des cryptos dont une hypothèse est cassée ou morte, ou dont la dernière vérification dit « cassée ». */
-export function brokenThesisCoins(theses: Pick<Thesis, 'coinId' | 'hypotheses' | 'lastCheck'>[]): string[] {
-  return theses
-    .filter((t) => t.hypotheses.some((h) => h.status === 'broken' || h.status === 'dead') || /cass/i.test(t.lastCheck?.verdict ?? ''))
-    .map((t) => t.coinId);
 }
 
 export interface OutsideDcaVerdict { allowed: boolean; reasons: string[] }

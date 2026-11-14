@@ -12,7 +12,8 @@ import {
 } from '../lib/basket';
 import { rulesOf } from '../lib/profile';
 import { scatterReport } from '../lib/scatter';
-import { autoDiscoveryCandidates } from '../lib/discovery';
+import { autoDiscoveryCandidates, MIDCAP_FILTER, type AutoPick } from '../lib/discovery';
+import { AUTO_BASE_TOP, planAutoBasket, topBaseUniverse, type AutoCandidate } from '../lib/autoBasket';
 import type { CoinRef } from '../types';
 import { useToday } from './useClock';
 
@@ -39,9 +40,32 @@ export function useBasket() {
   const cycle = useCycle();
   const markets = useMarkets();
 
+  // Panier entièrement automatique : base = top 20 hors stablecoins, découverte = pépites et/ou milieu de classement.
+  const fullAuto = basket?.mode === 'auto';
+  const source = basket?.discoverySource ?? 'both';
+  const baseUniverse = useMemo(() => {
+    if (!fullAuto) return [];
+    return topBaseUniverse((markets.data ?? []).map((m) => ({ id: m.id, symbol: m.symbol, name: m.name, image: m.image, rank: m.market_cap_rank })), AUTO_BASE_TOP);
+  }, [fullAuto, markets.data]);
+
   // Découverte automatique : tu ne choisis plus rien — les candidates viennent du scan des pépites.
-  const autoMode = basket?.discoveryMode === 'auto';
-  const smalls = useSmallCaps(autoMode);
+  const autoMode = basket?.discoveryMode === 'auto' && !fullAuto;
+  const smalls = useSmallCaps(autoMode || (fullAuto && source !== 'mid'));
+  const fullAutoPicks = useMemo((): AutoPick[] => {
+    if (!fullAuto) return [];
+    const baseIds = new Set(baseUniverse.map((c) => c.id));
+    const opts = { excluded: baseIds, excludedSymbols: new Set(baseUniverse.map((c) => c.symbol.toUpperCase())), max: 8 };
+    const toInput = (m: NonNullable<typeof markets.data>[number]) => ({
+      id: m.id, symbol: m.symbol, name: m.name, marketCap: m.market_cap, fdv: m.fully_diluted_valuation, volume24h: m.total_volume,
+      change7d: m.price_change_percentage_7d_in_currency ?? null, change30d: m.price_change_percentage_30d_in_currency ?? null,
+      athChangePct: m.ath_change_percentage, rank: m.market_cap_rank,
+    });
+    const gems = source !== 'mid' && smalls.data ? autoDiscoveryCandidates(smalls.data.map(toInput), { ...opts, label: 'Pépite du scan' }) : [];
+    const mids = source !== 'gems' ? autoDiscoveryCandidates((markets.data ?? []).filter((m) => (m.market_cap_rank ?? 0) > AUTO_BASE_TOP).map(toInput), { ...opts, filter: MIDCAP_FILTER, label: 'Milieu de classement' }) : [];
+    const seen = new Set<string>();
+    return [...gems, ...mids].sort((a, b) => b.score - a.score).filter((p) => (seen.has(p.coin.coinId) ? false : (seen.add(p.coin.coinId), true))).slice(0, 8);
+  }, [fullAuto, source, baseUniverse, smalls.data, markets.data]);
+
   const autoPicks = useMemo(() => {
     if (!autoMode || !basket || !smalls.data) return [];
     const inputs = smalls.data.map((m) => ({
@@ -55,7 +79,11 @@ export function useBasket() {
     });
   }, [autoMode, basket, smalls.data]);
 
-  const ids = useMemo(() => (basket ? [...new Set([...basket.core.map((c) => c.coinId), ...basket.discovery.map((c) => c.coinId), ...(autoPicks.map((p) => p.coin.coinId))])] : []), [basket, autoPicks]);
+  const ids = useMemo(() => {
+    if (!basket) return [];
+    if (fullAuto) return [...new Set([...baseUniverse.map((c) => c.id), ...fullAutoPicks.map((p) => p.coin.coinId)])];
+    return [...new Set([...basket.core.map((c) => c.coinId), ...basket.discovery.map((c) => c.coinId), ...(autoPicks.map((p) => p.coin.coinId))])];
+  }, [basket, fullAuto, baseUniverse, fullAutoPicks, autoPicks]);
   // On réutilise les cours déjà chargés (top 250) et on ne demande à CoinGecko que les cryptos manquantes.
   const marketMap = useMemo(() => new Map((markets.data ?? []).map((m) => [m.id, m])), [markets.data]);
   const missing = useMemo(() => ids.filter((id) => !marketMap.has(id)), [ids, marketMap]);
@@ -72,8 +100,10 @@ export function useBasket() {
   // Le cycle peut manquer (Binance injoignable) : l'ordre est alors calculé à ×1 avec un avertissement, au lieu de disparaître un jour de DCA.
   const cycleSettled = !!cycle.data || !!cycle.error;
   // En mode auto, le scan des pépites doit avoir répondu (même vide) : jamais de plan « sans regarder ».
-  const autoSettled = !autoMode || !!smalls.data || !!smalls.isError;
-  const ready = !!basket && !pf.loading && cycleSettled && autoSettled && !!markets.data && (missing.length === 0 || !!bm.data || bm.isError);
+  const autoSettled = !(autoMode || (fullAuto && source !== 'mid')) || !!smalls.data || !!smalls.isError;
+  // Mode automatique : la base est classée par le signal investisseur — on attend l'analyse (ou son échec) avant de trancher.
+  const scanSettled = !fullAuto || !!scan.data || !!scan.error;
+  const ready = !!basket && !pf.loading && cycleSettled && autoSettled && scanSettled && !!markets.data && (missing.length === 0 || !!bm.data || bm.isError);
   const loadError = (markets.error ?? cycle.error ?? null) as Error | null;
 
   const ctx = useMemo((): BasketContext | null => {
@@ -104,7 +134,27 @@ export function useBasket() {
     };
   }, [basket, ready, profile, pf.holdings, pf.alloc, coins, ids, scan.data, cdc, cycle.data, autoPicks]);
 
-  const plan = useMemo(() => (basket && ctx ? planBasketOrder(basket, ctx) : null), [basket, ctx]);
+  const plan = useMemo(() => {
+    if (!basket || !ctx) return null;
+    if (!fullAuto) return planBasketOrder(basket, ctx);
+    const rules = rulesOf(profile);
+    const scatter = scatterReport(pf.holdings, rules);
+    const cand = (coinId: string, coin: CoinRef, rank: number | null, score: number | null): AutoCandidate => ({
+      coin, rank, score, change7d: ctx.change7d[coinId] ?? null, heldUsd: ctx.values[coinId] ?? 0, cdc: ctx.cdc ? ctx.cdc[coinId] ?? 'unknown' : null,
+    });
+    return planAutoBasket(
+      { amountUsd: basket.amountUsd, basePct: basket.basePct ?? 70, maxBaseLines: basket.maxBaseLines ?? 3, maxDiscoveryLines: basket.maxDiscoveryLines ?? 3, minOrderUsd: basket.minOrderUsd, reserveUsd: basket.reserveUsd },
+      {
+        temperature: ctx.temperature,
+        totalValueUsd: ctx.totalValueUsd,
+        maxPerGemPct: rules.maxPerGemPct,
+        base: baseUniverse.map((c) => cand(c.id, { coinId: c.id, symbol: c.symbol, name: c.name, image: c.image }, c.rank, ctx.scores[c.id] ?? null)),
+        discovery: fullAutoPicks.map((p) => cand(p.coin.coinId, { ...p.coin, image: marketMap.get(p.coin.coinId)?.image ?? coins.find((m) => m.id === p.coin.coinId)?.image }, null, p.score)),
+        canOpenBase: scatter.lines.length < rules.maxLines,
+        canOpenDiscovery: scatter.discoveryLines < rules.maxDiscoveryLines,
+      },
+    );
+  }, [basket, ctx, fullAuto, profile, pf.holdings, baseUniverse, fullAutoPicks, marketMap, coins]);
 
   const { last, periodKey, done, due, next } = useBasketDue();
 
@@ -123,6 +173,7 @@ export function useBasket() {
   return {
     loadError, missingCoins: bm.isError && missing.length > 0, retry: () => { void markets.refetch(); void bm.refetch(); },
     basket, ctx, plan, ready, loading: !!basket && !ready && !loadError, markets: coins, known, priceOf, rate: pf.rate, currency: pf.currency, cycle: cycle.data, temperature: cycle.data?.temperature ?? null, holdings: pf.holdings, last, periodKey, done, due, next,
-    autoCandidates: autoPicks,
+    autoCandidates: fullAuto ? fullAutoPicks : autoPicks,
+    fullAuto,
   };
 }

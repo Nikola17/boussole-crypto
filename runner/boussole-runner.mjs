@@ -1156,7 +1156,7 @@ function buildBrief(i) {
   const ghosts = ghostTheses(watch.paperTrades, usd);
   if (ghosts.length) {
     const verdicts = ghosts.slice(0, 4).map((g) => `${g.symbol.toUpperCase()} ${g.pnlPct != null ? `${g.pnlPct >= 0 ? "+" : ""}${g.pnlPct.toFixed(0)} %` : "sans prix"}${g.closed ? " (close)" : ""}`);
-    lines.push(`Th\xE8ses fant\xF4mes (envies not\xE9es, pas achet\xE9es) : ${verdicts.join(", ")}${ghosts.length > 4 ? `\u2026 ${ghosts.length} lignes` : ""}`);
+    lines.push(`Achats fant\xF4mes (envies not\xE9es, pas achet\xE9es) : ${verdicts.join(", ")}${ghosts.length > 4 ? `\u2026 ${ghosts.length} lignes` : ""}`);
   }
   const plans = list(i.bundle.data.dcaPlans).filter((p) => p.active);
   const dcaExecs = list(i.bundle.data.dcaExecutions);
@@ -1371,7 +1371,7 @@ function smartMessage(e, nowMs = Date.now()) {
     return [
       `Smart money \u2014 ${e.walletLabel} VEND ${tok}`,
       `${qtyLabel(e)}${when ? `, ${when}` : ""}. Un wallet que tu suis pour ses r\xE9sultats se d\xE9charge de ce token.`,
-      `C'est le signal pour relire ta th\xE8se de sortie : garde, all\xE8ge, ou sors \u2014 mais d\xE9cide \xE0 froid.`
+      `C'est le signal pour relire ton plan de sortie : garde, all\xE8ge, ou sors \u2014 mais d\xE9cide \xE0 froid.`
     ].join("\n");
   }
   return [

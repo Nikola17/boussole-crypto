@@ -99,7 +99,6 @@ export function CriteriaCard({ coinId, symbol, market, coin }: { coinId: string;
   return (
     <Card
       title={<span className="inline-flex items-center gap-2"><ListChecks className="size-4 text-accent" />Fiche des 12 critères</span>}
-      subtitle="Tes questions du prompt Grok, vérifiées sur des données réelles. Une donnée absente reste « non vérifié »."
       actions={!go ? <Button size="sm" variant="primary" onClick={() => setGo(true)}>Charger la fiche</Button> : undefined}
     >
       {!go && <p className="text-sm text-muted">Quelques requêtes vers CoinGecko (carnet d’ordres, plateformes, code) : environ 15 secondes.</p>}

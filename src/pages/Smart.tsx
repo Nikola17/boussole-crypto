@@ -4,12 +4,14 @@
 // ta sortie ». Ici : la liste des wallets, leur flux de mouvements, et le lien avec ta liste de tokens.
 
 import { useMemo, useState } from 'react';
-import { Eye, Plus, Trash2, Users } from 'lucide-react';
+import { Eye, Plus, Sparkles, Trash2, Users } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../store/useStore';
 import { fetchAllWalletEvents } from '../api/smartmoney';
 import { refsOf, tokenMatches, type SmartEvent } from '../lib/smartmoney';
 import { buildPositions } from '../lib/portfolio';
+import { recommendSmartWallets, type Recommendation } from '../lib/smartCatalog';
+import { usePortfolio } from '../hooks/usePortfolio';
 import type { SmartWallet } from '../types';
 import { Badge, Banner, Button, Card, Empty, Field, Input, Modal, PageHeader, Segmented, Select, Spinner, Table, Td } from '../components/ui';
 import { fmtDate, uid } from '../lib/format';
@@ -86,8 +88,10 @@ export default function Smart() {
       <Banner tone="info" title="Des adresses publiques, des mouvements publics">
         Tu suis des adresses de blockchain publiques (fonds, initiés, KOL) — jamais des secrets. Les mouvements sont
         lus sur Solana, Ethereum et Base via des services publics. Un wallet qui vend un token de ta liste déclenche
-        une alerte Telegram (ton serveur veille) : c'est le moment de relire ta thèse de sortie, pas de paniquer.
+        une alerte Telegram (ton serveur veille) : c'est le moment de relire ton plan de sortie, pas de paniquer.
       </Banner>
+
+      <RecommendedCard />
 
       <Card title="Wallets suivis" subtitle={`${wallets.length} wallet${wallets.length > 1 ? 's' : ''} — synchronisés entre tes appareils`}>
         {wallets.length === 0 ? (
@@ -169,5 +173,51 @@ function EventRow({ e, mine }: { e: SmartEvent; mine: boolean }) {
       </div>
       {mine && <Badge tone="accent" icon={<Eye className="size-3" />}>dans ta liste</Badge>}
     </li>
+  );
+}
+
+/** Wallets connus proposés selon TON portefeuille : un clic pour les suivre. */
+function RecommendedCard() {
+  const wallets = useStore((s) => s.smartWallets);
+  const addSmartWallet = useStore((s) => s.addSmartWallet);
+  const likesGems = useStore((s) => s.profile.interests.gems);
+  const pf = usePortfolio();
+  const [all, setAll] = useState(false);
+  const recos = useMemo(() => recommendSmartWallets(pf.holdings.map((h) => ({ coinId: h.coinId, symbol: h.symbol, valueUsd: h.valueUsd, bucket: h.bucket })), wallets, { likesGems }), [pf.holdings, wallets, likesGems]);
+  const relevant = recos.filter((r) => r.score > 0);
+  const shown = all ? recos : (relevant.length ? relevant : recos).slice(0, 5);
+  const btcPct = pf.totals.value > 0 ? (pf.holdings.filter((h) => h.bucket === 'btc').reduce((s, h) => s + h.value, 0) / pf.totals.value) * 100 : 0;
+
+  const follow = (r: Recommendation) => addSmartWallet({ id: uid(), label: r.wallet.label, chain: r.wallet.chain, address: r.wallet.address, kind: r.wallet.kind, addedAt: new Date().toISOString() });
+
+  return (
+    <Card title={<span className="inline-flex items-center gap-2"><Sparkles className="size-4 text-accent" />Wallets recommandés pour ton portefeuille</span>} subtitle="Des adresses publiques connues, vérifiées sur leur étiquette Etherscan ou leur nom ENS, classées selon ce que tu détiens">
+      {recos.length === 0 ? (
+        <Empty title="Tu suis déjà toute la liste">Ajoute d'autres adresses avec « Suivre un wallet ».</Empty>
+      ) : (
+        <ul className="divide-y divide-line">
+          {shown.map((r) => (
+            <li key={r.wallet.key} className="flex flex-wrap items-start gap-3 py-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-ink">
+                  {r.wallet.label}
+                  <Badge>{KIND_LABEL[r.wallet.kind]}</Badge>
+                  <a className="text-xs font-normal text-link underline decoration-dotted underline-offset-2" href={explorerOf({ ...r.wallet, id: r.wallet.key, addedAt: '' })} target="_blank" rel="noreferrer">{r.wallet.address.slice(0, 6)}…{r.wallet.address.slice(-4)}</a>
+                </div>
+                <p className="mt-0.5 text-xs text-ink-2">{r.wallet.why}</p>
+                {r.reasons.length > 0 && <p className="mt-0.5 text-xs text-accent">{r.reasons.join(' ')}</p>}
+                <p className="mt-0.5 text-[0.7rem] text-muted">Source : {r.wallet.source}</p>
+              </div>
+              <Button size="sm" icon={<Plus className="size-3.5" />} onClick={() => follow(r)}>Suivre</Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {recos.length > shown.length && !all && <button type="button" className="mt-2 text-xs font-medium text-accent hover:underline" onClick={() => setAll(true)}>Voir toute la liste ({recos.length})</button>}
+      <p className="mt-3 text-xs text-muted">
+        Le suivi lit les transferts de tokens sur Ethereum (pas l'ETH « natif ») : une vente d'ETH apparaît comme un achat de stablecoins.
+        {btcPct >= 30 ? ` Ton Bitcoin (${Math.round(btcPct)} %) n'a pas d'équivalent ici : la chaîne Bitcoin n'est pas suivie.` : ''} Aucune adresse Solana ou Base n'a pu être attribuée de façon fiable : ajoute les tiennes à la main.
+      </p>
+    </Card>
   );
 }

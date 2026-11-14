@@ -403,7 +403,7 @@ describe('cycle du runner — smart money (wallets suivis)', () => {
     const { state, result } = await runCycle(CFG_SM, emptyState(), dry(), deps, H(6, 30));
     expect(result.error).toBeNull();
     expect(sent.some((t) => t.includes('Fonds Test VEND ABC'))).toBe(true);
-    expect(sent.some((t) => t.includes('thèse de sortie'))).toBe(true);
+    expect(sent.some((t) => t.includes('plan de sortie'))).toBe(true);
     expect(state.sent['sm:w1:h1:MintA']).toBeTruthy();
     expect(state.smCursor['w1']).toBe(at); // lu jusqu'à ce mouvement : pas de relecture au prochain cycle
   });

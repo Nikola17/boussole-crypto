@@ -1,6 +1,5 @@
-// Formulaires (fenêtres modales) partagés : transaction, plan DCA, alerte de prix, trade, thèse d'investissement.
+// Formulaires (fenêtres modales) partagés : transaction, plan DCA, alerte de prix, trade.
 
-import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useCycle, useEurUsdHistory, useFx, useMarkets } from '../hooks/useMarket';
@@ -10,7 +9,7 @@ import { fmtMoney, fmtNum, isoDay, uid } from '../lib/format';
 import { isStable } from '../lib/portfolio';
 import { eurPerUsdOn, FALLBACK_EUR_PER_USD } from '../lib/fx';
 import { outsideDcaCheck, impulseVerdict, FOMO_WAIT_MS } from '../lib/rules';
-import type { CoinRef, DcaPlan, PriceAlert, Thesis, TradeEntry, Transaction, TxType } from '../types';
+import type { CoinRef, DcaPlan, PriceAlert, TradeEntry, Transaction, TxType } from '../types';
 import type { Currency } from '../lib/format';
 import { CoinPicker } from './CoinPicker';
 import { Banner, Button, Field, Input, Modal, NumberInput, Select, Textarea, Toggle } from './ui';
@@ -413,13 +412,14 @@ export function TradeModal({ open, onClose, initial, preset }: {
   useEffect(() => {
     if (!open) return;
     const base: TradeEntry = initial ?? {
-      id: uid(), coinId: preset?.coinId ?? '', symbol: preset?.symbol ?? '', side: 'long', status: 'open', entryDate: isoDay(),
+      id: uid(), coinId: preset?.coinId ?? '', symbol: preset?.symbol ?? '', side: preset?.side ?? 'long', status: 'open', entryDate: isoDay(),
       entryPrice: preset?.entryPrice ?? 0, quantity: preset?.quantity ?? 0, stopLoss: preset?.stopLoss, takeProfit: preset?.takeProfit,
-      leverage: 1, fees: 0, setup: preset?.setup ?? '', emotion: '', notes: '',
+      leverage: preset?.leverage ?? 1, fees: 0, setup: preset?.setup ?? '', emotion: '', notes: '',
     };
     setT(base);
     setCoin(base.coinId ? { coinId: base.coinId, symbol: base.symbol, name: base.symbol.toUpperCase() } : null);
-  }, [open, initial, preset]);
+    // Initialisé à l'ouverture seulement : un préremplissage recréé à chaque rendu effaçait la saisie en cours.
+  }, [open, initial?.id]);
 
   if (!t) return null;
   const set = (patch: Partial<TradeEntry>) => setT({ ...t, ...patch });
@@ -467,75 +467,6 @@ export function TradeModal({ open, onClose, initial, preset }: {
         </Select></Field>
         <Field label="Notes"><Textarea value={t.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} placeholder="Pourquoi ce trade ? Qu'as-tu appris ?" /></Field>
         {!t.stopLoss && <Banner tone="warn">Un trade sans stop loss n’a pas de risque défini. Fixe-le avant d’entrer.</Banner>}
-      </div>
-    </Modal>
-  );
-}
-
-// ------------------------------------------------------------------ Thèse
-
-export function ThesisModal({ open, onClose, coin, initial }: { open: boolean; onClose: () => void; coin: CoinRef; initial?: Thesis | null }) {
-  const upsert = useStore((s) => s.upsertThesis);
-  const [sentences, setSentences] = useState<string[]>(['']);
-  const [hyp, setHyp] = useState<string[]>(['']);
-  const [red, setRed] = useState<string[]>(['']);
-  const [buyPrice, setBuyPrice] = useState<number | ''>('');
-  const live = usePriceOf(coin.coinId);
-
-  useEffect(() => {
-    if (!open) return;
-    setSentences(initial?.sentences?.filter((s) => s.trim()) ?? ['']);
-    setHyp(initial?.hypotheses.map((h) => h.label) ?? ['', '', '']);
-    setRed(initial?.redLines ?? ['', '']);
-    setBuyPrice(initial?.buyPrice ?? (live ? Math.round(live * 1e6) / 1e6 : ''));
-  }, [open, initial, live]);
-
-  const placeholder = `Pourquoi détiens-tu ${coin.name} ? (ex : la valeur vient de…, l’avantage durable est…, si je me trompe, ma perte reste limitée car…)`;
-  const valid = sentences.some((s) => s.trim()) || hyp.some((h) => h.trim());
-
-  function save() {
-    upsert({
-      id: initial?.id ?? uid(),
-      ...coin,
-      createdAt: initial?.createdAt ?? new Date().toISOString(),
-      buyPrice: buyPrice === '' ? undefined : Number(buyPrice),
-      sentences,
-      hypotheses: hyp.filter((h) => h.trim()).map((label, i) => ({ id: initial?.hypotheses[i]?.id ?? uid(), label, status: initial?.hypotheses[i]?.status ?? 'ok' })),
-      redLines: red.filter((r) => r.trim()),
-      sellPlan: initial?.sellPlan ?? [{ multiple: 2, pct: 25 }, { multiple: 3, pct: 25 }, { multiple: 5, pct: 25 }],
-      lastCheck: initial?.lastCheck,
-    });
-    onClose();
-  }
-
-  const listEditor = (items: string[], setItems: (v: string[]) => void, placeholder: string) => (
-    <div className="space-y-2">
-      {items.map((v, i) => (
-        <div key={i} className="flex gap-2">
-          <Input value={v} placeholder={placeholder} onChange={(e) => setItems(items.map((x, j) => (j === i ? e.target.value : x)))} />
-          <Button variant="ghost" icon={<Trash2 className="size-4" />} aria-label="Supprimer" onClick={() => setItems(items.filter((_, j) => j !== i))} />
-        </div>
-      ))}
-      <Button size="sm" variant="ghost" icon={<Plus className="size-3.5" />} onClick={() => setItems([...items, ''])}>Ajouter</Button>
-    </div>
-  );
-
-  return (
-    <Modal wide open={open} onClose={onClose} title={`Ma thèse sur ${coin.name}`} footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button><Button variant="primary" disabled={!valid} onClick={save}>Enregistrer la thèse</Button></>}>
-      <div className="space-y-5">
-        <Banner tone="info" title="Écris-la à froid">Rédige ta thèse avant d’acheter, librement : en une phrase ou en une page. Elle te protégera de la panique comme de l’euphorie le jour où le prix la testera.</Banner>
-        <Field label="Pourquoi je détiens (ou veux détenir) cette crypto">
-          <Textarea value={sentences.join('\n')} onChange={(e) => setSentences(e.target.value.split('\n'))} placeholder={placeholder} className="min-h-28" />
-        </Field>
-        <Field label="Prix de référence ($)"><NumberInput value={buyPrice} onChange={setBuyPrice} /></Field>
-        <div>
-          <p className="mb-2 text-sm font-medium text-ink">Hypothèses à vérifier régulièrement</p>
-          {listEditor(hyp, setHyp, 'Ex : la TVL continue de croître chaque trimestre')}
-        </div>
-        <div>
-          <p className="mb-2 text-sm font-medium text-ink">Lignes rouges (si l’une est franchie, je réévalue ou je vends)</p>
-          {listEditor(red, setRed, 'Ex : piratage majeur, départ des fondateurs, perte de 50 % des utilisateurs')}
-        </div>
       </div>
     </Modal>
   );

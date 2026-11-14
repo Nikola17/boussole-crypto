@@ -83,6 +83,10 @@ export interface TradeStats {
   avgR: number | null;
   equity: { time: number; value: number }[];
   bySetup: { setup: string; count: number; pnl: number; winRate: number }[];
+  /** Plus forte baisse de la courbe de résultats cumulés, depuis son dernier sommet ($, valeur positive). */
+  maxDrawdown: number;
+  /** Plus longue série de trades perdants consécutifs. */
+  maxLosingStreak: number;
 }
 
 export function tradePnl(t: TradeEntry): number | null {
@@ -121,7 +125,21 @@ export function tradeStats(trades: TradeEntry[]): TradeStats {
     if (pnls[i] > 0) s.wins++;
     setups.set(k, s);
   });
+  let peak = 0;
+  let maxDrawdown = 0;
+  for (const e of equity) {
+    peak = Math.max(peak, e.value);
+    maxDrawdown = Math.max(maxDrawdown, peak - e.value);
+  }
+  let streak = 0;
+  let maxLosingStreak = 0;
+  for (const p of pnls) {
+    streak = p <= 0 ? streak + 1 : 0;
+    maxLosingStreak = Math.max(maxLosingStreak, streak);
+  }
   return {
+    maxDrawdown,
+    maxLosingStreak,
     closed: closed.length,
     open: trades.filter((t) => t.status === 'open').length,
     wins: wins.length,
@@ -136,5 +154,37 @@ export function tradeStats(trades: TradeEntry[]): TradeStats {
     equity,
     bySetup: [...setups.entries()].map(([setup, s]) => ({ setup, count: s.count, pnl: s.pnl, winRate: (s.wins / s.count) * 100 }))
       .sort((a, b) => b.pnl - a.pnl),
+  };
+}
+
+export interface OpenTradeStatus {
+  /** Résultat latent au cours donné, frais d'entrée déduits ($). */
+  pnl: number;
+  /** Résultat latent exprimé en R (multiples du risque initial) ; null sans stop. */
+  r: number | null;
+  /** Le cours a franchi le stop : la position aurait dû être coupée. */
+  stopHit: boolean;
+  /** Le cours a atteint l'objectif. */
+  targetHit: boolean;
+  /** Distance au stop et à l'objectif, en % du cours (positive = encore de la marge). */
+  toStopPct: number | null;
+  toTargetPct: number | null;
+}
+
+/** Un trade ouvert, valorisé au cours du moment : où en est-il par rapport à son stop et à son objectif ? */
+export function openTradeStatus(t: TradeEntry, price: number): OpenTradeStatus | null {
+  if (t.status !== 'open' || !(price > 0) || !(t.entryPrice > 0) || !(t.quantity > 0)) return null;
+  const dir = t.side === 'long' ? 1 : -1;
+  const pnl = (price - t.entryPrice) * t.quantity * dir - (t.fees || 0);
+  const risk = t.stopLoss != null ? Math.abs(t.entryPrice - t.stopLoss) * t.quantity : 0;
+  const stopHit = t.stopLoss != null && (dir === 1 ? price <= t.stopLoss : price >= t.stopLoss);
+  const targetHit = t.takeProfit != null && (dir === 1 ? price >= t.takeProfit : price <= t.takeProfit);
+  return {
+    pnl,
+    r: risk > 0 ? pnl / risk : null,
+    stopHit,
+    targetHit,
+    toStopPct: t.stopLoss != null ? ((price - t.stopLoss) / price) * 100 * dir : null,
+    toTargetPct: t.takeProfit != null ? ((t.takeProfit - price) / price) * 100 * dir : null,
   };
 }

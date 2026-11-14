@@ -33,7 +33,7 @@ export function todayContext(i: TodayInput): Record<string, unknown> {
       'Bitcoin et Ethereum ne se vendent qu’en euphorie (température ≥ 80), par tranches de 5 à 10 %, avec au moins 30 jours entre deux tranches. Un excès de Bitcoin se corrige en orientant le DCA, jamais en vendant.',
       `Une ligne vaut au moins ${i.rules.minLinePct} % du portefeuille ; au plus ${i.rules.maxLines} lignes, dont ${i.rules.maxDiscoveryLines} « découverte » ; plafond par pépite ${i.rules.maxPerGemPct} %.`,
       'Achat hors DCA : uniquement avec la réserve d’USDC et si la température du marché est sous 30.',
-      'Thèse cassée = sortie, quel que soit le prix. Une altcoin sous Bitcoin depuis 6 mois sans progrès : bascule vers Bitcoin.',
+      'Une altcoin sous Bitcoin depuis 6 mois sans progrès : bascule vers Bitcoin.',
     ],
     temperatureMarche: i.temperature == null ? null : Math.round(i.temperature),
     avertissement: i.portfolioComplete ? null : 'Un wallet suivi n’a pas pu être lu : le portefeuille ci-dessus est partiel. Ne tire aucune conclusion sur sa valeur totale ni sur les écarts à l’allocation.',

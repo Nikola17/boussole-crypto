@@ -443,6 +443,19 @@ export interface BasketPlan {
   discoveryMaxPct: number;
   /** « manual » : tu choisis ta liste (à la barre de recherche) ; « auto » : Boussole choisit pour toi. */
   discoveryMode?: 'manual' | 'auto';
+  /**
+   * « auto » : tu ne règles que le montant, les jours et la part base/découverte ; Boussole choisit jusqu'à 3 cryptos
+   * du top 20 (hors stablecoins) et jusqu'à 3 découvertes. Absent ou « custom » : panier personnalisé (cœur + liste).
+   */
+  mode?: 'auto' | 'custom';
+  /** Mode auto : part du budget pour la base (0 à 100), le reste va à la découverte. */
+  basePct?: number;
+  /** Mode auto : nombre maximal de cryptos de base par échéance (1 à 3). */
+  maxBaseLines?: number;
+  /** Mode auto : nombre maximal de découvertes par échéance (0 à 3). */
+  maxDiscoveryLines?: number;
+  /** Mode auto : où chercher les découvertes — pépites (petites capis), milieu de classement (rangs 21-250), ou les deux. */
+  discoverySource?: 'gems' | 'mid' | 'both';
   core: BasketCoin[];
   /** Liste « découverte » : 5 cryptos au plus, une seule achetée par échéance. */
   discovery: CoinRef[];

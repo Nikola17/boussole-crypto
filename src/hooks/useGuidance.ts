@@ -8,7 +8,7 @@ import { useExitPlan } from './useExitPlan';
 import { usePortfolio } from './usePortfolio';
 import { lastOccurrence, multiplierFor, nextOccurrences, periodKey } from '../lib/dca';
 import { BUCKET_LABEL, isStable, isWrappedOrStaked, rebalance, rebalanceAction } from '../lib/portfolio';
-import { brokenThesisCoins, lagsBitcoin } from '../lib/rules';
+import { lagsBitcoin } from '../lib/rules';
 import { useToday } from './useClock';
 import { aggregateByCoin } from '../lib/holdings';
 import { fmtMoney, fmtNum } from '../lib/format';
@@ -85,7 +85,6 @@ export function useGuidance(): Guidance[] {
   const bd = useBasketDue();
   const exit = useExitPlan();
   const profile = useStore((s) => s.profile);
-  const theses = useStore((s) => s.theses);
   const currency = useStore((s) => s.settings.currency);
   const markets = useMarkets();
 
@@ -168,12 +167,6 @@ export function useGuidance(): Guidance[] {
           out.push({ key: `alt-${h.key}`, tone: 'warn', title: `${h.symbol} pèse ${Math.round(weight)} % de ton portefeuille`, detail: `Ta limite par altcoin est de ${profile.rules.maxPerAltPct} %.`, to: '/portefeuille' });
         }
       }
-      // « Thèse cassée = sortie » (STRATEGIE.md) : quel que soit le prix.
-      const held = new Set(pf.holdings.filter((h) => h.value > 0).map((h) => h.coinId));
-      for (const coinId of brokenThesisCoins(theses).filter((id) => held.has(id)).slice(0, 2)) {
-        const t = theses.find((x) => x.coinId === coinId);
-        out.push({ key: `broken-${coinId}`, tone: 'down', title: `Thèse cassée sur ${(t?.symbol ?? coinId).toUpperCase()} : ta règle est de sortir`, detail: 'Une hypothèse de ta thèse est cassée. Sors de la ligne quel que soit le prix d’achat : ne la garde pas « pour revenir à zéro ».', to: `/coin/${coinId}` });
-      }
       // « 6 mois sous Bitcoin sans progrès = bascule vers Bitcoin ».
       const btc200 = markets.data?.find((m) => m.id === 'bitcoin')?.price_change_percentage_200d_in_currency;
       if (btc200 != null) {
@@ -199,5 +192,5 @@ export function useGuidance(): Guidance[] {
     }
     if (!profile.completed) out.unshift({ key: 'profile', tone: 'neutral', title: 'Définis ton profil investisseur (2 min)', detail: 'Boussole adaptera l’allocation, les tailles de position et les conseils à ton profil.', to: '/guide' });
     return out.slice(0, 7);
-  }, [cycle.data, dca, pf, profile, currency, bd, exit, theses, markets.data]);
+  }, [cycle.data, dca, pf, profile, currency, bd, exit, markets.data]);
 }

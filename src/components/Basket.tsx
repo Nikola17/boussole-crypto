@@ -1,6 +1,6 @@
 // Panier DCA : plan (jours, budget en USDC, cœur et liste « découverte »), ordre du jour, validation et historique.
 
-import { Check, ClipboardPaste, Pencil, Plus, Shield, SkipForward, Sparkles, Trash2, X } from 'lucide-react';
+import { Check, Pencil, Plus, Shield, SkipForward, Sparkles, Trash2, Wand2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { newId, useStore } from '../store/useStore';
 import { useBasket } from '../hooks/useBasket';
@@ -12,11 +12,11 @@ import type { BasketCoin, BasketExecution, BasketOrderLog, BasketPlan, CoinRef, 
 import { CoinPicker } from './CoinPicker';
 import { CdcBadge } from './CdcBadge';
 import { useCryptoCom } from '../hooks/useCryptoCom';
-import { GrokBridge } from './GrokBridge';
 import { Markdown } from './Markdown';
 import { useAiConfig } from './AiBlocks';
 import { runBasketReview } from '../ai/tasks';
 import { Badge, Banner, Button, Card, CoinIcon, Empty, ErrorNote, Field, Input, Modal, NumberInput, Segmented, Select, Spinner, Toggle } from './ui';
+import { AUTO_BASE_TOP, AUTO_MAX_LINES } from '../lib/autoBasket';
 
 const SHORT = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const BTC: CoinRef = { coinId: 'bitcoin', symbol: 'btc', name: 'Bitcoin' };
@@ -29,12 +29,14 @@ function defaultBasket(held: { coinId?: string; symbol: string; name: string; im
     .map((h) => ({ coinId: h.coinId as string, symbol: h.symbol.toLowerCase(), name: h.name, image: h.image }));
   return {
     id: newId(), name: 'Mon panier DCA', active: true, amountUsd: 25, daysOfWeek: [2, 5], startDate: isoDay(), discoveryMaxPct: 50,
+    mode: 'auto', basePct: 70, maxBaseLines: AUTO_MAX_LINES, maxDiscoveryLines: AUTO_MAX_LINES, discoverySource: 'both',
     core: [{ ...BTC, weight: 70 }, { ...ETH, weight: 30 }], discovery, reserveUsd: 0, minOrderUsd: 5, reminder: true, createdAt: new Date().toISOString(),
   };
 }
 
 export function BasketEditor({ open, onClose, initial }: { open: boolean; onClose: () => void; initial: BasketPlan | null }) {
   const setBasket = useStore((s) => s.setBasket);
+  const [askDelete, setAskDelete] = useState(false);
   const accounts = useStore((s) => s.accounts);
   const pf = usePortfolio();
   const [d, setD] = useState<BasketPlan>(() => initial ?? defaultBasket([]));
@@ -44,18 +46,37 @@ export function BasketEditor({ open, onClose, initial }: { open: boolean; onClos
   }, [open, initial]);
 
   const set = (p: Partial<BasketPlan>) => setD((cur) => ({ ...cur, ...p }));
-  const valid = d.name.trim() && d.amountUsd > 0 && d.daysOfWeek.length > 0 && d.core.some((c) => c.weight > 0);
+  const auto = d.mode === 'auto';
+  const basePct = Math.max(0, Math.min(100, d.basePct ?? 70));
+  const valid = d.name.trim() && d.amountUsd > 0 && d.daysOfWeek.length > 0 && (auto || d.core.some((c) => c.weight > 0));
   const addCore = (c: CoinRef) => { if (!d.core.some((x) => x.coinId === c.coinId)) set({ core: [...d.core, { ...c, weight: 10 }] }); };
   const addDisc = (c: CoinRef) => { if (d.discovery.length < MAX_DISCOVERY && !d.discovery.some((x) => x.coinId === c.coinId)) set({ discovery: [...d.discovery, c] }); };
 
   return (
-    <Modal open={open} onClose={onClose} wide title={initial ? 'Modifier mon panier' : 'Créer mon panier DCA'}
-      footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button><Button variant="primary" disabled={!valid} onClick={() => { setBasket({ ...d, name: d.name.trim() }); onClose(); }}>Enregistrer</Button></>}>
+    <>
+    <Modal open={open && !askDelete} onClose={onClose} wide title={initial ? 'Modifier mon panier' : 'Créer mon panier DCA'}
+      footer={<>
+        {initial && <Button variant="danger" className="mr-auto" icon={<Trash2 className="size-4" />} onClick={() => setAskDelete(true)}>Supprimer ce DCA</Button>}
+        <Button variant="ghost" onClick={onClose}>Annuler</Button>
+        <Button variant="primary" disabled={!valid} onClick={() => { setBasket({ ...d, name: d.name.trim(), basePct }); onClose(); }}>Enregistrer</Button>
+      </>}>
       <div className="space-y-4">
+        <div>
+          <Segmented
+            value={auto ? 'auto' : 'custom'}
+            onChange={(v) => set({ mode: v })}
+            options={[{ value: 'auto', label: 'Automatique' }, { value: 'custom', label: 'Personnalisé' }]}
+          />
+          <p className="mt-1.5 text-xs text-muted">
+            {auto
+              ? `Tu règles le montant, les jours et la part base / découverte. Boussole te dit exactement quoi acheter : jusqu’à ${AUTO_MAX_LINES} cryptos du top ${AUTO_BASE_TOP} (hors stablecoins) pour la base, jusqu’à ${AUTO_MAX_LINES} découvertes.`
+              : 'Tu composes toi-même le cœur (poids relatifs) et la liste découverte.'}
+          </p>
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Nom" className="col-span-2"><Input value={d.name} onChange={(e) => set({ name: e.target.value })} /></Field>
-          <Field label="Budget par échéance (USDC)"><NumberInput value={d.amountUsd} onChange={(v) => set({ amountUsd: v === '' ? 0 : v })} /></Field>
-          <Field label="Minimum par ordre (USDC)"><NumberInput value={d.minOrderUsd} onChange={(v) => set({ minOrderUsd: v === '' ? 0 : v })} /></Field>
+          <Field label="Montant par échéance (USDC)" className="col-span-2 sm:col-span-1"><NumberInput value={d.amountUsd} onChange={(v) => set({ amountUsd: v === '' ? 0 : v })} /></Field>
+          {!auto && <Field label="Minimum par ordre (USDC)"><NumberInput value={d.minOrderUsd} onChange={(v) => set({ minOrderUsd: v === '' ? 0 : v })} /></Field>}
         </div>
         <div>
           <p className="mb-1 text-xs font-medium text-ink-2">Jours d’achat</p>
@@ -66,6 +87,33 @@ export function BasketEditor({ open, onClose, initial }: { open: boolean; onClos
             ))}
           </div>
         </div>
+        {auto && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={`Base (%) — top ${AUTO_BASE_TOP} hors stablecoins`}><NumberInput value={basePct} onChange={(v) => set({ basePct: v === '' ? 0 : Math.min(100, Math.max(0, v)) })} /></Field>
+              <Field label="Découverte (%) — pépites ou autres"><NumberInput value={100 - basePct} onChange={(v) => set({ basePct: 100 - (v === '' ? 0 : Math.min(100, Math.max(0, v))) })} /></Field>
+            </div>
+            <p className="-mt-2 text-xs text-muted">Sur {fmtNum(d.amountUsd, 2)} USDC : {fmtNum((d.amountUsd * basePct) / 100, 2)} pour la base, {fmtNum((d.amountUsd * (100 - basePct)) / 100, 2)} pour la découverte, avant la modulation par la température du marché.</p>
+            <details className="rounded-lg border border-line p-3">
+              <summary className="cursor-pointer text-sm text-ink-2">Options</summary>
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Field label="Cryptos de base (max)"><Select value={d.maxBaseLines ?? AUTO_MAX_LINES} onChange={(e) => set({ maxBaseLines: Number(e.target.value) })}>{[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}</Select></Field>
+                <Field label="Découvertes (max)"><Select value={d.maxDiscoveryLines ?? AUTO_MAX_LINES} onChange={(e) => set({ maxDiscoveryLines: Number(e.target.value) })}>{[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}</Select></Field>
+                <Field label="Découvertes parmi">
+                  <Select value={d.discoverySource ?? 'both'} onChange={(e) => set({ discoverySource: e.target.value as BasketPlan['discoverySource'] })}>
+                    <option value="both">Pépites et milieu de classement</option>
+                    <option value="gems">Pépites (petites capis)</option>
+                    <option value="mid">Milieu de classement (rangs 21-250)</option>
+                  </Select>
+                </Field>
+                <Field label="Minimum par ordre (USDC)"><NumberInput value={d.minOrderUsd} onChange={(v) => set({ minOrderUsd: v === '' ? 0 : v })} /></Field>
+                <Field label="Réserve d’USDC" hint="Alimentée quand le marché est chaud, puisée quand il a peur."><NumberInput value={d.reserveUsd} onChange={(v) => set({ reserveUsd: v === '' ? 0 : v })} /></Field>
+              </div>
+            </details>
+          </>
+        )}
+        {!auto && (
+        <>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Part « découverte » maximale (%)" hint="Elle baisse toute seule quand tes altcoins approchent de ta cible."><NumberInput value={d.discoveryMaxPct} onChange={(v) => set({ discoveryMaxPct: v === '' ? 0 : Math.min(100, v) })} /></Field>
           <Field label="Réserve d’USDC" hint="Alimentée quand le marché est chaud, puisée quand il a peur."><NumberInput value={d.reserveUsd} onChange={(v) => set({ reserveUsd: v === '' ? 0 : v })} /></Field>
@@ -111,6 +159,8 @@ export function BasketEditor({ open, onClose, initial }: { open: boolean; onClos
           {d.discovery.length < MAX_DISCOVERY && <div className="mt-2"><CoinPicker value={null} onChange={addDisc} placeholder="Ajouter une crypto à étudier…" /></div>}
         </div>
         )}
+        </>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           {accounts.length > 0 && (
             <Field label="Compte où tu passes les ordres">
@@ -124,6 +174,28 @@ export function BasketEditor({ open, onClose, initial }: { open: boolean; onClos
         </div>
       </div>
     </Modal>
+    {initial && <DeleteBasketModal open={askDelete} basket={initial} onClose={() => setAskDelete(false)} onDeleted={() => { setAskDelete(false); onClose(); }} />}
+    </>
+  );
+}
+
+/** Supprimer le DCA : ses échéances partent avec lui ; les achats du journal restent (ils ont eu lieu), sauf si tu demandes leur retrait. */
+function DeleteBasketModal({ open, basket, onClose, onDeleted }: { open: boolean; basket: BasketPlan; onClose: () => void; onDeleted: () => void }) {
+  const removeBasket = useStore((s) => s.removeBasket);
+  const execs = useStore((s) => s.basketExecutions);
+  const [purge, setPurge] = useState(false);
+  const mine = execs.filter((e) => e.basketId === basket.id);
+  const txCount = mine.reduce((n, e) => n + (e.txIds?.length ?? 0), 0);
+  const plural = mine.length > 1 ? 's' : '';
+  return (
+    <Modal open={open} onClose={onClose} title={`Supprimer « ${basket.name} » ?`}
+      footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button><Button variant="danger" onClick={() => { removeBasket({ purgeTransactions: purge }); onDeleted(); }}>Supprimer</Button></>}>
+      <div className="space-y-3 text-sm text-ink-2">
+        <p>Le DCA s’arrête : plus d’ordre du jour ni de rappel. {mine.length > 0 ? `Ses ${mine.length} échéance${plural} enregistrée${plural} ser${mine.length > 1 ? 'ont' : 'a'} supprimée${plural} avec lui.` : 'Aucune échéance n’a encore été enregistrée.'}</p>
+        {txCount > 0 && <Toggle checked={purge} onChange={setPurge} label={`Retirer aussi les ${txCount} opérations du journal`} hint="À ne cocher que si ces achats n’ont pas vraiment eu lieu : sinon ton portefeuille et ton prix de revient seraient faux." />}
+        <p className="text-xs text-muted">La suppression se propage à tes autres appareils synchronisés.</p>
+      </div>
+    </Modal>
   );
 }
 
@@ -131,7 +203,7 @@ const USDC: CoinRef = { coinId: 'usd-coin', symbol: 'usdc', name: 'USDC' };
 const n2 = (x: number) => fmtNum(Math.round(x * 100) / 100, 2);
 
 /** Confirmation des ordres réellement passés : la quantité reçue vient de ta plateforme, pas d'une estimation. */
-function ExecuteModal({ open, onClose, b, custom }: { open: boolean; onClose: () => void; b: ReturnType<typeof useBasket>; custom: PlannedOrder[] | null }) {
+function ExecuteModal({ open, onClose, b }: { open: boolean; onClose: () => void; b: ReturnType<typeof useBasket> }) {
   const addExec = useStore((s) => s.addBasketExecution);
   const fx = useFx();
   const [orders, setOrders] = useState<PlannedOrder[]>([]);
@@ -139,7 +211,7 @@ function ExecuteModal({ open, onClose, b, custom }: { open: boolean; onClose: ()
   useEffect(() => {
     if (!open) return;
     // Photo des ordres à l'ouverture : un rafraîchissement des cours ne doit pas écraser ce que tu saisis.
-    const list = custom ?? b.plan?.orders ?? [];
+    const list = b.plan?.orders ?? [];
     setOrders(list);
     setRows(list.map((o) => {
       const p = b.priceOf(o.coinId);
@@ -204,8 +276,7 @@ export function BasketSection() {
   const cdc = useCryptoCom(b.markets);
   const [editor, setEditor] = useState(false);
   const [exec, setExec] = useState(false);
-  const [grok, setGrok] = useState(false);
-  const [custom, setCustom] = useState<PlannedOrder[] | null>(null);
+  const [allHistory, setAllHistory] = useState(false);
   const cfg = useAiConfig();
   const [review, setReview] = useState<{ text: string; cost: string } | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
@@ -233,14 +304,16 @@ export function BasketSection() {
     return (
       <>
         <Empty icon={<Sparkles className="size-8" />} title="Un panier DCA pour tes achats de la semaine" action={<Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setEditor(true)}>Créer mon panier</Button>}>
-          Un budget en USDC réparti à chaque échéance sur au plus deux lignes : un cœur (Bitcoin, Ethereum…) et une « découverte », modulés par la température du marché, avec une réserve et des règles contre l’éparpillement.
+          Indique un montant, tes jours d’achat et la part base / découverte : à chaque échéance, Boussole te dit exactement quoi acheter (jusqu’à 3 cryptos du top 20 et 3 découvertes), modulé par la température du marché, avec une réserve et des règles contre l’éparpillement.
         </Empty>
         <BasketEditor open={editor} onClose={() => setEditor(false)} initial={null} />
       </>
     );
   }
 
-  const mine = history.filter((e) => e.basketId === bk.id).slice(0, 6);
+  const mineAll = history.filter((e) => e.basketId === bk.id);
+  const mine = allHistory ? mineAll : mineAll.slice(0, 6);
+  const kindLabel = (k: PlannedOrder['kind']) => (k === 'core' ? (b.fullAuto ? 'Base' : 'Cœur') : 'Découverte');
   const plan = b.plan;
   const skip = () => {
     if (!b.periodKey) return;
@@ -250,9 +323,11 @@ export function BasketSection() {
   return (
     <>
       <Card
-        title={<span className="inline-flex items-center gap-2"><Sparkles className="size-4 text-accent" />{bk.name}</span>}
-        subtitle={`${dayList(bk)} · ${n2(bk.amountUsd)} USDC par échéance · cœur ${bk.core.map((c) => `${c.symbol.toUpperCase()} ${Math.round(c.weight)} %`).join(' / ')} · découverte ≤ ${Math.round(bk.discoveryMaxPct)} %${bk.discoveryMode === 'auto' ? ' (choisie par Boussole)' : ''}`}
-        actions={<><Button size="sm" icon={<ClipboardPaste className="size-3.5" />} onClick={() => setGrok(true)}>Grok</Button><Button size="sm" variant="ghost" aria-label="Modifier le panier" icon={<Pencil className="size-3.5" />} onClick={() => setEditor(true)} /></>}
+        title={<span className="inline-flex items-center gap-2">{b.fullAuto ? <Wand2 className="size-4 text-accent" /> : <Sparkles className="size-4 text-accent" />}{bk.name}</span>}
+        subtitle={b.fullAuto
+          ? `${dayList(bk)} · ${n2(bk.amountUsd)} USDC par échéance · automatique : base ${Math.round(bk.basePct ?? 70)} % (top ${AUTO_BASE_TOP}) / découverte ${100 - Math.round(bk.basePct ?? 70)} %`
+          : `${dayList(bk)} · ${n2(bk.amountUsd)} USDC par échéance · cœur ${bk.core.map((c) => `${c.symbol.toUpperCase()} ${Math.round(c.weight)} %`).join(' / ')} · découverte ≤ ${Math.round(bk.discoveryMaxPct)} %${bk.discoveryMode === 'auto' ? ' (choisie par Boussole)' : ''}`}
+        actions={<Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} onClick={() => setEditor(true)}>Modifier ou supprimer</Button>}
       >
         <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
           {b.due && b.last && <Badge tone="warn">Échéance du {fmtDate(b.last)} à faire</Badge>}
@@ -264,9 +339,9 @@ export function BasketSection() {
         {b.loading && <Spinner label="Calcul de l’ordre du jour (marché, portefeuille, disponibilité Crypto.com)…" />}
         {b.loadError && !b.ready && <ErrorNote error={b.loadError} onRetry={b.retry} />}
         {b.missingCoins && <Banner tone="warn">Les cours de certaines cryptos du panier n’ont pas pu être chargés (CoinGecko limite les requêtes : ajoute une clé « Demo » gratuite dans Réglages). Les règles qui dépendent de ces cours (anti-FOMO, prix indicatif) sont alors moins précises.</Banner>}
-        {bk.discoveryMode === 'auto' && b.autoCandidates.length > 0 && (
+        {(bk.discoveryMode === 'auto' || b.fullAuto) && b.autoCandidates.length > 0 && (
           <details className="mb-1 text-xs text-muted">
-            <summary className="cursor-pointer">Découverte automatique : {b.autoCandidates.length} candidates du scan, une seule sera achetée</summary>
+            <summary className="cursor-pointer">Découverte automatique : {b.autoCandidates.length} candidates, {b.fullAuto ? `jusqu’à ${bk.maxDiscoveryLines ?? AUTO_MAX_LINES} retenues` : 'une seule sera achetée'}</summary>
             <ul className="mt-1 list-disc pl-5">
               {b.autoCandidates.map((p) => (<li key={p.coin.coinId}>{p.coin.symbol.toUpperCase()} — {p.reason}</li>))}
             </ul>
@@ -282,7 +357,7 @@ export function BasketSection() {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <CoinIcon src={o.image ?? b.markets.find((m) => m.id === o.coinId)?.image} symbol={o.symbol} size={26} />
                     <span className="min-w-0 flex-1 text-sm font-medium text-ink">{o.name} <span className="text-muted">{o.symbol.toUpperCase()}</span></span>
-                    <Badge tone={o.kind === 'core' ? 'accent' : 'neutral'}>{o.kind === 'core' ? 'Cœur' : 'Découverte'}</Badge>
+                    <Badge tone={o.kind === 'core' ? 'accent' : 'neutral'}>{kindLabel(o.kind)}</Badge>
                     <CdcBadge status={cdc.status(o.coinId)} ready={cdc.ready} />
                     <span className="tnum text-lg font-semibold text-ink">{n2(o.usd)} <span className="text-xs font-normal text-muted">USDC</span></span>
                   </div>
@@ -302,7 +377,7 @@ export function BasketSection() {
             )}
             {b.due && (
               <div className="flex flex-wrap gap-2 pt-1">
-                <Button variant="primary" icon={<Check className="size-4" />} onClick={() => { setCustom(null); setExec(true); }}>{plan.orders.length ? 'J’ai passé ces ordres' : 'Mettre en réserve'}</Button>
+                <Button variant="primary" icon={<Check className="size-4" />} onClick={() => setExec(true)}>{plan.orders.length ? 'J’ai passé ces ordres' : 'Mettre en réserve'}</Button>
                 <Button icon={<SkipForward className="size-4" />} onClick={skip}>Sauter cette échéance</Button>
               </div>
             )}
@@ -311,7 +386,7 @@ export function BasketSection() {
 
         {mine.length > 0 && (
           <div className="mt-4 border-t border-line pt-3">
-            <p className="mb-1 text-xs font-medium text-ink-2">Dernières échéances</p>
+            <p className="mb-1 text-xs font-medium text-ink-2">{allHistory ? `Toutes les échéances (${mineAll.length})` : 'Dernières échéances'}</p>
             <ul className="divide-y divide-line text-sm">
               {mine.map((e) => (
                 <li key={e.id} className="flex items-center justify-between gap-3 py-1.5">
@@ -320,13 +395,13 @@ export function BasketSection() {
                 </li>
               ))}
             </ul>
-            <p className="mt-1 text-xs text-muted">Annuler une échéance remet la réserve comme avant ; les transactions du journal sont à supprimer à part.</p>
+            {mineAll.length > 6 && <button type="button" className="mt-1 text-xs font-medium text-accent hover:underline" onClick={() => setAllHistory((v) => !v)}>{allHistory ? 'Voir moins' : `Voir les ${mineAll.length} échéances`}</button>}
+            <p className="mt-1 text-xs text-muted">La corbeille supprime une échéance : ses achats sortent du journal et la réserve revient comme avant.</p>
           </div>
         )}
       </Card>
       <BasketEditor open={editor} onClose={() => setEditor(false)} initial={bk} />
-      <ExecuteModal open={exec} onClose={() => setExec(false)} b={b} custom={custom} />
-      <GrokBridge open={grok} onClose={() => setGrok(false)} b={b} onUseOrders={(o) => { setCustom(o); setExec(true); }} />
+      <ExecuteModal open={exec} onClose={() => setExec(false)} b={b} />
     </>
   );
 }

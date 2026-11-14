@@ -52,7 +52,7 @@ export function ConsolidateCard() {
   return (
     <Card
       title={<span className="inline-flex items-center gap-2"><Layers className="size-4 text-accent" />Petites lignes à regrouper</span>}
-      subtitle={`Moins de ${fmtNum(rulesOf(profile).minLinePct, 2)} % du portefeuille chacune, sans thèse écrite ni place dans ton panier`}
+      subtitle={`Moins de ${fmtNum(rulesOf(profile).minLinePct, 2)} % du portefeuille chacune, hors de ton panier`}
       actions={plan.merge.length > 0 && <Button size="sm" variant="primary" disabled={!chosen.length} onClick={() => setOpen(true)}>J’ai regroupé vers Bitcoin</Button>}
     >
       {plan.merge.length > 0 && (

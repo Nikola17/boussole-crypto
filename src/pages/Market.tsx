@@ -167,7 +167,7 @@ export default function Market() {
           </div>
           <div>
             <p className="font-medium text-ink">Les limites</p>
-            <p className="mt-1">Aucun indicateur ne prédit l’avenir : ce sont des probabilités. Combine toujours le signal avec ta thèse, ta taille de position et un niveau d’invalidation. Ouvre une crypto pour voir le détail de chaque facteur.</p>
+            <p className="mt-1">Aucun indicateur ne prédit l’avenir : ce sont des probabilités. Combine toujours le signal avec ta taille de position et un niveau d’invalidation. Ouvre une crypto pour voir le détail de chaque facteur.</p>
           </div>
         </div>
       </Card>

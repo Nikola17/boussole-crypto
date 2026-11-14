@@ -68,7 +68,7 @@ export function defaultProfile(): Profile {
 
 export const GOLDEN_RULES: { title: string; detail: string }[] = [
   { title: 'Le DCA est ton socle', detail: 'Investis un montant régulier sur BTC/ETH quoi qu’il arrive. Le temps passé sur le marché bat le timing.' },
-  { title: 'Écris ta thèse avant d’acheter', detail: 'Formule pourquoi tu achètes et ce qui invaliderait ta thèse — par écrit, à froid.' },
+  { title: 'Comprends ce que tu achètes', detail: 'Utilité réelle, tokenomics, déblocages à venir : si tu ne sais pas l’expliquer en deux phrases, n’achète pas.' },
   { title: 'Définis ta sortie à l’entrée', detail: 'Paliers de prise de profits (×2, ×3, ×5) et conditions d’invalidation, fixés à froid.' },
   { title: 'Taille de position = gestion du risque', detail: 'Une pépite ne dépasse jamais ta limite par ligne. Tu dois pouvoir la perdre à 100 % sans souffrir.' },
   { title: 'Jamais d’argent emprunté ni de levier excessif', detail: 'Le levier transforme une correction normale en liquidation.' },
@@ -77,17 +77,4 @@ export const GOLDEN_RULES: { title: string; detail: string }[] = [
   { title: 'Méfie-toi du FOMO', detail: 'Une crypto qui a déjà fait +100 % en une semaine n’est pas une opportunité, c’est un risque.' },
   { title: 'Inverse, toujours inverser', detail: 'Demande-toi comment ton investissement pourrait échouer avant de te demander combien il peut rapporter (Munger).' },
   { title: 'Pense à la fiscalité', detail: 'En France, chaque conversion en euros est imposable au-delà de 305 €/an. Garde un historique propre.' },
-];
-
-export const BUY_CHECKLIST: { q: string; help: string; critical?: boolean }[] = [
-  { q: 'Je comprends ce que fait le projet et comment il crée de la valeur', help: 'Utilité réelle, utilisateurs, revenus — pas seulement une narrative.', critical: true },
-  { q: 'J’ai vérifié la tokenomics (offre en circulation, FDV, déblocages à venir)', help: 'Un FDV très supérieur à la capitalisation = pression vendeuse future.', critical: true },
-  { q: 'La liquidité est suffisante pour sortir sans casser le prix', help: 'Volume quotidien et liquidité des pools au moins 50× ta position.' },
-  { q: 'Le contrat a été vérifié (pas de honeypot, pas de mint illimité)', help: 'Utilise le scan sécurité de Boussole pour les tokens on-chain.', critical: true },
-  { q: 'Je respecte ma taille de position maximale', help: 'Selon ton profil : limite par pépite et par altcoin.', critical: true },
-  { q: 'J’ai écrit ma thèse et mes conditions de sortie', help: 'Pourquoi tu achètes, objectifs de profits ET niveau d’invalidation.' },
-  { q: 'Je n’achète pas sous l’effet du FOMO (pas +50 % en 7 jours)', help: 'Si c’est le cas, attends un repli ou passe ton tour.' },
-  { q: 'J’ai lu au moins une analyse critique (bear case)', help: 'Cherche activement les arguments contre ton achat.' },
-  { q: 'Je peux supporter -70 % sur cette ligne sans paniquer', help: 'Les altcoins chutent régulièrement de 70 à 90 % en marché baissier.' },
-  { q: 'L’argent investi n’est pas nécessaire à court terme', help: 'Jamais l’épargne de précaution ni d’argent emprunté.', critical: true },
 ];

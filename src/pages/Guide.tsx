@@ -1,31 +1,32 @@
-import { BookOpen, CheckCircle2, ClipboardCheck, Compass, Hourglass, Palmtree, RotateCcw, Trash2, UserRound } from 'lucide-react';
+import { BookOpen, CheckCircle2, Compass, Hourglass, Palmtree, Trash2, UserRound } from 'lucide-react';
 import { fmtDate, fmtNum } from '../lib/format';
 import { useState } from 'react';
 import { clsx } from 'clsx';
 import { useStore } from '../store/useStore';
-import { ARCHETYPES, BUY_CHECKLIST, GOLDEN_RULES, archetypeFor, rulesOf, scoreProfile } from '../lib/profile';
+import { ARCHETYPES, GOLDEN_RULES, archetypeFor, rulesOf, scoreProfile } from '../lib/profile';
 import { BUCKET_LABEL, BUCKET_ORDER } from '../lib/portfolio';
 import { setQuery, useHashPath } from '../router';
 import { Badge, Banner, Button, Card, Field, Input, NumberInput, PageHeader, Segmented, Toggle } from '../components/ui';
 import type { Archetype, Profile } from '../types';
 
-type Tab = 'profil' | 'methode' | 'checklist' | 'glossaire';
+type Tab = 'profil' | 'methode' | 'glossaire';
+const TABS: Tab[] = ['profil', 'methode', 'glossaire'];
 
 export default function Guide() {
   const { query } = useHashPath();
-  const tab = (query.get('tab') as Tab) || 'profil';
+  // Un ancien lien (ex : l'onglet « checklist », retiré) retombe sur le profil au lieu d'une page vide.
+  const asked = query.get('tab') as Tab | null;
+  const tab: Tab = asked && TABS.includes(asked) ? asked : 'profil';
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader title="Guide & profil" subtitle="Boussole adapte ses conseils à ta situation. Définis ton profil, adopte une méthode et vérifie chaque achat avec la checklist." />
+      <PageHeader title="Guide & profil" subtitle="Boussole adapte ses conseils à ta situation. Définis ton profil et adopte une méthode." />
       <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[
         { value: 'profil', label: 'Mon profil' },
         { value: 'methode', label: 'Ma méthode' },
-        { value: 'checklist', label: 'Checklist avant achat' },
         { value: 'glossaire', label: 'Glossaire' },
       ]} />
       {tab === 'profil' && <ProfileTab />}
       {tab === 'methode' && <Method />}
-      {tab === 'checklist' && <Checklist />}
       {tab === 'glossaire' && <Glossary />}
     </div>
   );
@@ -72,7 +73,7 @@ export function ProfileTab() {
     <div className="grid gap-4 lg:grid-cols-5">
       <Card className="lg:col-span-3" title={<span className="inline-flex items-center gap-2"><UserRound className="size-4 text-accent" />Questionnaire</span>} subtitle="5 questions pour calibrer ton allocation et tes limites de risque">
         <div className="space-y-5">
-          <Field label="Ton prénom"><Input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="Nico" /></Field>
+          <Field label="Ton prénom"><Input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="Ton prénom" /></Field>
           <Choice label="1. Horizon de placement" value={draft.horizon} onChange={(v) => set({ horizon: v })} options={[[1, 'Moins d’un an'], [2, '1 à 4 ans'], [3, '4 ans et plus (un cycle complet ou plus)']]} />
           <Choice label="2. Ta tolérance au risque" value={draft.riskTolerance} onChange={(v) => set({ riskTolerance: v })} options={[[1, 'Très faible : je veux dormir tranquille'], [2, 'Faible'], [3, 'Moyenne'], [4, 'Élevée'], [5, 'Très élevée : je vise des ×10']]} />
           <Choice label="3. Ton expérience" value={draft.experience} onChange={(v) => set({ experience: v })} options={[[1, 'Débutant'], [2, 'Intermédiaire (au moins un cycle vécu)'], [3, 'Avancé (DeFi, trading)']]} />
@@ -92,7 +93,7 @@ export function ProfileTab() {
         </div>
       </Card>
       <div className="space-y-4 lg:col-span-2">
-        <Card title="Ton profil" subtitle={mine ? 'Ta stratégie (docs/STRATEGIE.md)' : `Score ${score}/18`}>
+        <Card title="Ton profil" subtitle={mine ? 'Cœur Bitcoin/Ethereum, règles contre l’éparpillement' : `Score ${score}/18`}>
           <div className="mb-3">
             <Segmented<'quiz' | 'mine'>
               value={mine ? 'mine' : 'quiz'}
@@ -238,45 +239,10 @@ function Method() {
         <div className="grid gap-3 text-sm text-ink-2 md:grid-cols-3">
           <div><p className="font-medium text-ink">Chaque jour (2 min)</p><p>Ouvre le Cockpit : température du marché, brief IA, « que faire aujourd’hui ». La plupart des jours, la bonne action est de ne rien faire.</p></div>
           <div><p className="font-medium text-ink">Chaque semaine (10 min)</p><p>Exécute ton DCA au montant recommandé, coche tes tâches d’airdrop, jette un œil aux setups et aux pépites (sans obligation d’acheter).</p></div>
-          <div><p className="font-medium text-ink">Chaque mois (30 min)</p><p>Rééquilibre vers ta cible, fais vérifier tes thèses par l’IA, revois ton journal de trading, exporte une sauvegarde.</p></div>
+          <div><p className="font-medium text-ink">Chaque mois (30 min)</p><p>Rééquilibre vers ta cible, relance l’analyse IA de tes principales lignes, revois ton journal de trading, exporte une sauvegarde.</p></div>
         </div>
       </Card>
     </div>
-  );
-}
-
-function Checklist() {
-  const state = useStore((s) => s.checklist);
-  const setState = useStore((s) => s.setChecklist);
-  const [coin, setCoin] = useState('');
-  const done = BUY_CHECKLIST.filter((_, i) => state[i]).length;
-  const criticalMissing = BUY_CHECKLIST.some((c, i) => c.critical && !state[i]);
-  return (
-    <Card title={<span className="inline-flex items-center gap-2"><ClipboardCheck className="size-4 text-accent" />Avant d’acheter, coche tout</span>} subtitle="La checklist sert à éliminer les mauvaises décisions, pas à justifier une envie." actions={<Button size="sm" variant="ghost" icon={<RotateCcw className="size-3.5" />} onClick={() => setState({})}>Réinitialiser</Button>}>
-      <Field label="Crypto concernée (facultatif)" className="mb-4 max-w-sm"><Input value={coin} onChange={(e) => setCoin(e.target.value)} placeholder="Ex : SOL" /></Field>
-      <ul className="space-y-2">
-        {BUY_CHECKLIST.map((c, i) => (
-          <li key={i}>
-            <button type="button" onClick={() => setState({ ...state, [i]: !state[i] })} className={clsx('flex w-full items-start gap-3 rounded-lg border p-3 text-left', state[i] ? 'border-good/40 bg-good/5' : 'border-line hover:bg-surface-2')}>
-              <CheckCircle2 className={clsx('mt-0.5 size-5 shrink-0', state[i] ? 'text-good' : 'text-surface-3')} />
-              <div>
-                <p className="text-sm font-medium text-ink">{c.q} {c.critical && <Badge tone="warn" className="ml-1">indispensable</Badge>}</p>
-                <p className="mt-0.5 text-xs text-ink-2">{c.help}</p>
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-4">
-        {done === BUY_CHECKLIST.length ? (
-          <Banner tone="success" title={`Feu vert${coin ? ` pour ${coin}` : ''}`}>Tu as fait tes devoirs. Achète par paliers, respecte ta taille de position et note ta thèse.</Banner>
-        ) : criticalMissing ? (
-          <Banner tone="danger" title="Pas prêt">Au moins un point indispensable n’est pas validé. Patience : une opportunité manquée coûte moins cher qu’une erreur.</Banner>
-        ) : (
-          <Banner tone="warn" title={`${done}/${BUY_CHECKLIST.length} points validés`}>Les points indispensables sont OK. Réduis la taille de position tant que tout n’est pas coché.</Banner>
-        )}
-      </div>
-    </Card>
   );
 }
 

@@ -187,11 +187,14 @@ export default function Paper() {
 }
 
 /**
- * Thèses fantômes : « j'aurais acheté X ici » — ce que tu n'as PAS fait, chiffré aux prix réels.
+ * Achats fantômes : « j'aurais acheté X ici » — ce que tu n'as PAS fait, chiffré aux prix réels.
  * Aucun cash papier consommé : une envie se note, se valorise, et se confronte au réel quand tu la closes.
  */
 function GhostCard({ prices }: { prices: Map<string, number> }) {
-  const trades = useStore((s) => s.paperTrades.filter((t) => t.ghost));
+  // Le filtre se fait HORS du sélecteur : un sélecteur qui renvoie une nouvelle liste à chaque lecture fait boucler
+  // React (erreur #185, « Maximum update depth exceeded ») — c'est ce qui faisait planter la page Papier.
+  const allTrades = useStore((s) => s.paperTrades);
+  const trades = useMemo(() => allTrades.filter((t) => t.ghost), [allTrades]);
   const upsertPaperTrade = useStore((s) => s.upsertPaperTrade);
   const removePaperTrade = useStore((s) => s.removePaperTrade);
   const markets = useMarkets();
@@ -243,7 +246,7 @@ function GhostCard({ prices }: { prices: Map<string, number> }) {
   }
 
   return (
-    <Card title={<span className="inline-flex items-center gap-2"><Ghost className="size-4 text-accent" />Thèses fantômes</span>} subtitle="« J'aurais acheté ici » : ce que tu n'as pas fait, chiffré aux prix réels — aucun cash papier engagé">
+    <Card title={<span className="inline-flex items-center gap-2"><Ghost className="size-4 text-accent" />Achats fantômes</span>} subtitle="« J'aurais acheté ici » : ce que tu n'as pas fait, chiffré aux prix réels — aucun cash papier engagé">
       <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
         <Field label="Crypto que tu n'as pas achetée"><CoinPicker value={coin} onChange={setCoin} /></Field>
         <Field label="Montant d'envie ($)"><NumberInput value={amount} onChange={setAmount} placeholder="100" /></Field>
@@ -252,7 +255,7 @@ function GhostCard({ prices }: { prices: Map<string, number> }) {
       {error && <p className="text-sm text-critical">{error}</p>}
       {coin && priceUsd != null && <p className="text-xs text-muted">1 {coin.symbol.toUpperCase()} = {fmtPrice(priceUsd, 'USD')} · l'envie sera valorisée à chaque relevé de prix.</p>}
       {theses.length > 0 ? (
-        <Table head={['Thèse', 'Mis (-)', 'Valeur du jour', 'Bilan', '']}>
+        <Table head={['Crypto', 'Mis (-)', 'Valeur du jour', 'Bilan', '']}>
           {theses.map((t) => (
             <tr key={t.coinId}>
               <Td><span className="flex items-center gap-2"><CoinIcon src={undefined} symbol={t.symbol} size={20} /><span className="font-medium text-ink">{t.symbol.toUpperCase()}</span><span className="text-xs text-muted">{fmtDate(t.firstAt, true)}</span></span></Td>
@@ -261,7 +264,7 @@ function GhostCard({ prices }: { prices: Map<string, number> }) {
               <Td>{t.pnlPct != null ? <span className={t.pnlPct >= 0 ? 'text-good' : 'text-critical'}>{t.pnlPct >= 0 ? '+' : ''}{fmtNum(t.pnlPct)} %</span> : '—'}</Td>
               <Td className="whitespace-nowrap">
                 {!t.closed && <Button size="sm" variant="ghost" disabled={t.priceUsd == null} onClick={() => closeThesis(t)}>Clôturer</Button>}
-                <Button size="sm" variant="ghost" icon={<Trash2 className="size-4" />} aria-label="Supprimer cette thèse" onClick={() => dropThesis(t.coinId)} />
+                <Button size="sm" variant="ghost" icon={<Trash2 className="size-4" />} aria-label="Supprimer cet achat fantôme" onClick={() => dropThesis(t.coinId)} />
               </Td>
             </tr>
           ))}

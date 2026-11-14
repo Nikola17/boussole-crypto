@@ -146,9 +146,11 @@ export function useAiContext() {
         actif: 'PANIER DCA (USDC)',
         montantBase: basket.amountUsd,
         frequence: `jours d'achat ${basket.daysOfWeek.join(', ')} (1 = lundi)`,
-        strategie: 'cœur + une ligne découverte, cœur modulé par la température, réserve d’USDC',
-        coeur: basket.core.map((c) => `${c.symbol.toUpperCase()} ${c.weight} %`),
-        listeDecouverte: basket.discovery.map((c) => c.symbol.toUpperCase()),
+        strategie: basket.mode === 'auto'
+          ? `automatique : base ${basket.basePct ?? 70} % (jusqu’à ${basket.maxBaseLines ?? 3} cryptos du top 20 hors stablecoins), découverte ${100 - (basket.basePct ?? 70)} % (jusqu’à ${basket.maxDiscoveryLines ?? 3}), base modulée par la température, réserve d’USDC`
+          : 'cœur + une ligne découverte, cœur modulé par la température, réserve d’USDC',
+        coeur: basket.mode === 'auto' ? 'choisi automatiquement à chaque échéance' : basket.core.map((c) => `${c.symbol.toUpperCase()} ${c.weight} %`),
+        listeDecouverte: basket.mode === 'auto' ? 'choisie automatiquement à chaque échéance' : basket.discovery.map((c) => c.symbol.toUpperCase()),
         reserveUsdc: basket.reserveUsd,
         multiplicateurDuMoment: temperature != null ? temperatureMultiplier(temperature) : 1,
         prochaineEcheance: next ? isoDay(next) : null,

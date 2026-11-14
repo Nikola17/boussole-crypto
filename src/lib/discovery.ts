@@ -7,7 +7,10 @@
 // finir une ligne ouverte avant d'en ouvrir une autre, disponibilité sur ta plateforme d'achat).
 
 import type { CoinRef } from '../types';
-import { DEFAULT_SMALLCAP_FILTER, isSmallCapCandidate, scoreSmallCap, type SmallCapInput } from './gems';
+import { DEFAULT_SMALLCAP_FILTER, isSmallCapCandidate, scoreSmallCap, type SmallCapFilter, type SmallCapInput } from './gems';
+
+/** Milieu de classement (rangs 21 à 250 du top) : mêmes critères que les pépites, sans plafond de capitalisation. */
+export const MIDCAP_FILTER: SmallCapFilter = { minCap: 5e6, maxCap: Infinity, minVolume: 300e3 };
 
 export interface AutoPick {
   coin: CoinRef;
@@ -24,6 +27,10 @@ export interface AutoDiscoveryOptions {
   excludedSymbols: ReadonlySet<string>;
   /** Nombre de candidates pré-sélectionnées (le plan n'en achète qu'une). */
   max?: number;
+  /** Filtre de capitalisation et de volume (par défaut : celui des petites capis). */
+  filter?: SmallCapFilter;
+  /** Libellé de la raison (par défaut : « Pépite du scan »). */
+  label?: string;
 }
 
 /** Les candidates du jour : pépites du scan, filtrées, classées — la porte reste ouverte à toutes les autres. */
@@ -31,11 +38,11 @@ export function autoDiscoveryCandidates(rows: SmallCapInput[], opts: AutoDiscove
   const max = opts.max ?? 5;
   const seen = new Set<string>();
   return rows
-    .filter((c) => isSmallCapCandidate(c, DEFAULT_SMALLCAP_FILTER))
+    .filter((c) => isSmallCapCandidate(c, opts.filter ?? DEFAULT_SMALLCAP_FILTER))
     .filter((c) => !opts.excluded.has(c.id) && !opts.excludedSymbols.has(c.symbol.toUpperCase()))
     .map((c) => ({ c, s: scoreSmallCap(c) }))
     .sort((a, b) => b.s.score - a.s.score)
-    .map(({ c, s }) => ({ coin: { coinId: c.id, symbol: c.symbol, name: c.name }, score: s.score, reason: `Pépite du scan, score ${s.score}/100` }))
+    .map(({ c, s }) => ({ coin: { coinId: c.id, symbol: c.symbol, name: c.name }, score: s.score, reason: `${opts.label ?? 'Pépite du scan'}, score ${s.score}/100` }))
     .filter((p) => (seen.has(p.coin.coinId) ? false : (seen.add(p.coin.coinId), true)))
     .slice(0, max);
 }
