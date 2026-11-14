@@ -14,7 +14,7 @@ import { rulesOf } from '../lib/profile';
 import { scatterReport } from '../lib/scatter';
 import { autoDiscoveryCandidates, MIDCAP_FILTER, type AutoPick } from '../lib/discovery';
 import { AUTO_BASE_TOP, planAutoBasket, topBaseUniverse, type AutoCandidate } from '../lib/autoBasket';
-import type { CoinRef } from '../types';
+import type { BasketExecution, CoinRef } from '../types';
 import { useToday } from './useClock';
 
 /** Échéance du panier (calendrier seulement, sans réseau) : sert au Cockpit et aux rappels. */
@@ -24,12 +24,14 @@ export function useBasketDue() {
   // Le jour courant change à minuit même si l'application reste ouverte (zone de notification) : l'échéance suit.
   const today = useToday();
   return useMemo(() => {
-    if (!basket) return { basket: null, last: null as Date | null, periodKey: null as string | null, done: false, due: false, next: null as Date | null };
+    if (!basket) return { basket: null, last: null as Date | null, periodKey: null as string | null, done: false, doneExecution: null as BasketExecution | null, due: false, next: null as Date | null };
     const last = lastBasketOccurrence(basket, today);
     const periodKey = last ? basketPeriodKey(last) : null;
-    const done = !!periodKey && executions.some((e) => e.basketId === basket.id && e.periodKey === periodKey);
+    // L'échéance validée : c'est elle qu'on affiche ensuite, pas un ordre recalculé avec le portefeuille d'après l'achat.
+    const doneExecution = periodKey ? executions.find((e) => e.basketId === basket.id && e.periodKey === periodKey) ?? null : null;
+    const done = !!doneExecution;
     const next = nextBasketOccurrences(basket, new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1), 1)[0] ?? null;
-    return { basket, last, periodKey, done, due: basket.active && !!last && !done, next };
+    return { basket, last, periodKey, done, doneExecution, due: basket.active && !!last && !done, next };
   }, [basket, executions, today]);
 }
 
@@ -156,7 +158,7 @@ export function useBasket() {
     );
   }, [basket, ctx, fullAuto, profile, pf.holdings, baseUniverse, fullAutoPicks, marketMap, coins]);
 
-  const { last, periodKey, done, due, next } = useBasketDue();
+  const { last, periodKey, done, doneExecution, due, next } = useBasketDue();
 
   /** Symbole (majuscules) → crypto : panier, positions, puis marché (la mieux classée en cas d'homonymes). */
   const known = useMemo(() => {
@@ -172,7 +174,7 @@ export function useBasket() {
 
   return {
     loadError, missingCoins: bm.isError && missing.length > 0, retry: () => { void markets.refetch(); void bm.refetch(); },
-    basket, ctx, plan, ready, loading: !!basket && !ready && !loadError, markets: coins, known, priceOf, rate: pf.rate, currency: pf.currency, cycle: cycle.data, temperature: cycle.data?.temperature ?? null, holdings: pf.holdings, last, periodKey, done, due, next,
+    basket, ctx, plan, ready, loading: !!basket && !ready && !loadError, markets: coins, known, priceOf, rate: pf.rate, currency: pf.currency, cycle: cycle.data, temperature: cycle.data?.temperature ?? null, holdings: pf.holdings, last, periodKey, done, doneExecution, due, next,
     autoCandidates: fullAuto ? fullAutoPicks : autoPicks,
     fullAuto,
   };

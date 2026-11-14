@@ -2,12 +2,14 @@
 // Le brief doit le reprendre tel quel (mêmes lignes, mêmes montants) au lieu de recalculer ou de contredire.
 
 import type { BasketPlanResult } from '../lib/basket';
-import type { ProfileRules } from '../types';
+import type { BasketExecution, ProfileRules } from '../types';
 
 export interface TodayInput {
   guidance: { title: string; detail: string }[];
   basketDue: boolean;
   plan: BasketPlanResult | null;
+  /** Échéance du jour déjà validée : on transmet ce qui a été passé, pas un ordre recalculé après l'achat. */
+  doneExecution?: BasketExecution | null;
   rules: ProfileRules;
   /** Faux si un wallet n'a pas pu être lu : le portefeuille transmis est alors partiel. */
   portfolioComplete: boolean;
@@ -18,7 +20,15 @@ export function todayContext(i: TodayInput): Record<string, unknown> {
   return {
     consigne: 'Ces éléments sont calculés par les règles de l’utilisateur. Reprends-les tels quels (mêmes lignes, mêmes montants en USDC) : ne les recalcule pas, ne les contredis pas. Tu peux ajouter un avis ou un risque, jamais un autre montant.',
     actionsDuJour: i.guidance.map((g) => `${g.title} — ${g.detail}`),
-    panierDca: i.plan
+    panierDca: i.doneExecution
+      ? {
+          echeanceFaite: true,
+          consigne: 'L’échéance du panier est déjà passée : ne propose aucun autre achat DCA avant la prochaine.',
+          ordresPasses: i.doneExecution.orders.map((o) => ({ ligne: o.symbol.toUpperCase(), montantUsdc: o.usd })),
+          variationReserveUsdc: i.doneExecution.reserveDeltaUsd,
+          sautee: !!i.doneExecution.skipped,
+        }
+      : i.plan
       ? {
           echeanceAujourdhui: i.basketDue,
           budgetUsdc: i.plan.baseUsd,

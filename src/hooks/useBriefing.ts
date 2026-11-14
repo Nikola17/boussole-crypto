@@ -40,7 +40,7 @@ export function useBriefing() {
         dca: ctx.dca(ctx.cycle?.temperature, mayerBy),
         profile: ctx.profile(),
         watchlist: watch,
-        today: todayContext({ guidance, basketDue: basket.due, plan: basket.plan, rules: rulesOf(profile), portfolioComplete: ctx.portfolioComplete, temperature: ctx.cycle?.temperature ?? null }),
+        today: todayContext({ guidance, basketDue: basket.due, plan: basket.plan, doneExecution: basket.doneExecution, rules: rulesOf(profile), portfolioComplete: ctx.portfolioComplete, temperature: ctx.cycle?.temperature ?? null }),
       }, (p) => useBriefingRun.getState().set({ progress: p }), controller.signal);
       addReport(report);
       return report;

@@ -244,6 +244,10 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 - **DCA × IA** : en mode automatique, « Optimiser avec l’IA » envoie l’ordre calculé par tes règles ET les autres candidates qui ont passé ces mêmes règles ; l’IA garde chaque ligne ou la remplace par une candidate du même côté, avec l’actualité et le contexte du projet. Elle ne change jamais un montant ; toute proposition hors liste, d’un autre côté, en doublon ou peu sûre (confiance < 3/5) est écartée et affichée. Option « Optimiser l’ordre avec l’IA à chaque échéance » : l’analyse part seule le jour de l’échéance, une fois par ordre (mise en cache). « J’ai passé l’ordre optimisé » enregistre la version de l’IA.
 - **Transactions modifiables partout** : les échéances du panier (montant dépensé, quantité reçue par ligne) et des plans avancés (montant, prix, quantité) se corrigent ; leurs transactions du journal et la réserve d’USDC suivent. Sur téléphone, toute la carte d’une transaction s’ouvre pour la modifier. Une transaction dont on change la date prend le taux EUR/USD de sa nouvelle date.
 
+### v1.22.1 — L’échéance validée ne se recalcule plus
+
+- **Après « J’ai passé ces ordres », le panier reproposait d’autres cryptos** : il recalculait l’ordre avec le portefeuille d’après l’achat (les lignes achetées comptent alors comme détenues, la réserve a bougé) et l’affichait comme un nouvel ordre. La carte montre maintenant l’échéance validée telle qu’enregistrée (cryptos, montants, quantités) ; l’aperçu de la prochaine échéance est replié et présenté comme indicatif, sans bouton ni optimisation IA. Le brief du jour reçoit lui aussi l’échéance passée au lieu de l’ordre recalculé, et ne propose plus d’autre achat DCA avant la prochaine.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

@@ -127,6 +127,16 @@ describe('ordre du jour transmis à l’IA', () => {
     expect(c.temperatureMarche).toBe(50);
     expect(c.avertissement).toBeNull();
   });
+  it('après validation, transmet l’échéance passée et non un ordre recalculé', () => {
+    const doneExecution = { id: 'e1', basketId: basket.id, periodKey: '2026-11-14', date: '2026-11-14', investedUsd: 20, reserveDeltaUsd: 0, orders: [
+      { coinId: 'solana', symbol: 'sol', name: 'Solana', usd: 20, quantity: 0.1, price: 200, kind: 'core' as const },
+    ] };
+    const c = todayContext({ guidance: [], basketDue: false, plan, doneExecution, rules, portfolioComplete: true, temperature: 50 });
+    const panier = c.panierDca as { echeanceFaite: boolean; ordresPasses: { ligne: string; montantUsdc: number }[]; ordres?: unknown };
+    expect(panier.echeanceFaite).toBe(true);
+    expect(panier.ordresPasses).toEqual([{ ligne: 'SOL', montantUsdc: 20 }]);
+    expect(panier.ordres).toBeUndefined();
+  });
   it('signale un portefeuille partiel et l’absence de panier', () => {
     const c = todayContext({ guidance: [], basketDue: false, plan: null, rules, portfolioComplete: false, temperature: null });
     expect(c.panierDca).toBeNull();

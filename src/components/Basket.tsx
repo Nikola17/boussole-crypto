@@ -1,7 +1,7 @@
 // Panier DCA : plan (jours, budget en USDC, cœur et liste « découverte »), ordre du jour, validation et historique.
 
 import { Check, Pencil, Plus, Shield, SkipForward, Sparkles, Trash2, Wand2, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { newId, useStore } from '../store/useStore';
 import { useBasket } from '../hooks/useBasket';
 import { usePortfolio } from '../hooks/usePortfolio';
@@ -353,9 +353,11 @@ export function BasketSection() {
             </ul>
           </details>
         )}
+        {b.done && b.doneExecution && <DoneExecution e={b.doneExecution} />}
         {plan && (
+          <PreviewWrap collapsed={b.done} next={b.next}>
           <div className="space-y-3">
-            <p className="text-xs font-medium text-ink-2">{b.due ? 'Ordre du jour' : 'Aperçu pour la prochaine échéance'}</p>
+            {!b.done && <p className="text-xs font-medium text-ink-2">{b.due ? 'Ordre du jour' : 'Aperçu pour la prochaine échéance'}</p>}
             {plan.orders.length === 0 && <Banner tone="info" title="Aucun ordre aujourd’hui">Le montant de l’échéance ({n2(plan.baseUsd)} USDC) part en réserve.</Banner>}
             <ul className="space-y-2">
               {plan.orders.map((o) => (
@@ -375,8 +377,8 @@ export function BasketSection() {
             {plan.warnings.map((w) => <Banner key={w} tone="warn">{w}</Banner>)}
             {plan.notes.length > 0 && <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted">{plan.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
             {plan.excluded.length > 0 && <details className="text-xs text-muted"><summary className="cursor-pointer">Écartées aujourd’hui ({plan.excluded.length})</summary><ul className="mt-1 list-disc pl-5">{plan.excluded.map((e) => <li key={e.symbol}>{e.symbol} : {e.reason}</li>)}</ul></details>}
-            {cfg && plan.orders.length > 0 && b.fullAuto && <OptimizePanel opt={opt} />}
-            {cfg && plan.orders.length > 0 && !b.fullAuto && (
+            {cfg && plan.orders.length > 0 && b.fullAuto && !b.done && <OptimizePanel opt={opt} />}
+            {cfg && plan.orders.length > 0 && !b.fullAuto && !b.done && (
               <div>
                 <Button size="sm" loading={reviewBusy} icon={<Sparkles className="size-3.5" />} onClick={() => void askReview()}>Avis de l’IA sur cet ordre</Button>
                 {review && <div className="mt-2 rounded-lg border border-line bg-surface-2 p-3 text-sm"><Markdown>{review.text}</Markdown>{review.cost && <p className="mt-1 text-xs text-muted">Coût de cette relecture {review.cost}</p>}</div>}
@@ -390,6 +392,7 @@ export function BasketSection() {
               </div>
             )}
           </div>
+          </PreviewWrap>
         )}
 
         {mine.length > 0 && (
@@ -412,6 +415,42 @@ export function BasketSection() {
       <ExecuteModal open={exec} onClose={() => setExec(false)} b={b} custom={custom} />
       <EditExecutionModal exec={editExec} onClose={() => setEditExec(null)} />
     </>
+  );
+}
+
+/** Échéance validée : ce que tu as réellement passé, tel qu'enregistré. Rien n'est recalculé. */
+function DoneExecution({ e }: { e: BasketExecution }) {
+  return (
+    <div className="mb-3 rounded-lg border border-line bg-surface-2 p-3 text-sm">
+      <p className="flex items-center gap-2 font-medium text-ink"><Check className="size-4 text-up" />Échéance du {fmtDate(e.periodKey)} validée</p>
+      {e.skipped ? <p className="mt-1 text-ink-2">Échéance sautée : le montant est parti en réserve.</p>
+        : e.orders.length === 0 ? <p className="mt-1 text-ink-2">Aucun achat : le montant est parti en réserve.</p>
+        : (
+          <ul className="mt-2 space-y-1">
+            {e.orders.map((o) => (
+              <li key={o.coinId} className="flex items-center gap-2">
+                <CoinIcon src={o.image} symbol={o.symbol} size={20} />
+                <span className="min-w-0 flex-1 truncate text-ink">{o.name} <span className="text-muted">{o.symbol.toUpperCase()}</span></span>
+                <span className="tnum text-ink">{n2(o.usd)} USDC</span>
+                <span className="tnum text-xs text-muted">{fmtQty(o.quantity)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      <p className="mt-2 text-xs text-muted">Investi {n2(e.investedUsd)} USDC · réserve {e.reserveDeltaUsd > 0 ? '+' : ''}{n2(e.reserveDeltaUsd)} USDC. Rien d’autre à faire avant la prochaine échéance.</p>
+    </div>
+  );
+}
+
+/** Après validation, l'ordre recalculé n'est qu'un aperçu de la prochaine échéance : replié pour ne pas ressembler à un nouvel ordre. */
+function PreviewWrap({ collapsed, next, children }: { collapsed: boolean; next: Date | null; children: ReactNode }) {
+  if (!collapsed) return <>{children}</>;
+  return (
+    <details className="text-sm">
+      <summary className="cursor-pointer text-xs font-medium text-ink-2">Aperçu indicatif de la prochaine échéance{next ? ` (${fmtDate(next)})` : ''}</summary>
+      <p className="mb-2 mt-1 text-xs text-muted">Calculé avec ton portefeuille d’après l’achat et les cours du moment, à titre d’information. Le vrai ordre sera fixé le jour de l’échéance.</p>
+      {children}
+    </details>
   );
 }
 
