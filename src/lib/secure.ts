@@ -1,7 +1,7 @@
-// Clés et phrases secrètes : sur l'application Windows, elles sont chiffrées par Windows lui-même
-// (safeStorage, DPAPI) et rangées à part — le stockage principal de l'application n'en contient
-// JAMAIS en clair, et le fichier de sauvegarde non plus. Sur Android et dans le navigateur, la clé
-// reste dans le stockage local de l'application (chiffrement système à étudier avec un plugin Capacitor).
+// Clés et phrases secrètes : elles sont chiffrées par le système — Windows (safeStorage, DPAPI) et
+// Android (keystore matériel, via le plugin BoussoleKeychain) — et rangées à part : le stockage
+// principal de l'application n'en contient JAMAIS en clair, et le fichier de sauvegarde non plus.
+// Dans le navigateur (développement), la clé reste dans le stockage local de l'application.
 
 import type { Settings } from '../types';
 import { isElectron } from './platform';
@@ -13,10 +13,27 @@ export type SecretKey = (typeof SECRET_KEYS)[number];
 const SEALED_KEY = 'boussole-sealed';
 
 function bridge(): { sealSecret: (v: string) => Promise<string | null>; openSecret: (v: string) => Promise<string | null> } | null {
-  if (!isElectron) return null;
-  const d = (window as unknown as { boussoleDesktop?: { sealSecret?: unknown; openSecret?: unknown } }).boussoleDesktop;
-  if (!d || typeof d.sealSecret !== 'function' || typeof d.openSecret !== 'function') return null;
-  return d as { sealSecret: (v: string) => Promise<string | null>; openSecret: (v: string) => Promise<string | null> };
+  if (isElectron) {
+    const d = (window as unknown as { boussoleDesktop?: { sealSecret?: unknown; openSecret?: unknown } }).boussoleDesktop;
+    if (!d || typeof d.sealSecret !== 'function' || typeof d.openSecret !== 'function') return null;
+    return d as { sealSecret: (v: string) => Promise<string | null>; openSecret: (v: string) => Promise<string | null> };
+  }
+  // Android : le keystore matériel, via le plugin natif BoussoleKeychain (AES-256-GCM, la clé ne sort jamais).
+  if (typeof window === 'undefined') return null; // hors navigateur (tests Node) : pas de keystore
+  const cap = (window as unknown as {
+    Capacitor?: {
+      isPluginAvailable?: (name: string) => boolean;
+      Plugins?: Record<string, { sealSecret?: (a: { value: string }) => Promise<{ blob: string }>; openSecret?: (a: { blob: string }) => Promise<{ value: string }> } | undefined>;
+    };
+  }).Capacitor;
+  const kc = cap?.Plugins?.['BoussoleKeychain'];
+  if (cap?.isPluginAvailable?.('BoussoleKeychain') && kc?.sealSecret && kc.openSecret) {
+    return {
+      sealSecret: async (v) => (await kc.sealSecret!({ value: v })).blob,
+      openSecret: async (v) => (await kc.openSecret!({ blob: v })).value,
+    };
+  }
+  return null;
 }
 
 /** Vrai quand cet appareil sait chiffrer les secrets par le système. */
