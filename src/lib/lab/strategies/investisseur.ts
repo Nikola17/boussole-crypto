@@ -2,10 +2,10 @@
 // température du marché (×2 en peur extrême … ×0,25 en euphorie), le reste attend en cash (la réserve), et une
 // tranche est allégée en euphorie, au plus une fois tous les 30 jours.
 
-import { temperatureMultiplier } from '../../dca';
+import { TEMP_TABLES, temperatureMultiplier, type TempTable } from '../../dca';
 import type { Intent, Strategy } from '../types';
 
-export type InvestisseurParams = { amountUsd: number; daysOfWeek: number[]; btcPct: number; trimPct: number; trimMinDays: number };
+export type InvestisseurParams = { amountUsd: number; daysOfWeek: number[]; btcPct: number; trimPct: number; trimMinDays: number; multTable: string };
 
 const fr = (x: number) => String(x).replace('.', ',');
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400_000);
@@ -15,7 +15,7 @@ export const investisseur: Strategy<InvestisseurParams> = {
   version: 1,
   label: 'Investisseur (température)',
   describe: 'Bitcoin et Ethereum, échéance modulée par la température du marché ; une tranche allégée en euphorie.',
-  defaults: { amountUsd: 25, daysOfWeek: [2, 5], btcPct: 75, trimPct: 7.5, trimMinDays: 30 },
+  defaults: { amountUsd: 25, daysOfWeek: [2, 5], btcPct: 75, trimPct: 7.5, trimMinDays: 30, multTable: 'actuelle' },
   uses: ['cycle'],
   replayable: true,
   kind: 'deposits',
@@ -32,7 +32,7 @@ export const investisseur: Strategy<InvestisseurParams> = {
       }
     }
     if (!ctx.scheduled(p.daysOfWeek)) return out;
-    const mult = t == null ? 1 : temperatureMultiplier(t);
+    const mult = t == null ? 1 : temperatureMultiplier(t, TEMP_TABLES[p.multTable as TempTable] ?? TEMP_TABLES.actuelle);
     const budget = Math.min(p.amountUsd * mult, ctx.portfolio.cashUsd);
     const reason = t == null ? 'Température indisponible : échéance ×1' : `Température ${Math.round(t)}/100 : échéance ×${fr(mult)}`;
     const btc = Math.round(budget * p.btcPct) / 100;

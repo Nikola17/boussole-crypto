@@ -54,13 +54,21 @@ export function mayerMultiplier(mayer: number): number {
   return 0.25;
 }
 
-export function temperatureMultiplier(t: number): number {
+/** Multiplicateurs de l'échéance par zone de température (sous 20, 20-40, 40-60, 60-80, 80 et plus). */
+export const TEMP_TABLES = {
+  actuelle: [2, 1.5, 1, 0.5, 0.25],
+  plate: [1.5, 1.25, 1, 0.75, 0.5],
+  pentue: [3, 2, 1, 0.33, 0],
+} as const satisfies Record<string, readonly number[]>;
+export type TempTable = keyof typeof TEMP_TABLES;
+
+export function temperatureMultiplier(t: number, table: readonly number[] = TEMP_TABLES.actuelle): number {
   if (!Number.isFinite(t)) return 1;
-  if (t < 20) return 2;
-  if (t < 40) return 1.5;
-  if (t < 60) return 1;
-  if (t < 80) return 0.5;
-  return 0.25;
+  if (t < 20) return table[0];
+  if (t < 40) return table[1];
+  if (t < 60) return table[2];
+  if (t < 80) return table[3];
+  return table[4];
 }
 
 export function multiplierFor(strategy: DcaStrategy, ctx: { fng?: number; mayer?: number; temperature?: number }): { mult: number; reason: string } {

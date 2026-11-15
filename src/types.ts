@@ -582,6 +582,10 @@ export interface BasketPlan {
   maxDiscoveryLines?: number;
   /** Mode auto : où chercher les découvertes — pépites (petites capis), milieu de classement (rangs 21-250), ou les deux. */
   discoverySource?: 'gems' | 'mid' | 'both';
+  /** Mode auto : règle de la base (absente : « top3 », la règle d'avant la mesure du banc d'essai). */
+  baseMode?: 'top3' | 'cap' | 'anchor' | 'equal' | 'btc';
+  /** Règle « anchor » : part de la base en Bitcoin et Ethereum (75/25), 70 % par défaut. */
+  anchorPct?: number;
   /** Mode auto : l'IA relit et affine l'ordre du jour dès qu'une échéance arrive (sans jamais changer les montants). */
   aiOptimize?: boolean;
   core: BasketCoin[];

@@ -3,12 +3,13 @@
 // Non rejouable (classement, pépites et disponibilité n'ont pas d'historique) : au banc d'essai, la base seule.
 
 import { analyze } from '../../signals';
-import { buildAutoBasketPlan } from '../../autoBasket';
+import { buildAutoBasketPlan, type BaseMode } from '../../autoBasket';
+import { median } from '../stats';
 import { ARCHETYPES } from '../../profile';
 import type { CgMarket } from '../../../api/coingecko';
 import type { Intent, Strategy } from '../types';
 
-export type DcaBoussoleParams = { amountUsd: number; daysOfWeek: number[]; basePct: number; maxBaseLines: number; maxDiscoveryLines: number; discoverySource: string; minOrderUsd: number };
+export type DcaBoussoleParams = { amountUsd: number; daysOfWeek: number[]; basePct: number; maxBaseLines: number; maxDiscoveryLines: number; discoverySource: string; minOrderUsd: number; baseMode: string; anchorPct: number };
 
 /** Ligne de marché minimale à partir de l'univers figé (banc d'essai, ou données en direct indisponibles). */
 const pseudoRow = (u: { coinId: string; symbol: string; name: string; rank: number | null }): CgMarket => ({
@@ -21,7 +22,7 @@ export const dcaBoussole: Strategy<DcaBoussoleParams> = {
   version: 1,
   label: 'DCA Boussole',
   describe: 'Le panier automatique de Boussole : jusqu’à 3 cryptos du top 20 et 3 découvertes à chaque échéance, montant modulé par la température, réserve et règles du panier.',
-  defaults: { amountUsd: 25, daysOfWeek: [2, 5], basePct: 70, maxBaseLines: 3, maxDiscoveryLines: 3, discoverySource: 'both', minOrderUsd: 5 },
+  defaults: { amountUsd: 25, daysOfWeek: [2, 5], basePct: 70, maxBaseLines: 3, maxDiscoveryLines: 3, discoverySource: 'both', minOrderUsd: 5, baseMode: 'top3', anchorPct: 70 },
   uses: ['signals', 'cycle', 'autoBasket'],
   replayable: false,
   kind: 'deposits',
@@ -32,9 +33,12 @@ export const dcaBoussole: Strategy<DcaBoussoleParams> = {
     const markets = live?.markets ?? ctx.universe.map(pseudoRow);
     const scores: Record<string, number> = {};
     const change7d: Record<string, number | null> = {};
+    // Règle « capitalisation » sans capitalisations historiques : volume médian sur 30 jours (en dollars).
+    const weights: Record<string, number> = {};
     for (const u of ctx.universe) {
       const cs = ctx.candles(u.coinId);
       if (!cs.length) continue;
+      if (!live) weights[u.coinId] = median(cs.slice(-30).map((c) => c.volume));
       change7d[u.coinId] = cs.length > 7 ? (cs[cs.length - 1].close / cs[cs.length - 8].close - 1) * 100 : null;
       const a = cs.length >= 30 ? analyze(cs, { temperature: ctx.temperature ?? undefined, isBitcoin: u.coinId === 'bitcoin' }, { closedOnly: true }) : null;
       if (a) scores[u.coinId] = a.investor.score;
@@ -50,7 +54,9 @@ export const dcaBoussole: Strategy<DcaBoussoleParams> = {
       basket: {
         amountUsd: p.amountUsd, basePct: live ? p.basePct : 100, maxBaseLines: p.maxBaseLines, maxDiscoveryLines: p.maxDiscoveryLines, minOrderUsd: p.minOrderUsd,
         reserveUsd: Math.max(0, ctx.portfolio.cashUsd - p.amountUsd), discoverySource: p.discoverySource as 'gems' | 'mid' | 'both',
+        baseMode: p.baseMode as BaseMode, anchorPct: p.anchorPct,
       },
+      weights: live ? undefined : weights,
       markets, smallCaps: live?.smallCaps ?? null, scores, change7d,
       cdc: known ? Object.fromEntries(ctx.universe.map((u) => [u.coinId, u.available ? 'app' : 'unknown'])) : null,
       temperature: ctx.temperature, heldUsd, totalValueUsd: ctx.portfolio.equityUsd, rules: live?.rules ?? ARCHETYPES['Ma stratégie'].rules,

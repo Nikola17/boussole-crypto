@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-11-15",
+  "dataThrough": "2026-11-14",
+  "controlFrom": "2023-01-01",
+  "chosen": "btc",
+  "beatsBtc": true,
+  "table": "actuelle",
+  "controlTwrPct": {
+    "top3": 117.6788,
+    "cap": 201.4057,
+    "anchor": 186.1059,
+    "equal": 136.7973,
+    "btc": 286.0608
+  },
+  "dcaBtcTwrPct": 285.937
+}

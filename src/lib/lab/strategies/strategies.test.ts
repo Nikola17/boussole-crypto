@@ -36,6 +36,20 @@ describe('stratégies de la version 1', () => {
     expect(unknown[0].reason).toBe('Température indisponible : échéance ×1');
     expect(inv.decide(ctx({ temperature: 15, cash: 20 }), inv.defaults).map((x) => x.sizing)).toEqual([{ usd: 15 }, { usd: 5 }]);
   });
+  it('Investisseur : table de multiplicateurs réglable (variantes du banc d’essai)', () => {
+    expect(inv.decide(ctx({ temperature: 15 }), { ...inv.defaults, multTable: 'pentue' })[0].reason).toBe('Température 15/100 : échéance ×3');
+    expect(inv.decide(ctx({ temperature: 90 }), { ...inv.defaults, multTable: 'pentue' }).filter((x) => x.side === 'buy').every((x) => (x.sizing as { usd: number }).usd === 0)).toBe(true);
+  });
+  it('DCA Boussole au banc d’essai : règle « capitalisation » pondérée par le volume, « btc » sur Bitcoin seul', () => {
+    const boussole = STRATEGIES['dca-boussole'];
+    const candles = (vol: number) => Array.from({ length: 40 }, (_, i) => ({ time: 1_700_000_000 + i * 86400, open: 10, high: 10.1, low: 9.9, close: 10, volume: vol }));
+    const vols: Record<string, number> = { bitcoin: 600, ethereum: 300, solana: 100 };
+    const c = { ...ctx(), universe: Object.keys(vols).map((id, i) => ({ coinId: id, symbol: id.slice(0, 3), name: id, rank: i + 1, available: true })), candles: (id: string) => candles(vols[id] ?? 0) };
+    const cap = boussole.decide(c, { ...boussole.defaults, amountUsd: 100, baseMode: 'cap', minOrderUsd: 1 });
+    expect(Object.fromEntries(cap.map((x) => [x.coinId, (x.sizing as { usd: number }).usd]))).toEqual({ bitcoin: 60, ethereum: 30, solana: 10 });
+    const btc = boussole.decide(c, { ...boussole.defaults, amountUsd: 100, baseMode: 'btc' });
+    expect(btc.map((x) => x.coinId)).toEqual(['bitcoin']);
+  });
   it('Investisseur : une tranche de 7,5 % en euphorie, 30 jours entre deux', () => {
     const positions = [pos('bitcoin'), pos('ethereum')];
     const trims = inv.decide(ctx({ temperature: 83, execDay: '2026-11-18', lastTrim: '2026-10-18', positions }), inv.defaults);

@@ -56,7 +56,17 @@ export interface AutoCandidate {
   heldUsd: number;
   /** Disponibilité sur Crypto.com ; null tant que la liste n'est pas chargée. */
   cdc: CdcState | null;
+  /** Poids de la règle « capitalisation » (capitalisation en direct ; volume médian au banc d'essai). */
+  weight?: number;
 }
+
+/** Règle de la base : trois meilleurs scores (historique), capitalisation, ancre Bitcoin et Ethereum, parts égales, Bitcoin seul. */
+export type BaseMode = 'top3' | 'cap' | 'anchor' | 'equal' | 'btc';
+export const BASE_MODES: BaseMode[] = ['top3', 'cap', 'anchor', 'equal', 'btc'];
+export const DEFAULT_ANCHOR_PCT = 70;
+export const BASE_MODE_LABEL: Record<BaseMode, string> = {
+  top3: 'Trois meilleurs scores', cap: 'Pondérée par la capitalisation', anchor: 'Ancre Bitcoin et Ethereum', equal: 'Parts égales sur le top 20', btc: 'Bitcoin seul',
+};
 
 export interface AutoBasketSettings {
   amountUsd: number;
@@ -66,6 +76,10 @@ export interface AutoBasketSettings {
   maxDiscoveryLines: number;
   minOrderUsd: number;
   reserveUsd: number;
+  /** Absent : « top3 », la règle d'avant la mesure (un panier existant n'est jamais modifié d'office). */
+  baseMode?: BaseMode;
+  /** Règle « anchor » : part de la base en Bitcoin et Ethereum (75/25), 70 % par défaut. */
+  anchorPct?: number;
 }
 
 export interface AutoBasketContext {
@@ -95,6 +109,19 @@ function split(picks: AutoCandidate[], maxLines: number, amount: number, minOrde
     kind,
     reason: reasonOf(c),
   }));
+}
+
+/** Parts proportionnelles aux poids, au centime ; les plus petites lignes sautent si elles passent sous le minimum. */
+function splitWeighted(picks: AutoCandidate[], maxLines: number, amount: number, minOrder: number, kind: PlannedOrder['kind'], reasonOf: (c: AutoCandidate) => string): PlannedOrder[] {
+  const min = Math.max(minOrder, 0.01);
+  let list = picks.filter((c) => (c.weight ?? 0) > 0).sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)).slice(0, Math.max(0, Math.floor(maxLines)));
+  const total = () => list.reduce((s, c) => s + (c.weight ?? 0), 0);
+  while (list.length && (amount * (list[list.length - 1].weight ?? 0)) / total() < min - 1e-9) list = list.slice(0, -1);
+  if (!list.length) return [];
+  const W = total();
+  const shares = list.map((c) => Math.floor(((amount * (c.weight ?? 0)) / W) * 100) / 100);
+  shares[0] = round2(amount - shares.slice(1).reduce((s, x) => s + x, 0));
+  return list.map((c, i) => ({ coinId: c.coin.coinId, symbol: c.coin.symbol, name: c.coin.name, image: c.coin.image, usd: shares[i], kind, reason: reasonOf(c) }));
 }
 
 const signed = (s: number) => `${s > 0 ? '+' : s < 0 ? '−' : ''}${Math.abs(s)}`;
@@ -165,18 +192,43 @@ export function planAutoBasket(s: AutoBasketSettings, ctx: AutoBasketContext): B
   }
 
   let baseOrders: PlannedOrder[] = [];
+  const mode = s.baseMode ?? 'top3';
   if (base > 0.005) {
-    const basePool = keepOpen(screen(ctx.base, 'base'), ctx.canOpenBase, 'Base');
-    remember(basePool, 'core');
-    baseOrders = split(basePool, Math.min(AUTO_MAX_LINES, s.maxBaseLines), base, s.minOrderUsd, 'core', (c) => {
+    const reasonOf = (c: AutoCandidate) => {
       const sig = c.score != null ? ` · score investisseur ${signed(c.score)}` : ' · score indisponible';
       return `${c.rank != null ? `Rang ${c.rank} (20 premières hors stablecoins)` : '20 premières hors stablecoins'}${sig}${c.heldUsd > 0 ? ' · tu en détiens déjà' : ''}`;
-    });
+    };
+    // Ancre et Bitcoin seul : achetés à chaque échéance, sans filtre de signal (seulement la disponibilité).
+    const pick = (id: string) => ctx.base.find((c) => c.coin.coinId === id && c.cdc !== 'unknown');
+    const one = (c: AutoCandidate, usd: number, reason: string): PlannedOrder => ({ coinId: c.coin.coinId, symbol: c.coin.symbol, name: c.coin.name, image: c.coin.image, usd: round2(usd), kind: 'core', reason });
+    const basePool = keepOpen(screen(ctx.base, 'base'), ctx.canOpenBase, 'Base');
+    remember(basePool, 'core');
+    if (mode === 'btc') {
+      const btc = pick('bitcoin');
+      if (btc && base >= Math.max(s.minOrderUsd, 0.01)) baseOrders = [one(btc, base, 'Bitcoin seul (règle de la base)')];
+    } else if (mode === 'anchor') {
+      const share = Math.max(0, Math.min(100, s.anchorPct ?? DEFAULT_ANCHOR_PCT)) / 100;
+      const btc = pick('bitcoin');
+      const eth = pick('ethereum');
+      let anchored = base * share;
+      const rest = split(basePool.filter((c) => c.coin.coinId !== 'bitcoin' && c.coin.coinId !== 'ethereum'), Math.min(AUTO_MAX_LINES, s.maxBaseLines), round2(base - anchored), s.minOrderUsd, 'core', reasonOf);
+      if (!rest.length) anchored = base; // le reste, trop petit ou sans candidate, rejoint l'ancre
+      const why = `Ancre Bitcoin et Ethereum (${Math.round(share * 100)} % de la base)`;
+      const btcUsd = eth ? round2(anchored * 0.75) : round2(anchored);
+      const anchor = [btc && btcUsd >= s.minOrderUsd ? one(btc, btcUsd, why) : null, eth && anchored - btcUsd >= s.minOrderUsd ? one(eth, anchored - btcUsd, why) : null].filter((x): x is PlannedOrder => !!x);
+      baseOrders = [...anchor, ...rest];
+    } else if (mode === 'cap') {
+      baseOrders = splitWeighted(basePool, AUTO_BASE_TOP, base, s.minOrderUsd, 'core', reasonOf);
+    } else if (mode === 'equal') {
+      baseOrders = split(basePool, AUTO_BASE_TOP, base, s.minOrderUsd, 'core', reasonOf);
+    } else {
+      baseOrders = split(basePool, Math.min(AUTO_MAX_LINES, s.maxBaseLines), base, s.minOrderUsd, 'core', reasonOf);
+    }
     if (!baseOrders.length) notes.push(base < Math.max(s.minOrderUsd, 0.01) ? `Part base (${usdc(base)}) sous le minimum de ${usdc(s.minOrderUsd)} : mise en réserve.` : 'Aucune crypto du top 20 ne passe les règles aujourd’hui : le montant part en réserve.');
   }
 
   const orders = [...baseOrders, ...discOrders];
-  if (orders.length > 1) notes.push('Le montant de chaque côté est partagé à parts égales entre les cryptos retenues.');
+  if (orders.length > 1) notes.push(mode === 'top3' || mode === 'equal' ? 'Le montant de chaque côté est partagé à parts égales entre les cryptos retenues.' : `Base : règle « ${BASE_MODE_LABEL[mode]} ».`);
   const invest = round2(orders.reduce((sum, o) => sum + o.usd, 0));
   return { baseUsd: amount, investUsd: invest, reserveDeltaUsd: round2(amount - invest), multiplier: mult, discoveryShare: 1 - basePart, orders, notes, warnings, excluded, pool };
 }
@@ -205,7 +257,9 @@ export function autoDiscoveryPicks(markets: CgMarket[], smallCaps: CgMarket[] | 
 }
 
 export interface AutoBasketInputs {
-  basket: Pick<BasketPlan, 'amountUsd' | 'basePct' | 'maxBaseLines' | 'maxDiscoveryLines' | 'minOrderUsd' | 'reserveUsd' | 'discoverySource'>;
+  basket: Pick<BasketPlan, 'amountUsd' | 'basePct' | 'maxBaseLines' | 'maxDiscoveryLines' | 'minOrderUsd' | 'reserveUsd' | 'discoverySource' | 'baseMode' | 'anchorPct'>;
+  /** Poids de la règle « capitalisation » quand les capitalisations manquent (banc d'essai : volume médian). */
+  weights?: Record<string, number>;
   markets: CgMarket[];
   smallCaps: CgMarket[] | null;
   /** Score investisseur par crypto (base). */
@@ -231,12 +285,12 @@ export function buildAutoBasketPlan(i: AutoBasketInputs): BasketPlanResult {
   });
   const b = i.basket;
   return planAutoBasket(
-    { amountUsd: b.amountUsd, basePct: b.basePct ?? 70, maxBaseLines: b.maxBaseLines ?? 3, maxDiscoveryLines: b.maxDiscoveryLines ?? 3, minOrderUsd: b.minOrderUsd, reserveUsd: b.reserveUsd },
+    { amountUsd: b.amountUsd, basePct: b.basePct ?? 70, maxBaseLines: b.maxBaseLines ?? 3, maxDiscoveryLines: b.maxDiscoveryLines ?? 3, minOrderUsd: b.minOrderUsd, reserveUsd: b.reserveUsd, baseMode: b.baseMode, anchorPct: b.anchorPct },
     {
       temperature: i.temperature,
       totalValueUsd: i.totalValueUsd,
       maxPerGemPct: i.rules.maxPerGemPct,
-      base: base.map((c) => cand({ coinId: c.id, symbol: c.symbol, name: c.name, image: c.image }, c.rank, i.scores[c.id] ?? null)),
+      base: base.map((c) => ({ ...cand({ coinId: c.id, symbol: c.symbol, name: c.name, image: c.image }, c.rank, i.scores[c.id] ?? null), weight: i.weights?.[c.id] ?? i.markets.find((m) => m.id === c.id)?.market_cap ?? 0 })),
       discovery: picks.map((p) => cand({ ...p.coin, image: imageOf(p.coin.coinId) }, null, p.score)),
       canOpenBase: i.linesOpen < i.rules.maxLines,
       canOpenDiscovery: i.discoveryLinesOpen < i.rules.maxDiscoveryLines,

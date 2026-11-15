@@ -162,3 +162,42 @@ describe('raisons du panier : le score, pas les libellés de la version 1', () =
     expect(text).not.toMatch(/Accumuler fort|Alléger/);
   });
 });
+
+describe('règle de la base (baseMode)', () => {
+  const base = [c('bitcoin', { rank: 1, score: 30, weight: 600 }), c('ethereum', { rank: 2, score: 20, weight: 300 }), c('solana', { rank: 5, score: 40, weight: 60 }), c('cardano', { rank: 9, score: 10, weight: 40 })];
+  const only = (over: Partial<AutoBasketSettings>) => planAutoBasket(settings({ amountUsd: 100, basePct: 100, ...over }), ctx({ base, discovery: [] })).orders;
+  it('sans réglage : les trois meilleurs scores, comme avant', () => {
+    expect(only({}).map((o) => o.coinId)).toEqual(['solana', 'bitcoin', 'ethereum']);
+    expect(only({ baseMode: 'top3' })).toEqual(only({}));
+  });
+  it('ancre à 70 % : 70 % de la base en Bitcoin et Ethereum (75/25), le reste selon le signal', () => {
+    const o = only({ baseMode: 'anchor', anchorPct: 70 });
+    const usd = Object.fromEntries(o.map((x) => [x.coinId, x.usd]));
+    expect(usd.bitcoin).toBeCloseTo(52.5, 2);
+    expect(usd.ethereum).toBeCloseTo(17.5, 2);
+    expect(usd.solana + (usd.cardano ?? 0)).toBeCloseTo(30, 2);
+    expect(usd.solana).toBeGreaterThan(0);
+    expect(sum(o)).toBe(100);
+  });
+  it('capitalisation : parts proportionnelles', () => {
+    const usd = Object.fromEntries(only({ baseMode: 'cap', minOrderUsd: 1 }).map((x) => [x.coinId, x.usd]));
+    expect(usd).toEqual({ bitcoin: 60, ethereum: 30, solana: 6, cardano: 4 });
+    // Minimum de 5 $ : la part de Cardano (4 $) saute, le reste est renormalisé
+    const min5 = Object.fromEntries(only({ baseMode: 'cap' }).map((x) => [x.coinId, x.usd]));
+    expect(min5).toEqual({ bitcoin: 62.5, ethereum: 31.25, solana: 6.25 });
+  });
+  it('parts égales : jusqu’à 20 parts, au centime, sans passer sous le minimum', () => {
+    const many = Array.from({ length: 25 }, (_, i) => c(`coin-${i}`, { rank: i + 1, score: 10 }));
+    const o = planAutoBasket(settings({ amountUsd: 100, basePct: 100, minOrderUsd: 5, baseMode: 'equal' }), ctx({ base: many, discovery: [] })).orders;
+    expect(o).toHaveLength(20);
+    expect(o.every((x) => x.usd === 5)).toBe(true);
+    const few = planAutoBasket(settings({ amountUsd: 33, basePct: 100, minOrderUsd: 5, baseMode: 'equal' }), ctx({ base: many, discovery: [] })).orders;
+    expect(few).toHaveLength(6);
+    expect(sum(few)).toBe(33);
+    expect(few.every((x) => x.usd >= 5)).toBe(true);
+  });
+  it('Bitcoin seul', () => {
+    expect(only({ baseMode: 'btc' })).toEqual([expect.objectContaining({ coinId: 'bitcoin', usd: 100 })]);
+  });
+});
+
