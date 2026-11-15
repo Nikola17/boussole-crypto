@@ -5,7 +5,8 @@
 // Les wallets lus sur la blockchain (xpub du Ledger, adresse Phantom…) ne sont pas relus par le runner :
 // ce que le journal ne décrit pas n'est pas vu, et le cœur (BTC, ETH) n'a de toute façon pas de paliers.
 
-import type { PaperConfig, PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PriceAlert, SmartWallet, Thesis, Transaction, WatchedToken } from '../types';
+import type { PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PriceAlert, SmartWallet, Transaction, WatchedToken } from '../types';
+import type { ExitSteps } from '../lib/exitSteps';
 import type { SyncBundle } from '../lib/sync/merge';
 import { checkPriceAlerts } from '../lib/alerts';
 import { DEFAULT_LADDER, exitLadder, pendingRungs } from '../lib/exit';
@@ -15,11 +16,10 @@ import { fmtPrice } from '../lib/format';
 export interface WatchData {
   alerts: PriceAlert[];
   transactions: Transaction[];
-  theses: Thesis[];
+  exitSteps: ExitSteps;
   exitDone: Record<string, number[]>;
   /** Portefeuille papier (expérimentations) : ordres fictifs et ses réglages. */
   paperTrades: PaperTrade[];
-  paper: PaperConfig | null;
   paperPortfolios: PaperPortfolio[];
   paperOrders: PaperOrder[];
   paperDays: PaperDayLog[];
@@ -36,13 +36,10 @@ export function watchOf(bundle: SyncBundle): WatchData {
   const list = <T>(k: string): T[] => (Array.isArray(bundle.data[k as keyof typeof bundle.data]) ? (bundle.data[k as keyof typeof bundle.data] as T[]) : []);
   const stamps = bundle.data as Record<string, unknown>;
   const exitDone = (stamps.exitDone && typeof stamps.exitDone === 'object' && !Array.isArray(stamps.exitDone) ? stamps.exitDone : {}) as Record<string, number[]>;
-  const paperRaw = stamps.paper;
-  const paper = (paperRaw && typeof paperRaw === 'object' && !Array.isArray(paperRaw))
-    ? paperRaw as PaperConfig
-    : null;
+  const exitSteps = (stamps.exitSteps && typeof stamps.exitSteps === 'object' && !Array.isArray(stamps.exitSteps) ? stamps.exitSteps : {}) as ExitSteps;
   const profileRaw = stamps.profile as { vacationUntil?: unknown } | undefined;
   const vacationUntil = profileRaw && typeof profileRaw === 'object' && typeof profileRaw.vacationUntil === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(profileRaw.vacationUntil) ? profileRaw.vacationUntil : null;
-  return { alerts: list<PriceAlert>('alerts'), transactions: list<Transaction>('transactions'), theses: list<Thesis>('theses'), exitDone, paperTrades: list<PaperTrade>('paperTrades'), paper, paperPortfolios: list<PaperPortfolio>('paperPortfolios'), paperOrders: list<PaperOrder>('paperOrders'), paperDays: list<PaperDayLog>('paperDays'), smartWallets: list<SmartWallet>('smartWallets'), watchedTokens: list<WatchedToken>('watchedTokens'), vacationUntil };
+  return { alerts: list<PriceAlert>('alerts'), transactions: list<Transaction>('transactions'), exitSteps, exitDone, paperTrades: list<PaperTrade>('paperTrades'), paperPortfolios: list<PaperPortfolio>('paperPortfolios'), paperOrders: list<PaperOrder>('paperOrders'), paperDays: list<PaperDayLog>('paperDays'), smartWallets: list<SmartWallet>('smartWallets'), watchedTokens: list<WatchedToken>('watchedTokens'), vacationUntil };
 }
 
 export const alertKey = (id: string): string => `alert:${id}`;
@@ -87,8 +84,7 @@ export function hitRungs(watch: WatchData, prices: ReadonlyMap<string, number>):
     const price = prices.get(p.coinId);
     if (price == null || !Number.isFinite(price) || price <= 0) continue;
     if (!(p.quantity > 0) || !(p.costUsd > 0)) continue;
-    const thesis = watch.theses.find((t) => t.coinId === p.coinId);
-    const steps = thesis?.sellPlan?.length ? thesis.sellPlan : DEFAULT_LADDER;
+    const steps = watch.exitSteps[p.coinId]?.length ? watch.exitSteps[p.coinId] : DEFAULT_LADDER;
     const rungs = exitLadder({ avgCostUsd: p.costUsd / p.quantity, priceUsd: price, quantity: p.quantity, steps, doneMultiples: watch.exitDone[p.coinId] ?? [] });
     for (const r of pendingRungs(rungs)) {
       out.push({ coinId: p.coinId, symbol: p.symbol, name: p.name, multiple: r.multiple, pct: r.pct, targetUsd: r.targetPrice, valueUsd: r.valueUsd });

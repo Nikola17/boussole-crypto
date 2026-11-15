@@ -2,6 +2,7 @@
 // Règle d'or : une erreur de stockage ne doit jamais se transformer en perte de données silencieuse.
 
 import { create } from 'zustand';
+import { exitStepsFromTheses } from '../lib/exitSteps';
 import type { StateStorage } from 'zustand/middleware';
 import { DATA_VERSION } from '../lib/backup';
 
@@ -60,6 +61,15 @@ export function migrateState(persisted: unknown, version: number): unknown {
     // v3 → v4 (1.28.0) : relevés du portefeuille, mouvements des wallets suivis, relevés des pépites.
     const s = persisted as Record<string, unknown>;
     for (const k of ['portfolioSnapshots', 'smartMoves', 'pickSnapshots']) if (!Array.isArray(s[k])) s[k] = [];
+  }
+  if (version < 5 && typeof persisted === 'object' && persisted !== null) {
+    // v4 → v5 (1.28.0) : thèses, checklist et ancien réglage du papier sortent. Les paliers de vente des thèses
+    // (la seule donnée encore utilisée) deviennent des paliers personnalisés. Copie de précaution faite avant (guardedStorage).
+    const s = persisted as Record<string, unknown>;
+    if (typeof s.exitSteps !== 'object' || s.exitSteps === null) s.exitSteps = exitStepsFromTheses(s.theses);
+    delete s.theses;
+    delete s.checklist;
+    delete s.paper;
   }
   return persisted;
 }

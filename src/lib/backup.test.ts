@@ -170,3 +170,13 @@ describe('liens écrits par l’IA', () => {
     expect(linkInfo(undefined).ok).toBe(false);
   });
 });
+
+describe('sauvegarde d’avant la version 5', () => {
+  it('les paliers de ses thèses deviennent des paliers personnalisés, le reste des thèses est ignoré', () => {
+    const r = validateBackup({ app: 'boussole-crypto', version: 4, transactions: [], theses: [{ id: 't', coinId: 'solana', sellPlan: [{ multiple: 2, pct: 30 }] }], checklist: { a: true } });
+    expect(r.ok).toBe(true);
+    expect(r.data.exitSteps).toEqual({ solana: [{ multiple: 2, pct: 30 }] });
+    expect('theses' in r.data).toBe(false);
+    expect('checklist' in r.data).toBe(false);
+  });
+});

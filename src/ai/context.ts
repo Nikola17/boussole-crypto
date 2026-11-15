@@ -42,7 +42,6 @@ export function useAiContext() {
   const dcaExecutions = useStore((s) => s.dcaExecutions);
   const basket = useStore((s) => s.basket);
   const basketExecutions = useStore((s) => s.basketExecutions);
-  const theses = useStore((s) => s.theses);
   const markets = useMarkets();
   const global = useGlobal();
   const fng = useFearGreed(60);
@@ -115,9 +114,8 @@ export function useAiContext() {
         poche: BUCKET_LABEL[h.bucket],
         detenuSur: h.sources.join(' + '),
       })),
-      theses: theses.map((t) => ({ actif: t.symbol.toUpperCase(), these: t.sentences.filter(Boolean).join(' '), lignesRouges: t.redLines })),
     };
-  }, [pf, profile.target, settings.currency, settings.aiAnonymous, theses]);
+  }, [pf, profile.target, settings.currency, settings.aiAnonymous]);
 
   const dca = useCallback((temperature?: number, mayerBySymbol?: Record<string, number>) => {
     const today = new Date();

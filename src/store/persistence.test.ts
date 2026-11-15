@@ -41,6 +41,21 @@ describe('migration des données enregistrées', () => {
     expect(out.syncStamp).toEqual({});
   });
 
+  it('v4 → v5 : thèses, checklist et ancien réglage du papier sortent ; les paliers des thèses deviennent exitSteps', () => {
+    const v4 = {
+      transactions: [{ id: 'a' }], watchlist: ['bitcoin'], paperPortfolios: [{ id: 'manuel' }], syncStamp: { profile: 'x' },
+      theses: [{ id: 't1', coinId: 'solana', sellPlan: [{ multiple: 3, pct: 50 }] }, { id: 't2', coinId: 'pepe', sellPlan: [] }],
+      checklist: { stop: true }, paper: { enabled: true, startingUsd: 1000 },
+    };
+    const out = migrateState(JSON.parse(JSON.stringify(v4)), 4) as Record<string, unknown>;
+    expect('theses' in out).toBe(false);
+    expect('checklist' in out).toBe(false);
+    expect('paper' in out).toBe(false);
+    expect(out.exitSteps).toEqual({ solana: [{ multiple: 3, pct: 50 }] });
+    for (const k of ['transactions', 'watchlist', 'paperPortfolios', 'syncStamp'] as const) expect(out[k]).toEqual(v4[k]);
+    expect(DATA_VERSION).toBe(5);
+  });
+
   it('v1 → v2 : des registres déjà présents ne sont pas écrasés', () => {
     const s = { transactions: [], deletions: [{ key: 'transactions/x', at: '2026-11-09T08:00:00.000Z' }], syncStamp: { profile: '2026-11-09T08:00:00.000Z' } };
     const out = migrateState(s, 1) as Record<string, unknown>;

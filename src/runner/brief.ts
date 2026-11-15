@@ -141,9 +141,10 @@ export function buildBrief(i: BriefInputs): string {
   // Autopilotes du Labo (papier) : ce que Boussole aurait fait seule, et si elle mérite ta confiance.
   if (i.autopilots?.length) lines.push(['Autopilotes (papier) :', ...i.autopilots.map((l) => `· ${l}`)].join('\n'));
   // Portefeuille papier (expérimentations) : le P&L des ordres fictifs, valorisé aux mêmes prix réels.
-  const paper = watch.paper;
-  if (paper?.enabled && watch.paperTrades.length) {
-    const st = paperStatus(paper.startingUsd, watch.paperTrades, usd);
+  const manuel = watch.paperPortfolios.find((p) => p.id === 'manuel');
+  const manualTrades = watch.paperTrades.filter((t) => !t.ghost && (t.portfolioId ?? 'manuel') === 'manuel');
+  if (manuel && !manuel.archived && manualTrades.length) {
+    const st = paperStatus(manuel.startingUsd, manualTrades, usd);
     if (st.positions.length) {
       const badge = st.pnlUsd >= 0 ? '+' : '';
       lines.push(`Papier (expérimentations) : ${fmtPrice(st.totalUsd, 'USD')} (${badge}${st.pnlPct.toFixed(1).replace('.', ',')} %)${st.unpriced ? `${st.unpriced} ligne${st.unpriced > 1 ? 's' : ''} sans prix` : ''}`);

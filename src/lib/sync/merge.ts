@@ -6,11 +6,11 @@
 import type { SyncDeletion } from '../../types';
 
 /** Rubriques-listes : chaque élément a un identifiant, la fusion se fait élément par élément. */
-export const ITEM_KEYS = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'theses', 'accounts', 'basketExecutions', 'defiBets', 'paperTrades', 'paperPortfolios', 'paperOrders', 'paperDays', 'portfolioSnapshots', 'smartMoves', 'pickSnapshots', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory'] as const;
+export const ITEM_KEYS = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'accounts', 'basketExecutions', 'defiBets', 'paperTrades', 'paperPortfolios', 'paperOrders', 'paperDays', 'portfolioSnapshots', 'smartMoves', 'pickSnapshots', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory'] as const;
 export type ItemKey = (typeof ITEM_KEYS)[number];
 
 /** Rubriques datées dans `syncStamp` : fusionnées d'un bloc, la version la plus récente l'emporte. */
-export const STAMP_KEYS = ['profile', 'watchlist', 'exitDone', 'coreTrims', 'envelope', 'cdcSeen', 'checklist', 'basket', 'paper'] as const;
+export const STAMP_KEYS = ['profile', 'watchlist', 'exitDone', 'exitSteps', 'coreTrims', 'envelope', 'cdcSeen', 'basket'] as const;
 export type StampKey = (typeof STAMP_KEYS)[number];
 
 export interface SyncBundle {

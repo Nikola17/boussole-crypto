@@ -109,7 +109,7 @@ export function ExitPlanCard() {
               );
             })}
             {c.rungs.some((r) => r.done) && <button type="button" className="mt-1 text-xs text-muted hover:text-ink" onClick={() => c.rungs.filter((r) => r.done).forEach((r) => toggle(c.coinId, r.multiple))}>Réinitialiser les paliers vendus</button>}
-            {!c.hasThesis && <p className="mt-1 text-xs text-muted">Paliers par défaut (×2, ×3, ×5 à 25 % chacun).</p>}
+            {!c.hasCustomPlan && <p className="mt-1 text-xs text-muted">Paliers par défaut (×2, ×3, ×5 à 25 % chacun).</p>}
           </div>
         ))}
         {watchAlts.length > 0 && (

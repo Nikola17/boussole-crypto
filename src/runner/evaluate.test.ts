@@ -1,7 +1,7 @@
 // Paliers de vente vus par le runner : recalculés depuis le journal de l'application (fonctions pures).
 
 import { describe, expect, it } from 'vitest';
-import type { PriceAlert, Thesis, Transaction } from '../types';
+import type { PriceAlert, Transaction } from '../types';
 import type { SyncBundle } from '../lib/sync/merge';
 import { alertKey, alertMessage, consumeAlerts, hitAlerts, hitRungs, priceLabel, rungKey, rungMessage, watchOf, zoneMessage, type MessageCurrency, type WatchData } from './evaluate';
 
@@ -10,7 +10,7 @@ const tx = (over: Partial<Transaction> = {}): Transaction => ({
   quantity: 100, price: 2, currency: 'USD', fee: 0, fxEurPerUsd: 0.87, updatedAt: '2026-01-10T00:00:00Z', ...over,
 });
 
-const watch = (over: Partial<WatchData> = {}): WatchData => ({ alerts: [], transactions: [], theses: [], exitDone: {}, paperTrades: [], paper: null, paperPortfolios: [], paperOrders: [], paperDays: [], smartWallets: [], watchedTokens: [], vacationUntil: null, ...over });
+const watch = (over: Partial<WatchData> = {}): WatchData => ({ alerts: [], transactions: [], exitSteps: {}, exitDone: {}, paperTrades: [], paperPortfolios: [], paperOrders: [], paperDays: [], smartWallets: [], watchedTokens: [], vacationUntil: null, ...over });
 
 const bundleOf = (data: Record<string, unknown>): SyncBundle => ({ data, deletions: [], stamps: {} });
 
@@ -35,13 +35,9 @@ describe('paliers de vente du runner (journal)', () => {
     expect(hitRungs(small, new Map([['solana', 4]]))).toHaveLength(0);
   });
 
-  it('le plan de vente d’une thèse remplace l’échelle par défaut ; BTC, ETH et stablecoins n’ont pas de paliers', () => {
-    const thesis: Thesis = {
-      id: 'th1', coinId: 'solana', symbol: 'sol', name: 'Solana', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
-      sentences: [], hypotheses: [], redLines: [], sellPlan: [{ multiple: 1.5, pct: 50 }],
-    };
+  it('des paliers personnalisés remplacent l’échelle par défaut ; BTC, ETH et stablecoins n’ont pas de paliers', () => {
     const prices = new Map([['solana', 3], ['bitcoin', 200_000], ['ethereum', 9_000], ['usd-coin', 1]]);
-    const w = watch({ theses: [thesis], exitDone: {}, transactions: [
+    const w = watch({ exitSteps: { solana: [{ multiple: 1.5, pct: 50 }] }, exitDone: {}, transactions: [
       tx(),
       tx({ id: 't2', coinId: 'bitcoin', symbol: 'btc', name: 'Bitcoin', price: 100_000, quantity: 1 }),
       tx({ id: 't3', coinId: 'ethereum', symbol: 'eth', name: 'Ethereum', price: 4_000, quantity: 10 }),

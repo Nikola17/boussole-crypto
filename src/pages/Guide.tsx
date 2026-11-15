@@ -14,7 +14,7 @@ const TABS: Tab[] = ['profil', 'methode', 'glossaire'];
 
 export default function Guide() {
   const { query } = useHashPath();
-  // Un ancien lien (ex : l'onglet « checklist », retiré) retombe sur le profil au lieu d'une page vide.
+  // Un ancien lien (onglet retiré) retombe sur le profil au lieu d'une page vide.
   const asked = query.get('tab') as Tab | null;
   const tab: Tab = asked && TABS.includes(asked) ? asked : 'profil';
   return (

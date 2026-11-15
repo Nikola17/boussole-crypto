@@ -315,24 +315,7 @@ export interface AirdropItem {
   createdAt: string;
 }
 
-export interface ThesisHypothesis {
-  id: string;
-  label: string;
-  status: 'ok' | 'weak' | 'broken' | 'dead';
-}
 
-export interface Thesis extends CoinRef {
-  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
-  updatedAt?: UpdatedAt;
-  id: string;
-  createdAt: string;
-  buyPrice?: number;
-  sentences: string[]; // phrases de la thèse, une par ligne (longueur libre)
-  hypotheses: ThesisHypothesis[];
-  redLines: string[];
-  sellPlan: { multiple: number; pct: number }[];
-  lastCheck?: { date: string; verdict: string; reportId?: string };
-}
 
 export type AiReportKind = 'briefing' | 'committee' | 'quick' | 'pulse' | 'airdrops' | 'journal' | 'thesis' | 'gem';
 
@@ -473,12 +456,6 @@ export interface PaperDayLog {
   by: string;
 }
 
-/** Réglages du portefeuille papier : solde de départ et date du dernier reset. */
-export interface PaperConfig {
-  enabled: boolean;
-  startingUsd: number;
-  resetAt?: string;
-}
 
 export interface AiUsage {
   inputTokens: number;

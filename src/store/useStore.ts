@@ -1,9 +1,10 @@
 // État global persistant (stocké uniquement sur l'appareil, dans le stockage local de l'app).
 
 import { create } from 'zustand';
+import type { ExitSteps } from '../lib/exitSteps';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
-  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, HotNote, ImpulseWait, PaperConfig, PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PickSnapshot, PortfolioSnapshot, SmartMove, PriceAlert, Profile, ProfileChange, Settings, SmartWallet, SyncDeletion, Thesis,
+  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, HotNote, ImpulseWait, PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PickSnapshot, PortfolioSnapshot, SmartMove, PriceAlert, Profile, ProfileChange, Settings, SmartWallet, SyncDeletion,
   TradeEntry, Transaction, WalletAddress, WatchedToken,
 } from '../types';
 import { defaultProfile, rulesOf } from '../lib/profile';
@@ -29,10 +30,8 @@ export interface AppState {
   trades: TradeEntry[];
   alerts: PriceAlert[];
   airdrops: AirdropItem[];
-  theses: Thesis[];
   reports: AiReport[];
   chat: ChatMessage[];
-  checklist: Record<string, boolean>;
   accounts: Account[];
   basket: BasketPlan | null;
   basketExecutions: BasketExecution[];
@@ -44,7 +43,8 @@ export interface AppState {
   defiBets: DefiBet[];
   /** Portefeuille papier : ordres fictifs aux prix réels (profil « expérimentations », sans risque). */
   paperTrades: PaperTrade[];
-  paper: PaperConfig;
+  /** Paliers de vente personnalisés par crypto (venus des anciennes thèses). */
+  exitSteps: ExitSteps;
   /** Portefeuilles papier (manuels ou en autopilote), leurs ordres en attente et les journaux des autopilotes. */
   paperPortfolios: PaperPortfolio[];
   paperOrders: PaperOrder[];
@@ -92,13 +92,10 @@ export interface AppState {
   removeAlert: (id: string) => void;
   upsertAirdrop: (a: AirdropItem) => void;
   removeAirdrop: (id: string) => void;
-  upsertThesis: (t: Thesis) => void;
-  removeThesis: (id: string) => void;
   addReport: (r: AiReport) => void;
   removeReport: (id: string) => void;
   addChat: (m: ChatMessage) => void;
   clearChat: () => void;
-  setChecklist: (c: Record<string, boolean>) => void;
   upsertAccount: (a: Account) => void;
   removeAccount: (id: string) => void;
   setBasket: (b: BasketPlan | null) => void;
@@ -119,7 +116,6 @@ export interface AppState {
   setEnvelope: (patch: Partial<DefiEnvelope>) => void;
   upsertPaperTrade: (t: PaperTrade) => void;
   removePaperTrade: (id: string) => void;
-  setPaper: (patch: Partial<PaperConfig>) => void;
   upsertPaperPortfolio: (p: PaperPortfolio) => void;
   /** Supprime un portefeuille papier avec ses ordres, ses exécutions et ses journaux (suppressions propagées). */
   removePaperPortfolio: (id: string) => void;
@@ -229,10 +225,8 @@ const initialData = () => ({
   trades: [] as TradeEntry[],
   alerts: [] as PriceAlert[],
   airdrops: [] as AirdropItem[],
-  theses: [] as Thesis[],
   reports: [] as AiReport[],
   chat: [] as ChatMessage[],
-  checklist: {} as Record<string, boolean>,
   accounts: [] as Account[],
   basket: null as BasketPlan | null,
   basketExecutions: [] as BasketExecution[],
@@ -240,7 +234,7 @@ const initialData = () => ({
   coreTrims: {} as Record<string, string>,
   envelope: { ...DEFAULT_ENVELOPE },
   paperTrades: [] as PaperTrade[],
-  paper: { enabled: true, startingUsd: 1000 } as PaperConfig,
+  exitSteps: {} as ExitSteps,
   paperPortfolios: [{ id: 'manuel', name: 'Papier manuel', kind: 'manual', startingUsd: 1000, createdAt: new Date().toISOString(), costs: { preset: 'exchange', feePct: 0.1, spreadPct: 0.05 } }] as PaperPortfolio[],
   paperOrders: [] as PaperOrder[],
   paperDays: [] as PaperDayLog[],
@@ -324,15 +318,12 @@ export const useStore = create<AppState>()(
       removeAlert: (id) => set((s) => ({ alerts: s.alerts.filter((x) => x.id !== id), ...dropped(s, `alerts/${id}`) })),
       upsertAirdrop: (a) => set((s) => ({ airdrops: upsert(s.airdrops, touch(a)) })),
       removeAirdrop: (id) => set((s) => ({ airdrops: s.airdrops.filter((x) => x.id !== id), ...dropped(s, `airdrops/${id}`) })),
-      upsertThesis: (t) => set((s) => ({ theses: upsert(s.theses, touch(t)) })),
-      removeThesis: (id) => set((s) => ({ theses: s.theses.filter((x) => x.id !== id), ...dropped(s, `theses/${id}`) })),
       addReport: (r) => set((s) => ({
         reports: [r, ...s.reports.filter((x) => x.id !== r.id)].slice(0, MAX_REPORTS).map((x, i) => (i >= KEEP_PARTS && x.parts ? { ...x, parts: undefined } : x)),
       })),
       removeReport: (id) => set((s) => ({ reports: s.reports.filter((x) => x.id !== id) })),
       addChat: (m) => set((s) => ({ chat: [...s.chat, m].slice(-MAX_CHAT) })),
       clearChat: () => set({ chat: [] }),
-      setChecklist: (c) => set({ checklist: c }),
       upsertAccount: (a) => set((s) => ({ accounts: upsert(s.accounts, touch(a)) })),
       removeAccount: (id) => set((s) => ({
         accounts: s.accounts.filter((x) => x.id !== id),
@@ -418,7 +409,6 @@ export const useStore = create<AppState>()(
       setEnvelope: (patch) => set((s) => ({ envelope: { ...s.envelope, ...patch }, ...bump(s, 'envelope') })),
       upsertPaperTrade: (t) => set((s) => ({ paperTrades: upsert(s.paperTrades, touch(t)) })),
       removePaperTrade: (id) => set((s) => ({ paperTrades: s.paperTrades.filter((x) => x.id !== id), ...dropped(s, `paperTrades/${id}`) })),
-      setPaper: (patch) => set((s) => ({ paper: { ...s.paper, ...patch }, ...bump(s, 'paper') })),
       upsertPaperPortfolio: (p) => set((s) => ({ paperPortfolios: upsert(s.paperPortfolios, touch(p)) })),
       removePaperPortfolio: (id) => set((s) => {
         const orders = s.paperOrders.filter((o) => o.portfolioId === id);

@@ -13,7 +13,7 @@ import { Badge, Button, Card, CoinIcon, Field, Modal, NumberInput } from './ui';
 export function ConsolidateCard() {
   const pf = usePortfolio();
   const profile = useStore((s) => s.profile);
-  const theses = useStore((s) => s.theses);
+  const exitSteps = useStore((s) => s.exitSteps);
   const basket = useStore((s) => s.basket);
   const accounts = useStore((s) => s.accounts);
   const [skip, setSkip] = useState<Set<string>>(new Set());
@@ -24,11 +24,11 @@ export function ConsolidateCard() {
     pf.holdings.map((h) => ({ key: h.key, coinId: h.coinId, symbol: h.symbol, name: h.name, image: h.image, quantity: h.quantity, valueUsd: h.valueUsd, priceUsd: h.priceUsd, bucket: h.bucket, source: h.source })),
     {
       minLinePct: rulesOf(profile).minLinePct,
-      thesisIds: new Set(theses.map((t) => t.coinId)),
+      thesisIds: new Set(Object.keys(exitSteps)),
       coreIds: new Set(['bitcoin', 'ethereum', ...(basket?.core.map((c) => c.coinId) ?? [])]),
       discoveryIds: new Set(basket?.discovery.map((c) => c.coinId) ?? []),
     },
-  ), [pf.holdings, profile, theses, basket]);
+  ), [pf.holdings, profile, exitSteps, basket]);
 
   if (!plan.merge.length && !plan.reinforce.length) return null;
   const chosen = plan.merge.filter((l) => !skip.has(l.coinId));

@@ -10,19 +10,21 @@ import { sanitizeReportData } from './reportData';
  * v4 (1.28.0) : relevés quotidiens du portefeuille, mouvements des wallets suivis, relevés des pépites.
  * v3 (1.28.0) : plusieurs portefeuilles papier (`paperPortfolios`), ordres en attente (`paperOrders`), journaux des autopilotes (`paperDays`).
  */
-export const DATA_VERSION = 4;
+import { exitStepsFromTheses } from './exitSteps';
+
+export const DATA_VERSION = 5;
 
 /** Toutes les données de l'utilisateur : le stockage et la sauvegarde partent de cette seule liste. */
 export const BACKUP_KEYS = [
   'settings', 'profile', 'watchlist', 'watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions',
-  'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'checklist', 'accounts', 'basket', 'basketExecutions', 'exitDone', 'coreTrims', 'envelope', 'defiBets', 'cdcSeen', 'paperTrades', 'paper', 'paperPortfolios', 'paperOrders', 'paperDays', 'portfolioSnapshots', 'smartMoves', 'pickSnapshots', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory',
+  'trades', 'alerts', 'airdrops', 'reports', 'chat', 'accounts', 'basket', 'basketExecutions', 'exitDone', 'exitSteps', 'coreTrims', 'envelope', 'defiBets', 'cdcSeen', 'paperTrades', 'paperPortfolios', 'paperOrders', 'paperDays', 'portfolioSnapshots', 'smartMoves', 'pickSnapshots', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory',
   'deletions', 'syncStamp',
 ] as const;
 export type BackupKey = (typeof BACKUP_KEYS)[number];
 
 const STRING_LISTS: BackupKey[] = ['watchlist', 'cdcSeen'];
-const OBJECT_LISTS: BackupKey[] = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'accounts', 'basketExecutions', 'defiBets', 'paperTrades', 'paperPortfolios', 'paperOrders', 'paperDays', 'portfolioSnapshots', 'smartMoves', 'pickSnapshots', 'deletions', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory'];
-const PLAIN_OBJECTS: BackupKey[] = ['settings', 'profile', 'checklist', 'exitDone', 'coreTrims', 'envelope', 'syncStamp'];
+const OBJECT_LISTS: BackupKey[] = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'reports', 'chat', 'accounts', 'basketExecutions', 'defiBets', 'paperTrades', 'paperPortfolios', 'paperOrders', 'paperDays', 'portfolioSnapshots', 'smartMoves', 'pickSnapshots', 'deletions', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory'];
+const PLAIN_OBJECTS: BackupKey[] = ['settings', 'profile', 'exitDone', 'exitSteps', 'coreTrims', 'envelope', 'syncStamp'];
 
 /**
  * Réglages repris d'une sauvegarde. Jamais : clés API, adresse du serveur d'IA, fournisseur d'IA (un fichier piégé pourrait
@@ -76,7 +78,7 @@ export interface BackupCheck {
 
 const COUNT_LABELS: [BackupKey, string][] = [
   ['transactions', 'transactions'], ['accounts', 'comptes'], ['wallets', 'wallets suivis'], ['dcaPlans', 'plans DCA'],
-  ['basketExecutions', 'échéances du panier'], ['theses', 'thèses'], ['trades', 'trades'], ['alerts', 'alertes'], ['reports', 'rapports IA'],
+  ['basketExecutions', 'échéances du panier'], ['trades', 'trades'], ['alerts', 'alertes'], ['reports', 'rapports IA'],
 ];
 
 /** Vérifie un fichier de sauvegarde (déjà décodé) et prépare ce qui peut être importé. N'écrit rien nulle part. */
@@ -121,6 +123,11 @@ export function validateBackup(raw: unknown): BackupCheck {
         : kept;
     }
   }
+  // Sauvegarde d'avant la version 5 : les paliers de ses thèses deviennent des paliers personnalisés.
+  if (!('exitSteps' in raw) && Array.isArray(raw.theses)) {
+    const steps = exitStepsFromTheses(raw.theses);
+    if (Object.keys(steps).length) data.exitSteps = steps;
+  }
   if (errors.length) return fail();
 
   if (isObj(data.exitDone)) {
@@ -158,6 +165,6 @@ export function countsOf(state: Partial<Record<BackupKey, unknown>>): { label: s
 
 /** Vrai si l'état contient autre chose que les valeurs d'un premier lancement (évite de sauvegarder du vide). */
 export function hasUserData(state: Partial<Record<BackupKey, unknown>>): boolean {
-  const lists: BackupKey[] = ['transactions', 'wallets', 'accounts', 'dcaPlans', 'trades', 'alerts', 'airdrops', 'theses', 'basketExecutions', 'defiBets', 'watchedTokens'];
+  const lists: BackupKey[] = ['transactions', 'wallets', 'accounts', 'dcaPlans', 'trades', 'alerts', 'airdrops', 'basketExecutions', 'defiBets', 'watchedTokens'];
   return lists.some((k) => Array.isArray(state[k]) && (state[k] as unknown[]).length > 0) || !!state.basket;
 }

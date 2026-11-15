@@ -18,7 +18,8 @@ export interface ExitCoin {
   priceUsd: number | null;
   avgCostUsd: number;
   core: boolean;
-  hasThesis: boolean;
+  /** Paliers personnalisés (sinon ×2, ×3, ×5 à 25 % chacun). */
+  hasCustomPlan: boolean;
   rungs: Rung[];
   /** Ligne trop petite pour des paliers : à regrouper vers Bitcoin (voir « Consolider »). */
   tiny: boolean;
@@ -29,7 +30,7 @@ export interface ExitCoin {
 export function useExitPlan() {
   const pf = usePortfolio();
   const cycle = useCycle();
-  const theses = useStore((s) => s.theses);
+  const exitSteps = useStore((s) => s.exitSteps);
   const done = useStore((s) => s.exitDone);
   const coreTrims = useStore((s) => s.coreTrims);
   const profile = useStore((s) => s.profile);
@@ -51,13 +52,13 @@ export function useExitPlan() {
     const now = new Date();
     const coins: ExitCoin[] = [...agg.entries()].map(([coinId, a]) => {
       const core = a.bucket === 'btc' || a.bucket === 'eth';
-      const thesis = theses.find((t) => t.coinId === coinId);
+      const custom = exitSteps[coinId]?.length ? exitSteps[coinId] : null;
       const avgCostUsd = a.costQty > 0 ? a.costUsd / a.costQty : 0;
-      const rungs = core ? [] : exitLadder({ avgCostUsd, priceUsd: a.priceUsd ?? 0, quantity: a.qty, steps: thesis?.sellPlan?.length ? thesis.sellPlan : DEFAULT_LADDER, doneMultiples: done[coinId] ?? [] });
-      const tiny = !core && !thesis && isTinyLine(a.valueUsd, totalUsd, minLinePct);
-      return { coinId, symbol: a.symbol, name: a.name, image: a.image, quantity: a.qty, valueUsd: a.valueUsd, priceUsd: a.priceUsd, avgCostUsd, core, hasThesis: !!thesis, rungs, tiny, trim: core ? trimStatus(coreTrims[coinId], now) : null };
+      const rungs = core ? [] : exitLadder({ avgCostUsd, priceUsd: a.priceUsd ?? 0, quantity: a.qty, steps: custom ?? DEFAULT_LADDER, doneMultiples: done[coinId] ?? [] });
+      const tiny = !core && !custom && isTinyLine(a.valueUsd, totalUsd, minLinePct);
+      return { coinId, symbol: a.symbol, name: a.name, image: a.image, quantity: a.qty, valueUsd: a.valueUsd, priceUsd: a.priceUsd, avgCostUsd, core, hasCustomPlan: !!custom, rungs, tiny, trim: core ? trimStatus(coreTrims[coinId], now) : null };
     }).sort((x, y) => y.valueUsd - x.valueUsd);
     const pending = coins.filter((c) => !c.tiny).flatMap((c) => pendingRungs(c.rungs).map((r) => ({ coin: c, rung: r })));
     return { coins, pending, euphoria: euphoriaStep(temperature), temperature, rate: pf.rate, currency: pf.currency, fx: pf.fx, totalValue: pf.totals.value };
-  }, [pf.holdings, pf.rate, pf.currency, pf.fx, pf.totals.value, theses, done, temperature, coreTrims, profile]);
+  }, [pf.holdings, pf.rate, pf.currency, pf.fx, pf.totals.value, exitSteps, done, temperature, coreTrims, profile]);
 }

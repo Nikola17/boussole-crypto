@@ -22,6 +22,15 @@ function pc(over: Partial<SyncBundle> = {}): SyncBundle {
 }
 
 describe('fusion de deux appareils', () => {
+  it('un faisceau d’un appareil resté en 1.27 (thèses, checklist, papier) se fusionne sans erreur ; ces clés sont ignorées', () => {
+    const old = { ...pc(), data: { ...pc().data, theses: [{ id: 't1', coinId: 'sol', updatedAt: T2 }], checklist: { a: true }, paper: { enabled: true } }, stamps: { profile: T1, basket: T1, checklist: T2, paper: T2 } } as unknown as SyncBundle;
+    const m = mergeBundles(pc(), old, NOW);
+    expect((m.data as Record<string, unknown>).theses).toBeUndefined();
+    expect((m.data as Record<string, unknown>).checklist).toBeUndefined();
+    expect((m.data as Record<string, unknown>).paper).toBeUndefined();
+    expect(m.data.transactions).toHaveLength(3);
+  });
+
   it('un élément modifié d’un côté arrive de l’autre', () => {
     const tel = pc({ data: { ...pc().data, transactions: [tx('a', T2, 120), tx('b'), tx('c', T1)] }, stamps: { profile: T1, basket: T1 } });
     const m = mergeBundles(pc(), tel, NOW);

@@ -29,7 +29,7 @@ export function GhostCard({ prices }: { prices: Map<string, number> }) {
   const [amount, setAmount] = useState<number | ''>('');
   const [error, setError] = useState<string | null>(null);
 
-  const theses = useMemo(() => ghostTheses(trades, prices), [trades, prices]);
+  const ghosts = useMemo(() => ghostTheses(trades, prices), [trades, prices]);
   const priceUsd = coin ? prices.get(coin.coinId) ?? (markets.data ?? []).find((m) => m.id === coin.coinId)?.current_price ?? null : null;
 
   function placeGhost() {
@@ -54,7 +54,7 @@ export function GhostCard({ prices }: { prices: Map<string, number> }) {
   }
 
   /** Clôturer : revendre en fantôme toute la part restante, au prix réel du moment. */
-  function closeThesis(t: (typeof theses)[number]) {
+  function closeThesis(t: (typeof ghosts)[number]) {
     if (t.openQty <= 0 || t.priceUsd == null || !(t.priceUsd > 0)) return;
     upsertPaperTrade({
       id: uid(),
@@ -81,9 +81,9 @@ export function GhostCard({ prices }: { prices: Map<string, number> }) {
       </div>
       {error && <p className="text-sm text-critical">{error}</p>}
       {coin && priceUsd != null && <p className="text-xs text-muted">1 {coin.symbol.toUpperCase()} = {fmtPrice(priceUsd, 'USD')} · l'envie sera valorisée à chaque relevé de prix.</p>}
-      {theses.length > 0 ? (
+      {ghosts.length > 0 ? (
         <Table head={['Crypto', 'Mis (-)', 'Valeur du jour', 'Bilan', '']}>
-          {theses.map((t) => (
+          {ghosts.map((t) => (
             <tr key={t.coinId}>
               <Td><span className="flex items-center gap-2"><CoinIcon src={undefined} symbol={t.symbol} size={20} /><span className="font-medium text-ink">{t.symbol.toUpperCase()}</span><span className="text-xs text-muted">{fmtDate(t.firstAt, true)}</span></span></Td>
               <Td>{fmtPrice(t.investedUsd, 'USD')}</Td>

@@ -18,7 +18,7 @@ describe('migration 2 → 3', () => {
     expect(trades.find((t) => t.id === 'g')?.portfolioId).toBeUndefined();
     expect(out.paperOrders).toEqual([]);
     expect(out.paperDays).toEqual([]);
-    expect(out.paper).toEqual(v2.paper);
+    expect(out.paper).toBeUndefined(); // repris dans « Papier manuel », puis retiré en v5
     expect(migrateState(JSON.parse(JSON.stringify(out)), 3)).toEqual(out);
   });
   it('sans réglage du papier : date du premier ordre', () => {

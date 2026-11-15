@@ -1424,11 +1424,10 @@ function watchOf(bundle) {
   const list3 = (k) => Array.isArray(bundle.data[k]) ? bundle.data[k] : [];
   const stamps = bundle.data;
   const exitDone = stamps.exitDone && typeof stamps.exitDone === "object" && !Array.isArray(stamps.exitDone) ? stamps.exitDone : {};
-  const paperRaw = stamps.paper;
-  const paper = paperRaw && typeof paperRaw === "object" && !Array.isArray(paperRaw) ? paperRaw : null;
+  const exitSteps = stamps.exitSteps && typeof stamps.exitSteps === "object" && !Array.isArray(stamps.exitSteps) ? stamps.exitSteps : {};
   const profileRaw = stamps.profile;
   const vacationUntil = profileRaw && typeof profileRaw === "object" && typeof profileRaw.vacationUntil === "string" && /^\d{4}-\d{2}-\d{2}$/.test(profileRaw.vacationUntil) ? profileRaw.vacationUntil : null;
-  return { alerts: list3("alerts"), transactions: list3("transactions"), theses: list3("theses"), exitDone, paperTrades: list3("paperTrades"), paper, paperPortfolios: list3("paperPortfolios"), paperOrders: list3("paperOrders"), paperDays: list3("paperDays"), smartWallets: list3("smartWallets"), watchedTokens: list3("watchedTokens"), vacationUntil };
+  return { alerts: list3("alerts"), transactions: list3("transactions"), exitSteps, exitDone, paperTrades: list3("paperTrades"), paperPortfolios: list3("paperPortfolios"), paperOrders: list3("paperOrders"), paperDays: list3("paperDays"), smartWallets: list3("smartWallets"), watchedTokens: list3("watchedTokens"), vacationUntil };
 }
 var alertKey = (id) => `alert:${id}`;
 var rungKey = (coinId, multiple) => `exit:${coinId}:${multiple}`;
@@ -1451,8 +1450,7 @@ function hitRungs(watch, prices) {
     const price = prices.get(p.coinId);
     if (price == null || !Number.isFinite(price) || price <= 0) continue;
     if (!(p.quantity > 0) || !(p.costUsd > 0)) continue;
-    const thesis = watch.theses.find((t) => t.coinId === p.coinId);
-    const steps = thesis?.sellPlan?.length ? thesis.sellPlan : DEFAULT_LADDER;
+    const steps = watch.exitSteps[p.coinId]?.length ? watch.exitSteps[p.coinId] : DEFAULT_LADDER;
     const rungs = exitLadder({ avgCostUsd: p.costUsd / p.quantity, priceUsd: price, quantity: p.quantity, steps, doneMultiples: watch.exitDone[p.coinId] ?? [] });
     for (const r of pendingRungs(rungs)) {
       out.push({ coinId: p.coinId, symbol: p.symbol, name: p.name, multiple: r.multiple, pct: r.pct, targetUsd: r.targetPrice, valueUsd: r.valueUsd });
@@ -1866,9 +1864,10 @@ function buildBrief(i) {
   const usd = /* @__PURE__ */ new Map();
   for (const [id, p] of Object.entries(i.prices)) if (typeof p?.usd === "number" && p.usd > 0) usd.set(id, p.usd);
   if (i.autopilots?.length) lines.push(["Autopilotes (papier) :", ...i.autopilots.map((l) => `\xB7 ${l}`)].join("\n"));
-  const paper = watch.paper;
-  if (paper?.enabled && watch.paperTrades.length) {
-    const st = paperStatus(paper.startingUsd, watch.paperTrades, usd);
+  const manuel = watch.paperPortfolios.find((p) => p.id === "manuel");
+  const manualTrades = watch.paperTrades.filter((t) => !t.ghost && (t.portfolioId ?? "manuel") === "manuel");
+  if (manuel && !manuel.archived && manualTrades.length) {
+    const st = paperStatus(manuel.startingUsd, manualTrades, usd);
     if (st.positions.length) {
       const badge = st.pnlUsd >= 0 ? "+" : "";
       lines.push(`Papier (exp\xE9rimentations) : ${fmtPrice(st.totalUsd, "USD")} (${badge}${st.pnlPct.toFixed(1).replace(".", ",")} %)${st.unpriced ? `${st.unpriced} ligne${st.unpriced > 1 ? "s" : ""} sans prix` : ""}`);
