@@ -25,6 +25,7 @@ import { useSyncLifecycle } from './hooks/useSync';
 import { updateAssetUrl, useLatestVersion } from './hooks/useUpdate';
 import { loadSecrets, saveSecrets, secretsSealed } from './lib/secure';
 import Dashboard from './pages/Dashboard';
+import { usePaperSettle } from './hooks/usePaperSettle';
 
 const Market = lazy(() => import('./pages/Market'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
@@ -83,6 +84,7 @@ function AppEffects() {
   const closeToTray = useStore((s) => s.settings.closeToTray);
   const autoStart = useStore((s) => s.settings.autoStart);
   useSmartAlerts();
+  usePaperSettle();
   useAutoBackup();
   useSyncLifecycle();
   const exit = useExitPlan();
