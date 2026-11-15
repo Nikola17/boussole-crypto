@@ -171,11 +171,11 @@ export default function Market() {
         <div className="grid gap-4 text-sm text-ink-2 md:grid-cols-3">
           <div>
             <p className="font-medium text-ink">Investisseur</p>
-            <p className="mt-1">Tendance de fond (moyenne 200 jours), valorisation (multiple de Mayer), structure MM50/MM200, RSI hebdomadaire, distance au plus haut et température du marché. Idéal pour décider quand accumuler ou prendre des profits.</p>
+            <p className="mt-1">Seules des conditions mesurées sur l’historique décident du libellé : « Accumuler » quand la température du marché est sous 40, « Accumuler fort » quand tendance, valorisation et cycle sont alignés, « Alléger » sur un excès (RSI hebdomadaire au-dessus de 80, prix à plus de 2 fois sa moyenne 200 jours) ou pour une altcoin en marché chaud, « Prendre des profits » en euphorie. Le score sert au tri.</p>
           </div>
           <div>
             <p className="font-medium text-ink">Trader</p>
-            <p className="mt-1">Alignement des moyennes courtes, MACD, RSI 14 jours, bandes de Bollinger, cassures avec volume. Utile pour le timing d’une entrée ou d’une sortie à court terme.</p>
+            <p className="mt-1">Un seul signal d’achat est validé : la cassure des plus hauts 20 jours avec du volume (« Achat », et « Achat fort » avec un volume double). Aucun signal de vente ne l’est : le trader reste « Neutre » le reste du temps. Plan associé : stop jugé à la clôture, objectif à 3 R.</p>
           </div>
           <div>
             <p className="font-medium text-ink">Les limites</p>

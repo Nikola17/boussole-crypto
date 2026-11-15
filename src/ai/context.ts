@@ -10,6 +10,7 @@ import { lastOccurrence, multiplierFor, nextOccurrences, periodKey, temperatureM
 import { basketPeriodKey, lastBasketOccurrence, nextBasketOccurrences } from '../lib/basket';
 import { isoDay } from '../lib/format';
 import type { Analysis } from '../lib/signals';
+import { reliabilityOf, reliabilityPhrase } from '../lib/lab/reliability';
 
 const r2 = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10 ** d) / 10 ** d);
 
@@ -17,8 +18,8 @@ export function summarizeAnalysis(a: Analysis | null | undefined) {
   if (!a) return null;
   return {
     prix: r2(a.price, 6),
-    signalInvestisseur: `${a.investor.label} (${a.investor.score})`,
-    signalTrader: `${a.trader.label} (${a.trader.score})`,
+    signalInvestisseur: { libelle: a.investor.label, pourquoi: a.investor.why ?? null, fiabilite: reliabilityPhrase(reliabilityOf(`inv:${a.investor.label}`)) },
+    signalTrader: { libelle: a.trader.label, pourquoi: a.trader.why ?? null, fiabilite: reliabilityPhrase(reliabilityOf(`tr:${a.trader.label}`)) },
     rsi14: r2(a.rsi14, 0),
     rsiHebdo: r2(a.rsiWeekly, 0),
     multipleMayer: r2(a.mayer),
@@ -30,7 +31,7 @@ export function summarizeAnalysis(a: Analysis | null | undefined) {
     resistance: r2(a.plan?.resistance ?? null, 6),
     stopSuggere: r2(a.plan?.stop ?? null, 6),
     zoneAccumulation: a.accumulation ? [r2(a.accumulation.low, 6), r2(a.accumulation.high, 6)] : null,
-    setups: a.setups.map((s) => s.label),
+    setups: a.setups.map((s) => ({ libelle: s.label, fiabilite: reliabilityPhrase(reliabilityOf(`setup:${s.key}`)) })),
   };
 }
 

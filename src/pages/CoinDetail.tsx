@@ -38,6 +38,7 @@ function SignalCard({ title, help, result, reliabilityKey, setups }: { title: st
   const weak = (setups ?? []).filter((s) => isUnreliable(`setup:${s.key}`));
   return (
     <Card title={<span className="inline-flex items-center gap-1">{title}<InfoTip>{help}</InfoTip></span>} actions={<SignalBadge label={result.label} tone={result.tone} strength={result.strength} score={result.score} confidence={result.confidence} limited={result.limitedBy} reliabilityKey={reliabilityKey} />}>
+      {result.why && <p className="mb-1 text-sm text-ink">{result.why}</p>}
       <p className="mb-1 text-xs text-ink-2">Fiabilité de « {result.label} » : {reliabilityPhrase(reliabilityOf(reliabilityKey))}</p>
       <p className="mb-2 text-xs text-muted">Score {result.score > 0 ? '+' : ''}{result.score} sur ±100 · confiance {result.confidence}</p>
       {reliable.length > 0 && (
