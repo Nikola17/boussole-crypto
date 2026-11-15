@@ -15,6 +15,7 @@ import { BACKUP_KEYS, DATA_VERSION } from '../lib/backup';
 import { guardedStorage, migrateState, STORE_KEY, systemStorage, useStorageStatus } from './persistence';
 import { saveSecrets, secretsSealed, stripSecrets } from '../lib/secure';
 import { fixPaperFees } from '../lib/paper';
+import { mergeDayLogs } from '../lib/lab/autoState';
 
 export interface AppState {
   settings: Settings;
@@ -428,8 +429,11 @@ export const useStore = create<AppState>()(
       upsertPaperOrder: (o) => set((s) => ({ paperOrders: upsert(s.paperOrders, touch(o)) })),
       removePaperOrder: (id) => set((s) => ({ paperOrders: s.paperOrders.filter((x) => x.id !== id), ...dropped(s, `paperOrders/${id}`) })),
       applyPaperDays: (days) => set((s) => {
+        // Seuls les journaux dont le contenu change sont réécrits (deux appareils calculent le même jour à l'identique).
+        const { changed } = mergeDayLogs(s.paperDays, days);
+        if (!changed.length) return {};
         let list = s.paperDays;
-        for (const d of days) list = upsert(list, touch(d));
+        for (const d of changed) list = upsert(list, touch(d));
         return { paperDays: list };
       }),
       upsertDefiBet: (b) => set((s) => ({ defiBets: upsert(s.defiBets, touch(b)) })),

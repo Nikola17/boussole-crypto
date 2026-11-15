@@ -47,3 +47,16 @@ describe('suppression d’un portefeuille', () => {
     expect(keys).toEqual(['paperDays/p1:2026-11-02', 'paperOrders/o1', 'paperPortfolios/p1', 'paperTrades/t1']);
   });
 });
+
+describe('journaux d’autopilote', () => {
+  beforeEach(() => useStore.getState().resetAll());
+  it('un journal identique venu d’un autre appareil n’est pas réécrit', () => {
+    const d: PaperDayLog = { id: 'p1:2026-11-02', portfolioId: 'p1', day: '2026-11-02', decidedOn: '2026-11-01', rules: 'r', depositUsd: 25, fills: [], skipped: [], by: 'pc' };
+    useStore.getState().applyPaperDays([d]);
+    const first = useStore.getState().paperDays[0];
+    useStore.getState().applyPaperDays([{ ...d, by: 'vps' }]);
+    expect(useStore.getState().paperDays[0]).toBe(first);
+    useStore.getState().applyPaperDays([{ ...d, depositUsd: 30 }]);
+    expect(useStore.getState().paperDays[0].depositUsd).toBe(30);
+  });
+});
