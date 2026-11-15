@@ -22,8 +22,10 @@ function usePriceOf(coinId: string | undefined): number | null {
 
 // ------------------------------------------------------------------ Transaction
 
-export function TransactionModal({ open, onClose, initial, presetCoin, presetType }: {
+export function TransactionModal({ open, onClose, initial, presetCoin, presetType, copyOf }: {
   open: boolean; onClose: () => void; initial?: Transaction | null; presetCoin?: CoinRef | null; presetType?: TxType;
+  /** Copie en réel d'un ordre d'autopilote : la transaction enregistrée porte ce lien. */
+  copyOf?: Transaction['copyOf'];
 }) {
   const upsert = useStore((s) => s.upsertTransaction);
   const accounts = useStore((s) => s.accounts);
@@ -175,6 +177,7 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
       time: initial && !dateChanged ? initial.time : (date === isoDay() ? new Date().toISOString() : undefined),
       accountId: account || undefined,
       toAccountId: type === 'transfer' ? toAccount : undefined,
+      copyOf: initial ? initial.copyOf : copyOf,
     };
     upsert(tx);
     onClose();
@@ -416,7 +419,7 @@ export function TradeModal({ open, onClose, initial, preset }: {
     const base: TradeEntry = initial ?? {
       id: uid(), coinId: preset?.coinId ?? '', symbol: preset?.symbol ?? '', side: preset?.side ?? 'long', status: 'open', entryDate: isoDay(),
       entryPrice: preset?.entryPrice ?? 0, quantity: preset?.quantity ?? 0, stopLoss: preset?.stopLoss, takeProfit: preset?.takeProfit,
-      leverage: preset?.leverage ?? 1, fees: 0, setup: preset?.setup ?? '', emotion: '', notes: '',
+      leverage: preset?.leverage ?? 1, fees: 0, setup: preset?.setup ?? '', emotion: '', notes: '', copyOf: preset?.copyOf,
     };
     setT(base);
     setCoin(base.coinId ? { coinId: base.coinId, symbol: base.symbol, name: base.symbol.toUpperCase() } : null);

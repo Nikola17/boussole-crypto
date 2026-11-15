@@ -22,6 +22,7 @@ import { fmtDate, fmtNum, fmtPrice, isoDay } from '../../lib/format';
 import { Badge, Banner, Button, Card, Empty, Field, Modal, NumberInput, Segmented, Stat } from '../../components/ui';
 import { EquityChart } from './EquityChart';
 import { btcReference } from './Portfolios';
+import { CopyButton, CopyForms, CopyReportCard, CopySizeBanner, useCopySize } from './CopyReport';
 import benchFile from '../../data/strategies-bench.json';
 import type { PaperDayLog, PaperPortfolio } from '../../types';
 
@@ -96,6 +97,11 @@ export function AutopilotDetail({ p, onBack }: { p: PaperPortfolio; onBack: () =
   const [ask, setAsk] = useState(false);
   const [sim, setSim] = useState<DayPoint[] | null>(null);
   const [simBusy, setSimBusy] = useState(false);
+  const [copyTarget, setCopyTarget] = useState<{ day: string; fill: PaperDayLog['fills'][number] } | null>(null);
+  const trader = v.strategy?.kind === 'trades';
+  const sizeOf = useCopySize(v.verdict, trader ? Number((p.params ?? {}).riskPct ?? v.strategy?.defaults.riskPct ?? 1) : null);
+  const lastBuy = [...v.logs].reverse().flatMap((l) => l.fills).find((f) => f.side === 'buy' && f.kind === 'market');
+  const coinIds = useMemo(() => [...new Set(v.logs.flatMap((l) => l.fills.map((f) => f.coinId)))], [v.logs]);
   const last = v.series[v.series.length - 1];
   const perf = v.series.length > 1 ? twr(v.series) * 100 : null;
   const refPerf = v.reference && v.reference.length > 1 ? twr(v.reference) * 100 : null;
@@ -146,6 +152,8 @@ export function AutopilotDetail({ p, onBack }: { p: PaperPortfolio; onBack: () =
         <Stat label="Positions" value={Object.keys(v.state.positions).length} hint={Object.values(v.state.positions).map((x) => x.symbol.toUpperCase()).join(', ') || 'aucune'} />
       </div>
       <TrustPanel v={v.verdict} appPerf={v.appPerf} perf={perf} />
+      {lastBuy && <CopySizeBanner size={sizeOf(lastBuy)} verdict={v.verdict} />}
+      <CopyReportCard logs={v.logs} coinIds={coinIds} />
       <Card title="Courbe" subtitle={sim ? 'Pointillé : ce qu’elle aurait fait sur l’année précédente (simulation) ; trait plein : en direct' : 'En direct, frais compris'}
         actions={v.strategy?.replayable && !sim ? <Button size="sm" loading={simBusy} onClick={() => void runSim()}>Montrer ce qu’elle aurait fait depuis un an</Button> : null}>
         {merged.length > 1 ? <EquityChart series={merged} reference={v.reference} liveSince={sim ? p.liveSince : undefined} /> : <p className="text-sm text-muted">Démarre {p.liveSince ? `le ${fmtDate(p.liveSince)}` : 'demain'} à {p.executionHour ?? 8} h : la courbe apparaîtra après deux jours.</p>}
@@ -157,7 +165,7 @@ export function AutopilotDetail({ p, onBack }: { p: PaperPortfolio; onBack: () =
             {[...v.logs].reverse().slice(0, 30).map((l) => (
               <li key={l.id} className="py-2 text-sm">
                 <div className="text-xs text-muted">{fmtDate(l.day)}{l.depositUsd ? ` · apport ${fmtNum(l.depositUsd)} USDC` : ''}{l.lateDays ? ` · exécuté avec ${l.lateDays} jour${l.lateDays > 1 ? 's' : ''} de retard` : ''}</div>
-                {l.fills.map((f, k) => <div key={k} className="text-ink">{f.kind === 'stop' ? 'STOP TOUCHÉ · ' : f.kind === 'target' ? 'OBJECTIF ATTEINT · ' : ''}{orderLine(f)}</div>)}
+                {l.fills.map((f, k) => <div key={k} className="text-ink">{f.kind === 'stop' ? 'STOP TOUCHÉ · ' : f.kind === 'target' ? 'OBJECTIF ATTEINT · ' : ''}{orderLine(f)}{!p.archived && v.strategy?.id !== 'dca-btc' && <CopyButton p={p} day={l.day} fill={f} verdict={v.verdict} trader={trader} onCopy={setCopyTarget} />}</div>)}
                 {l.skipped.map((x, k) => <div key={`s${k}`} className="text-xs text-muted">{x.symbol} : {x.why}</div>)}
               </li>
             ))}
@@ -174,6 +182,7 @@ export function AutopilotDetail({ p, onBack }: { p: PaperPortfolio; onBack: () =
           </ul>
         </Card>
       )}
+      <CopyForms p={p} target={copyTarget} trader={trader} onClose={() => setCopyTarget(null)} />
       <Modal open={ask} onClose={() => setAsk(false)} title="Supprimer cet autopilote ?" footer={<><Button variant="ghost" onClick={() => setAsk(false)}>Annuler</Button><Button variant="primary" onClick={() => { remove(p.id); onBack(); }}>Supprimer</Button></>}>
         <p className="text-sm text-ink-2">Ses journaux et son historique seront supprimés sur tous tes appareils. Ton vrai portefeuille n’est pas concerné.</p>
       </Modal>

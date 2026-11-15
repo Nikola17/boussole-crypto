@@ -174,6 +174,8 @@ export interface Transaction extends CoinRef {
   toAccountId?: string;
   /** Horodatage précis (UTC, ISO 8601) quand la plateforme le fournit. */
   time?: string;
+  /** Copie en réel d'un ordre d'autopilote (portefeuille papier, jour de l'ordre, crypto). */
+  copyOf?: { portfolioId: string; day: string; coinId: string };
 }
 
 export type WalletChain = 'bitcoin' | 'evm' | 'solana';
@@ -267,6 +269,8 @@ export interface TradeEntry {
   setup?: string;
   emotion?: string;
   notes?: string;
+  /** Copie en réel d'un ordre d'autopilote (portefeuille papier, jour de l'ordre, crypto). */
+  copyOf?: { portfolioId: string; day: string; coinId: string };
 }
 
 export interface PriceAlert {
