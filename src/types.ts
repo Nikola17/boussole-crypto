@@ -449,7 +449,12 @@ export interface SmartMove {
 }
 
 /** Relevé hebdomadaire des pépites proposées (identifiant = semaine ISO), suivi en avant à 30 et 90 jours. */
-export interface PickSnapshot { updatedAt?: UpdatedAt; id: string; week: string; picks: { coinId: string; symbol: string; source: 'gems' | 'basket'; score: number | null; priceUsd: number }[] }
+export interface PickSnapshot {
+  updatedAt?: UpdatedAt; id: string; week: string;
+  /** Jour du relevé et prix de Bitcoin ce jour-là ; puis Bitcoin 30 et 90 jours après (0 : fenêtre manquée). */
+  day: string; btcUsd: number; btc30?: number; btc90?: number;
+  picks: { coinId: string; symbol: string; source: 'gems' | 'basket'; score: number | null; priceUsd: number; p30?: number; p90?: number }[];
+}
 
 /** Journal d'un jour d'exécution d'un autopilote : l'état du portefeuille se rejoue à partir de ces journaux. */
 export interface PaperDayLog {

@@ -7,6 +7,7 @@ import { clamp } from './format';
 import { piecewise } from './cycle';
 import { isGold, isStable, isWrappedOrStaked } from './portfolio';
 import { FOMO_7D_PCT } from './thresholds';
+import type { CgMarket } from '../api/coingecko';
 
 export interface GemFlag {
   label: string;
@@ -41,6 +42,15 @@ export interface SmallCapFilter {
 }
 
 export const DEFAULT_SMALLCAP_FILTER: SmallCapFilter = { minCap: 5e6, maxCap: 500e6, minVolume: 300e3 };
+
+/** Entrée du score à partir d'une ligne CoinGecko (onglet « Petites capis » et relevé hebdomadaire des pépites). */
+export function smallCapInputOf(m: CgMarket, trending: boolean): SmallCapInput {
+  return {
+    id: m.id, symbol: m.symbol, name: m.name, marketCap: m.market_cap, fdv: m.fully_diluted_valuation, volume24h: m.total_volume,
+    change7d: m.price_change_percentage_7d_in_currency ?? null, change30d: m.price_change_percentage_30d_in_currency ?? null,
+    athChangePct: m.ath_change_percentage, rank: m.market_cap_rank, trending,
+  };
+}
 
 export function isSmallCapCandidate(c: SmallCapInput, f: SmallCapFilter): boolean {
   if (!(c.marketCap >= f.minCap && c.marketCap <= f.maxCap)) return false;

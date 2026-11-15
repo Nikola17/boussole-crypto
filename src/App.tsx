@@ -17,6 +17,7 @@ import { useBriefing } from './hooks/useBriefing';
 import { cancelDcaReminders, ensureNotificationPermission, installUpdate, isNative, lockAvailable, notify, openExternal, scheduleDcaReminders, syncDesktop, unlockApp } from './lib/platform';
 import { useSmartAlerts } from './hooks/useSmartAlerts';
 import { useSignalAlerts } from './hooks/useSignalAlerts';
+import { usePickSnapshots } from './hooks/usePickSnapshots';
 import { useExitPlan } from './hooks/useExitPlan';
 import { EMPTY_WATCH, syncRunner, watchAlerts } from './lib/runnerSync';
 import { fmtPrice, isoDay } from './lib/format';
@@ -91,6 +92,7 @@ function AppEffects() {
   usePaperSettle();
   useAutopilot();
   useSnapshots();
+  usePickSnapshots();
   useAutoBackup();
   useSyncLifecycle();
   const exit = useExitPlan();

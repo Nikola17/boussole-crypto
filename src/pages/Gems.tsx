@@ -7,7 +7,7 @@ import { CdcBadge } from '../components/CdcBadge';
 import { useCryptoCom } from '../hooks/useCryptoCom';
 import { useCategories, useDefi, useDexPools, useFx, useMarkets, useSmallCaps, useTrending } from '../hooks/useMarket';
 import {
-  DEFAULT_POOL_FILTER, DEFAULT_SMALLCAP_FILTER, isDefiCandidate, isSmallCapCandidate, looksLikeNonGem, scoreDefi, scorePool, scoreSmallCap, type GemFlag,
+  DEFAULT_POOL_FILTER, DEFAULT_SMALLCAP_FILTER, isDefiCandidate, isSmallCapCandidate, looksLikeNonGem, scoreDefi, scorePool, scoreSmallCap, smallCapInputOf, type GemFlag,
 } from '../lib/gems';
 import { isStable, isWrappedOrStaked } from '../lib/portfolio';
 import { NETWORKS, getTokenPairs, networkByKey, poolLinks, type DexPair, type DexPool } from '../api/dex';
@@ -15,6 +15,7 @@ import { scanEvm, scanSolana, type SecurityReport } from '../api/security';
 import { walletHoldings } from '../api/smartmoney';
 import { emergingCandidates } from '../lib/emerging';
 import { getMarkets } from '../api/coingecko';
+import { pickPerformance, PICK_CARD_MIN_WEEKS } from '../lib/pickTracking';
 import { fmtAge, fmtCompact, fmtNum, fmtPct, fmtPrice } from '../lib/format';
 import { openExternal } from '../lib/platform';
 import { Link, setQuery, useHashPath } from '../router';
@@ -62,6 +63,7 @@ export default function Gems() {
           { value: 'suivis', label: 'Mes tokens suivis' },
         ]}
       />
+      {tab === 'smallcaps' && <PicksTrackCard />}
       {tab === 'smallcaps' && <SmallCaps />}
       {tab === 'emerging' && <EmergingGems />}
       {tab === 'dex' && <DexGems />}
@@ -69,6 +71,27 @@ export default function Gems() {
       {tab === 'narratives' && <NarrativesTab />}
       {tab === 'suivis' && <WatchedTokens />}
     </div>
+  );
+}
+
+// ------------------------------------------------------------------ Ce que valaient les scores
+
+/** Suivi en avant : les 10 meilleures pépites et les découvertes du panier de chaque semaine, 30 et 90 jours après. */
+function PicksTrackCard() {
+  const snaps = useStore((s) => s.pickSnapshots);
+  const perf = useMemo(() => pickPerformance(snaps, new Date().toISOString().slice(0, 10)), [snaps]);
+  if (perf.weeks < PICK_CARD_MIN_WEEKS) return null;
+  const line = (h: string, p: { avgPct: number; vsBtcPts: number; n: number } | null, unknown: number) => p
+    ? <li>{h} : en moyenne <span className={p.avgPct >= 0 ? 'text-good' : 'text-critical'}>{fmtPct(p.avgPct)}</span>, soit {fmtNum(p.vsBtcPts)} points {p.vsBtcPts >= 0 ? 'de mieux' : 'de moins'} que Bitcoin ({p.n} relevé{p.n > 1 ? 's' : ''}{unknown ? `, ${unknown} sans prix` : ''}).</li>
+    : <li>{h} : pas encore de relevé arrivé à échéance.</li>;
+  return (
+    <Card title="Ce que valaient les scores" subtitle={`${perf.weeks} semaines de suivi : les 10 meilleures pépites et les découvertes du panier de chaque semaine`}>
+      <ul className="space-y-1 text-sm text-ink-2">
+        {line('À 30 jours', perf.at30, perf.unknown30)}
+        {line('À 90 jours', perf.at90, perf.unknown90)}
+      </ul>
+      <p className="mt-2 text-xs text-muted">Une crypto sortie du classement CoinGecko n’a plus de prix : elle n’est pas comptée, ce qui flatte un peu le résultat.</p>
+    </Card>
   );
 }
 
@@ -96,11 +119,7 @@ function SmallCaps() {
       .filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)))
       .map((m) => ({
         m,
-        input: {
-          id: m.id, symbol: m.symbol, name: m.name, marketCap: m.market_cap, fdv: m.fully_diluted_valuation, volume24h: m.total_volume,
-          change7d: m.price_change_percentage_7d_in_currency ?? null, change30d: m.price_change_percentage_30d_in_currency ?? null,
-          athChangePct: m.ath_change_percentage, rank: m.market_cap_rank, trending: trendingIds.has(m.id),
-        },
+        input: smallCapInputOf(m, trendingIds.has(m.id)),
       }))
       .filter((r) => isSmallCapCandidate(r.input, filter))
       .filter((r) => !onlyCdc || !cdc.ready || cdc.status(r.m.id) !== 'unknown')
