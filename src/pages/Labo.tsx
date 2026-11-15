@@ -5,7 +5,8 @@ import { useMemo } from 'react';
 import { PageHeader, Segmented } from '../components/ui';
 import { setQuery, useHashPath } from '../router';
 import { useMarkets } from '../hooks/useMarket';
-import { GhostCard, PaperPanel } from './Paper';
+import { GhostCard } from './Paper';
+import { PortfoliosTab } from './labo/Portfolios';
 import { BenchTab } from './labo/BenchTab';
 
 type Tab = 'papier' | 'fantomes' | 'banc';
@@ -23,11 +24,11 @@ export default function Labo({ initialTab }: { initialTab?: Tab }) {
     <div className="space-y-4 sm:space-y-6">
       <PageHeader title="Labo" subtitle="Teste sans risquer un euro : ordres fictifs aux prix réels, achats que tu n’as pas faits, et ce que valent vraiment les signaux de Boussole sur l’historique." />
       <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[
-        { value: 'papier', label: 'Papier' },
+        { value: 'papier', label: 'Portefeuilles papier' },
         { value: 'fantomes', label: 'Achats fantômes' },
         { value: 'banc', label: 'Banc d’essai' },
       ]} />
-      {tab === 'papier' && <PaperPanel />}
+      {tab === 'papier' && <PortfoliosTab />}
       {tab === 'fantomes' && <Ghosts />}
       {tab === 'banc' && <BenchTab />}
     </div>
