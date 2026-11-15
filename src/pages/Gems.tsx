@@ -1,5 +1,6 @@
 import { AlertTriangle, ExternalLink, Gem, Plus, ShieldCheck, Sparkles, Star, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
+import { NarrativesCard, TrendingCard } from '../components/MarketPulse';
 import { clsx } from 'clsx';
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../store/useStore';
@@ -27,7 +28,7 @@ import { AiProgress, NeedKey, ReportView, useAiConfig, useAiRunner } from '../co
 import { useAiContext } from '../ai/context';
 import { runGem } from '../ai/tasks';
 
-type Tab = 'smallcaps' | 'emerging' | 'dex' | 'defi' | 'narratives' | 'suivis';
+type Tab = 'smallcaps' | 'emerging' | 'dex' | 'defi' | 'narratives' | 'suivis' | 'smart' | 'airdrops';
 
 function Flags({ flags }: { flags: GemFlag[] }) {
   return (
@@ -37,9 +38,9 @@ function Flags({ flags }: { flags: GemFlag[] }) {
   );
 }
 
-export default function Gems() {
+export default function Gems({ initialTab }: { initialTab?: Tab } = {}) {
   const { query } = useHashPath();
-  const tab = (query.get('tab') as Tab) || 'smallcaps';
+  const tab = (query.get('tab') as Tab) || initialTab || 'smallcaps';
   const rules = useStore((s) => s.profile.rules);
 
   return (
@@ -61,6 +62,8 @@ export default function Gems() {
           { value: 'defi', label: 'DeFi sous-évaluée' },
           { value: 'narratives', label: 'Narratives' },
           { value: 'suivis', label: 'Mes tokens suivis' },
+          { value: 'smart', label: 'Smart money' },
+          { value: 'airdrops', label: 'Airdrops' },
         ]}
       />
       {tab === 'smallcaps' && <PicksTrackCard />}
@@ -70,9 +73,14 @@ export default function Gems() {
       {tab === 'defi' && <DefiGems />}
       {tab === 'narratives' && <NarrativesTab />}
       {tab === 'suivis' && <WatchedTokens />}
+      {tab === 'smart' && <Suspense fallback={<Spinner />}><Smart embedded /></Suspense>}
+      {tab === 'airdrops' && <Suspense fallback={<Spinner />}><Airdrops embedded /></Suspense>}
     </div>
   );
 }
+
+const Smart = lazy(() => import('./Smart'));
+const Airdrops = lazy(() => import('./Airdrops'));
 
 // ------------------------------------------------------------------ Ce que valaient les scores
 
@@ -474,6 +482,8 @@ function NarrativesTab() {
   const coins = useQuery({ queryKey: ['category', selected], queryFn: () => getMarkets({ category: selected!, perPage: 30 }), enabled: !!selected, staleTime: 10 * 60_000 });
 
   return (
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-2"><NarrativesCard /><TrendingCard /></div>
     <div className="grid gap-4 lg:grid-cols-5">
       <Card className="lg:col-span-2" title="Secteurs" subtitle="Variation de capitalisation sur 24 h">
         {cats.isLoading && <Spinner />}
@@ -504,6 +514,7 @@ function NarrativesTab() {
           ))}
         </ul>
       </Card>
+    </div>
     </div>
   );
 }

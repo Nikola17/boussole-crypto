@@ -23,12 +23,12 @@ const STATUS: Record<AirdropStatus, string> = {
   idee: 'À étudier', farming: 'En cours', eligible: 'Éligible', claimable: 'À réclamer', claimed: 'Réclamé', abandoned: 'Abandonné',
 };
 
-export default function Airdrops() {
+export default function Airdrops({ embedded = false }: { embedded?: boolean } = {}) {
   const { query } = useHashPath();
   const tab = (query.get('tab') as Tab) || 'tracker';
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader title="Airdrops" subtitle="Repère les protocoles susceptibles de distribuer un token, organise tes tâches de farming et évite les arnaques." />
+      {!embedded && <PageHeader title="Airdrops" subtitle="Repère les protocoles susceptibles de distribuer un token, organise tes tâches de farming et évite les arnaques." />}
       <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[
         { value: 'tracker', label: 'Mon tracker' },
         { value: 'radar', label: 'Radar DeFi' },

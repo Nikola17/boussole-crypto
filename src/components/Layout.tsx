@@ -2,34 +2,23 @@
 
 import { clsx } from 'clsx';
 import {
-  Bot, CandlestickChart, Coins, FlaskConical, Gem, Gift, GraduationCap, LayoutDashboard, LineChart, Menu, Repeat, Settings, Users, Wallet, X,
+  Bot, CandlestickChart, FlaskConical, Gem, LayoutDashboard, LineChart, Menu, MoreHorizontal, Repeat, Wallet, X, type LucideIcon,
 } from 'lucide-react';
+import { isNavActive, NAV_ROUTES } from '../lib/routes';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useHashPath } from '../router';
 import { useStore } from '../store/useStore';
 import { aiReady } from '../ai/run';
 import { StaleDataBanner, StorageBanner } from './StatusBanners';
 
-export const NAV = [
-  { to: '/', label: 'Cockpit', icon: LayoutDashboard, mobile: true },
-  { to: '/marche', label: 'Signaux', icon: LineChart, mobile: true },
-  { to: '/dca', label: 'DCA', icon: Repeat, mobile: true },
-  { to: '/portefeuille', label: 'Wallet', icon: Wallet, mobile: true },
-  { to: '/pepites', label: 'Pépites', icon: Gem },
-  { to: '/trading', label: 'Trading', icon: CandlestickChart },
-  { to: '/labo', label: 'Labo', icon: FlaskConical },
-  { to: '/smart', label: 'Smart money', icon: Users },
-  { to: '/ia', label: 'Copilote IA', icon: Bot, mobile: true },
-  { to: '/airdrops', label: 'Airdrops', icon: Gift },
-  { to: '/defi', label: 'Rendement & DeFi', icon: Coins },
-  { to: '/guide', label: 'Guide & profil', icon: GraduationCap },
-  { to: '/reglages', label: 'Réglages', icon: Settings },
-];
+const ICONS: Record<string, LucideIcon> = {
+  '/': LayoutDashboard, '/marche': LineChart, '/dca': Repeat, '/portefeuille': Wallet, '/labo': FlaskConical,
+  '/pepites': Gem, '/trading': CandlestickChart, '/ia': Bot, '/plus': MoreHorizontal,
+};
+export const NAV = NAV_ROUTES.map((n) => ({ ...n, icon: ICONS[n.to] ?? MoreHorizontal }));
+const NAV_BY_TO = new Map(NAV_ROUTES.map((n) => [n.to, n]));
+const isActive = (path: string, to: string) => { const n = NAV_BY_TO.get(to); return n ? isNavActive(path, n) : path === to; };
 
-function isActive(path: string, to: string) {
-  if (to === '/') return path === '/';
-  return path === to || path.startsWith(`${to}/`) || (to === '/marche' && path.startsWith('/coin/'));
-}
 
 export function Layout({ children }: { children: ReactNode }) {
   const { path } = useHashPath();

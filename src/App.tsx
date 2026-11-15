@@ -16,6 +16,7 @@ import { alertCoinsToFetch, checkPriceAlerts } from './lib/alerts';
 import { useBriefing } from './hooks/useBriefing';
 import { cancelDcaReminders, ensureNotificationPermission, installUpdate, isNative, lockAvailable, notify, openExternal, scheduleDcaReminders, syncDesktop, unlockApp } from './lib/platform';
 import { useSmartAlerts } from './hooks/useSmartAlerts';
+import { resolveRoute } from './lib/routes';
 import { useSignalAlerts } from './hooks/useSignalAlerts';
 import { usePickSnapshots } from './hooks/usePickSnapshots';
 import { useExitPlan } from './hooks/useExitPlan';
@@ -36,10 +37,9 @@ const CoinDetail = lazy(() => import('./pages/CoinDetail'));
 const Gems = lazy(() => import('./pages/Gems'));
 const Portfolio = lazy(() => import('./pages/Portfolio'));
 const Labo = lazy(() => import('./pages/Labo'));
-const Smart = lazy(() => import('./pages/Smart'));
 const Dca = lazy(() => import('./pages/Dca'));
 const Trading = lazy(() => import('./pages/Trading'));
-const Airdrops = lazy(() => import('./pages/Airdrops'));
+const More = lazy(() => import('./pages/More'));
 const Defi = lazy(() => import('./pages/Defi'));
 const Advisor = lazy(() => import('./pages/Advisor'));
 const Guide = lazy(() => import('./pages/Guide'));
@@ -49,20 +49,19 @@ function Routes() {
   const { path } = useHashPath();
   const coin = matchRoute('/coin/:id', path);
   if (coin) return <CoinDetail key={coin.id} id={coin.id} />;
-  switch (path) {
-    case '/marche': return <Market />;
-    case '/pepites': return <Gems />;
-    case '/portefeuille': return <Portfolio />;
-    case '/labo': return <Labo />;
-    case '/papier': return <Labo initialTab="papier" />;
-    case '/smart': return <Smart />;
-    case '/dca': return <Dca />;
-    case '/trading': return <Trading />;
-    case '/airdrops': return <Airdrops />;
-    case '/defi': return <Defi />;
-    case '/ia': return <Advisor />;
-    case '/guide': return <Guide />;
-    case '/reglages': return <Settings />;
+  const r = resolveRoute(path);
+  switch (r.page) {
+    case 'marche': return <Market />;
+    case 'pepites': return <Gems initialTab={r.tab as 'smart' | 'airdrops' | undefined} />;
+    case 'portefeuille': return <Portfolio />;
+    case 'labo': return r.tab === 'papier' ? <Labo initialTab="papier" /> : <Labo />;
+    case 'dca': return <Dca />;
+    case 'trading': return <Trading />;
+    case 'defi': return <Defi />;
+    case 'ia': return <Advisor />;
+    case 'plus': return <More />;
+    case 'guide': return <Guide />;
+    case 'reglages': return <Settings />;
     default: return <Dashboard />;
   }
 }

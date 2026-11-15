@@ -32,7 +32,7 @@ const explorerOf = (w: SmartWallet): string =>
 
 const KIND_LABEL: Record<SmartWallet['kind'], string> = { fund: 'Fond', insider: 'Initié', kol: 'KOL', other: 'Autre' };
 
-export default function Smart() {
+export default function Smart({ embedded = false }: { embedded?: boolean } = {}) {
   const wallets = useStore((s) => s.smartWallets);
   const watched = useStore((s) => s.watchedTokens);
   const transactions = useStore((s) => s.transactions);
@@ -87,11 +87,11 @@ export default function Smart() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader
+      {embedded ? <div className="flex justify-end"><Button size="sm" variant="primary" icon={<Plus className="size-4" />} onClick={() => setAddOpen(true)}>Suivre un wallet</Button></div> : <PageHeader
         title="Smart money"
         subtitle="Les wallets publics que tu suis pour leurs résultats — et ce qu'ils achètent, ou surtout vendent"
         actions={<Button size="sm" variant="primary" icon={<Plus className="size-4" />} onClick={() => setAddOpen(true)}>Suivre un wallet</Button>}
-      />
+      />}
 
       <Banner tone="info" title="Des adresses publiques, des mouvements publics">
         Tu suis des adresses de blockchain publiques (fonds, initiés, KOL) — jamais des secrets. Les mouvements sont
