@@ -6404,7 +6404,7 @@ async function getJson3(url, headers = {}) {
 var markets = (key, page) => getJson3(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${page}&price_change_percentage=7d,30d`, key ? { "x-cg-demo-api-key": key } : {});
 async function runnerAutopilotSources(coingeckoKey, rules) {
   const top = await cached("markets", 24 * H, () => markets(coingeckoKey, 1));
-  const prices = await getAllPrices();
+  const prices = await cached("prices", 10 * 6e4, getAllPrices);
   const symbolOf = (coinId) => {
     const m = top.find((x) => x.id === coinId);
     return pairOf({ coinId, symbol: m?.symbol ?? coinId }, prices, m?.current_price ?? null);

@@ -32,7 +32,8 @@ const markets = (key: string | null, page: number) => getJson<CgMarket[]>(`https
 
 export async function runnerAutopilotSources(coingeckoKey: string | null, rules: ProfileRules): Promise<AutopilotSources> {
   const top = await cached('markets', 24 * H, () => markets(coingeckoKey, 1));
-  const prices = await getAllPrices();
+  // Liste des paires Binance : sert à trouver le symbole de chaque crypto ; mémorisée 10 minutes (alertes de trades, signaux et autopilotes l'appellent à chaque cycle).
+  const prices = await cached('prices', 10 * 60_000, getAllPrices);
   const symbolOf = (coinId: string) => {
     const m = top.find((x) => x.id === coinId);
     return pairOf({ coinId, symbol: m?.symbol ?? coinId }, prices, m?.current_price ?? null);
