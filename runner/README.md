@@ -45,7 +45,7 @@ Il n'a besoin de **rien installer** : Node ≥ 20 suffit (le bundle
   Ethereum et Base (Blockscout) — aucune clé API nécessaire. Quand un wallet
   suivi achète un token de ta liste (tokens suivis du DEX, positions du journal,
   alertes armées), l'alerte part sur Telegram ; **sa VENTE** est mise en avant :
-  c'est le signal « relis ta thèse de sortie ». Le brief du matin résume leurs
+  c'est le signal « relis ton plan de sortie ». Le brief du matin résume leurs
   mouvements des dernières 24 h (`smartMoneyEnabled`, activé par défaut) ;
 - **autopilotes du Labo** (papier) : le serveur fait le même calcul que l'application, chaque jour à l'heure d'exécution de chaque autopilote ; les journaux sont écrits dans la synchronisation chiffrée, les ordres, stops et objectifs arrivent sur Telegram, et le brief du matin donne une ligne par autopilote (valeur, performance, verdict de confiance). Les ordres limites et stops des portefeuilles papier manuels sont aussi exécutés application fermée (`autopilotEnabled`, `autopilotTelegram`, activés par défaut) ;
 - **wallets suivis notés** : chaque mouvement d'un wallet suivi dont le prix du token est connu (DexScreener) est inscrit dans la synchronisation (300 au plus), puis rejugé avec le prix 7 et 30 jours après ; la page Smart money affiche la note de chaque wallet (`smartMoneyEnabled`) ;

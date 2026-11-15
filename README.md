@@ -35,17 +35,18 @@ Ce que tu peux faire ensuite, quand tu veux :
 | Besoin | Réponse de Boussole |
 |---|---|
 | « Que faire aujourd'hui ? » | Le Cockpit : température du marché 0-100, échéances DCA, paliers de vente atteints, éparpillement, brief IA du matin |
-| Investir sans se poser de questions | DCA automatique : un montant, tes jours d'achat, une part base / découverte, et Boussole te dit exactement quoi acheter (jusqu'à 3 cryptos du top 20 hors stablecoins + 3 découvertes) ; l'IA peut affiner l'ordre avec l'actualité, sans jamais sortir de tes règles |
+| Investir sans se poser de questions | DCA automatique : un montant, tes jours d'achat, une part base / découverte, et Boussole te dit exactement quoi acheter, modulé par la température du marché ; la règle de la base est celle que le banc d'essai a mesurée, et « Rejouer mon panier » la compare au DCA Bitcoin simple |
 | Acheter sans se faire avoir | Scan de sécurité on-chain (honeypot, taxes, mint, concentration, liquidité) avant tout achat de petite crypto, score de pépite, délai anti-FOMO de 24 h |
 | Ne plus rater une vente | Paliers de vente par paliers (×2, ×3, ×5…), alertes de prix, notifications Telegram application fermée |
 | Savoir quoi penser | Comité de 4 analystes IA en parallèle, analyse rapide, « pourquoi ça bouge ? » |
-| Trader avec méthode | Taille de position calculée depuis une crypto (stop et objectif techniques), positions ouvertes suivies en direct, journal et statistiques (pire série, baisse maximale) |
+| Trader avec méthode | Taille de position calculée depuis une crypto (stop jugé à la clôture, objectif 3 R), chances et espérance mesurées frais compris, « Tester sur papier » en un clic, journal comparé au banc d'essai |
 | Tenir un journal honnête | Coût moyen, plus-values (fiscalité française, formule 150 VH bis), frais réels, comparaison « tout en Bitcoin », discipline du mois |
-| Suivre des wallets | Adresses publiques et xpub en lecture seule (Bitcoin, EVM, Solana), wallets « smart money » recommandés selon ton portefeuille, pépites émergentes Solana/Base |
-| Tester sans risquer | Portefeuille papier en USDC aux prix réels, achats fantômes (« j'aurais acheté ici ») chiffrés |
+| Suivre des wallets | Adresses publiques et xpub en lecture seule (Bitcoin, EVM, Solana), courbe du portefeuille, wallets « smart money » notés sur leurs mouvements, pépites émergentes Solana/Base |
+| Savoir si un signal vaut quelque chose | Le Labo : chaque signal affiche sa fiabilité mesurée sur l'historique depuis 2019 ; banc d'essai des stratégies |
+| Tester sans risquer | Plusieurs portefeuilles papier aux frais réalistes, autopilotes qui suivent seuls une stratégie avec un verdict de confiance, copie en réel avec l'écart mesuré |
 | Protéger tes données | Tout sur ton appareil, verrou biométrique sur Android, secrets chiffrés par le système, aucune donnée vendue, aucune collecte |
 
-Chaque écran explique ses indicateurs — rien n'est une boîte noire. Le portrait complet des modules (Cockpit, Signaux, Wallet, DCA, Trading, Pépites, DeFi, Airdrops, Guide) est dans [`docs/FONCTIONNALITES.md`](docs/FONCTIONNALITES.md).
+Chaque écran explique ses indicateurs — rien n'est une boîte noire. Le portrait complet des modules (Cockpit, Signaux, DCA, Wallet, Labo, Pépites avec Smart money et Airdrops, Trading, Copilote IA, et dans « Plus » : Rendement & DeFi, Guide, Réglages) est dans [`docs/FONCTIONNALITES.md`](docs/FONCTIONNALITES.md).
 
 ## Tes données t'appartiennent
 

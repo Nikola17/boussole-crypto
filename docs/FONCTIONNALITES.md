@@ -283,6 +283,16 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Wallets suivis notés** (Smart money) : chaque mouvement est rejugé à 7 et 30 jours (achat gagnant si le prix a monté, vente gagnante si elle a évité une baisse) : « 14 mouvements suivis, 9 gagnants à 30 jours », et « historique défavorable » sous 40 % de gagnants sur 10 mouvements.
 - **Pépites suivies en avant** : chaque semaine, les 10 meilleures petites capis et les découvertes du panier sont notées avec leur prix ; la carte « Ce que valaient les scores » (Pépites) montre leur rendement à 30 et 90 jours face à Bitcoin, à partir de 8 semaines de recul.
 
+**DCA et trading sur preuves, menu simplifié (lot 5)**
+- **Règle de la base du panier mesurée** (`docs/bench/2026-11-15-dca-variantes.md`) : trois meilleurs scores, capitalisation, ancre Bitcoin et Ethereum, parts égales, Bitcoin seul, simulés sur l'historique. « Bitcoin seul » fait jeu égal avec le DCA Bitcoin simple (+286 % depuis 2023) quand les trois meilleurs scores ont fait +118 % : c'est la règle des nouveaux paniers. Un panier existant n'est jamais modifié d'office : une bannière montre la mesure et propose de changer en un clic. La règle se choisit dans l'éditeur, chiffres à l'appui.
+- **Multiplicateurs de température inchangés** : une table plus pentue gagne 2,8 points par an mais creuse la pire baisse.
+- **« Rejouer mon panier »** (DCA) : la base de ton panier depuis 2023, avec tes réglages et tes frais, face au DCA Bitcoin simple.
+- **Découvertes « non mesuré »** tant que le suivi en avant des pépites ne bat pas Bitcoin à 90 jours.
+- **Plans sur une seule crypto** : la section disparaît s'il n'y en a aucun ; les plans existants restent utilisables (« remplacés par le panier »).
+- **Trading** : setups détectés triés par fiabilité mesurée, régime du moment en tête, non validés masqués par défaut ; calculateur avec le plan v2, chances et espérance selon les frais (avertissement chiffré si elles deviennent négatives) ; « Tester sur papier » depuis le calculateur ou la fiche d'une crypto ; journal comparé au banc d'essai ; le serveur prévient quand le stop ou l'objectif d'un trade ouvert du journal est touché.
+- **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
+- **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute
