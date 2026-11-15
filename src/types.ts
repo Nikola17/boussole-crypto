@@ -79,6 +79,8 @@ export interface ProfileRules {
 
 export interface Profile {
   completed: boolean;
+  /** Seuils du verdict de confiance des autopilotes (Labo → Règles de confiance) ; absents : valeurs par défaut. */
+  trustRules?: Partial<{ minDays: number; minTrades: number; minDeposits: number; maxDrawdownPct: number; maxExtraDrawdownPts: number; bootstrapDraws: number; minWindowWinPct: number; withdrawGapPts: number; copyPct: number; copyPctTrusted: number }>;
   name: string;
   horizon: 1 | 2 | 3; // court, moyen, long
   riskTolerance: 1 | 2 | 3 | 4 | 5;
