@@ -4,32 +4,12 @@
 import { useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import { useMarkets } from './useMarket';
-import { binanceSymbolFor, getAllPrices, getKlines } from '../api/binance';
+import { getAllPrices } from '../api/binance';
+import { hourlyBetween, pairOf } from '../lib/lab/pairs';
 import { settleOrders } from '../lib/lab/settle';
 import type { Candle } from '../lib/indicators';
 
-const HOUR = 3600_000;
-
-/** Bougies 1 heure d'une paire depuis `fromMs` (12 pages de 1000 heures au plus). */
-export async function hourlySince(symbol: string, fromMs: number): Promise<Candle[]> {
-  const out: Candle[] = [];
-  let cursor = Math.floor(fromMs / HOUR) * HOUR;
-  for (let page = 0; page < 12; page++) {
-    const chunk = await getKlines(symbol, '1h', 1000, cursor);
-    if (!chunk.length) break;
-    out.push(...chunk);
-    if (chunk.length < 1000) break;
-    cursor = (chunk[chunk.length - 1].time + 3600) * 1000;
-  }
-  return out;
-}
-
-/** Paire Binance d'une crypto : contrôlée par le prix quand il est connu, sinon par le seul symbole. */
-export function pairOf(coin: { coinId: string; symbol: string }, prices: Map<string, number>, priceUsd: number | null): string | null {
-  if (priceUsd) return binanceSymbolFor({ id: coin.coinId, symbol: coin.symbol, priceUsd }, prices);
-  const sym = `${coin.symbol.toUpperCase()}USDT`;
-  return prices.has(sym) ? sym : null;
-}
+export { pairOf } from '../lib/lab/pairs';
 
 export function usePaperSettle(): void {
   const markets = useMarkets();
@@ -50,7 +30,7 @@ export function usePaperSettle(): void {
           const sym = pairOf(o, prices, price);
           if (!sym) continue;
           const from = Math.min(...open.filter((x) => x.coinId === coinId).map((x) => Date.parse(x.createdAt)));
-          hourly.set(coinId, await hourlySince(sym, from));
+          hourly.set(coinId, await hourlyBetween(sym, from));
         }
         if (stopped) return;
         for (const portfolio of useStore.getState().paperPortfolios.filter((p) => p.kind === 'manual')) {

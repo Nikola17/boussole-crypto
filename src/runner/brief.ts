@@ -71,6 +71,8 @@ export interface BriefInputs {
   emerging?: string[];
   /** Mode vacances actif : jusqu'à cette date (AAAA-MM-JJ). */
   vacationUntil?: string | null;
+  /** Autopilotes du Labo : une ligne par portefeuille (valeur, performance, verdict). */
+  autopilots?: string[];
 }
 
 const HEAD_TOP = 3;
@@ -136,6 +138,8 @@ export function buildBrief(i: BriefInputs): string {
   const usd = new Map<string, number>();
   for (const [id, p] of Object.entries(i.prices)) if (typeof p?.usd === 'number' && p.usd > 0) usd.set(id, p.usd as number);
 
+  // Autopilotes du Labo (papier) : ce que Boussole aurait fait seule, et si elle mérite ta confiance.
+  if (i.autopilots?.length) lines.push(['Autopilotes (papier) :', ...i.autopilots.map((l) => `· ${l}`)].join('\n'));
   // Portefeuille papier (expérimentations) : le P&L des ordres fictifs, valorisé aux mêmes prix réels.
   const paper = watch.paper;
   if (paper?.enabled && watch.paperTrades.length) {

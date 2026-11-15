@@ -5,25 +5,22 @@ import { useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import { useMarkets } from './useMarket';
 import { useCryptoComListing } from './useCryptoCom';
-import { getAllPrices, getKlines } from '../api/binance';
+import { getAllPrices } from '../api/binance';
 import { getMarkets, type CgMarket } from '../api/coingecko';
 import { getFearGreed } from '../api/feargreed';
 import { loadDailyHistory } from '../api/history';
-import { pairOf } from './usePaperSettle';
+import { hourlyBetween, pairOf } from '../lib/lab/pairs';
 import { autoBaseUniverse } from '../lib/autoBasket';
 import { rulesOf } from '../lib/profile';
 import { temperatureSeries } from '../lib/lab/replayTemp';
 import { needsArchive, tickAutopilot, type AutopilotSources } from '../lib/lab/autopilot';
 import { renewAutopilot } from '../lib/lab/autopilotFactory';
-import type { Candle } from '../lib/indicators';
 import type { ProfileRules } from '../types';
 
 /** Sources de données de l'application (Binance, CoinGecko, alternative.me) pour le tick. */
 export async function appSources(markets: CgMarket[], cdcSymbols: string[] | null, rules: ProfileRules): Promise<AutopilotSources> {
   const prices = await getAllPrices();
   const symbolOf = (coinId: string) => {
-    if (coinId === 'bitcoin') return 'BTCUSDT';
-    if (coinId === 'ethereum') return 'ETHUSDT';
     const m = markets.find((x) => x.id === coinId);
     return pairOf({ coinId, symbol: m?.symbol ?? coinId }, prices, m?.current_price ?? null);
   };
@@ -33,20 +30,7 @@ export async function appSources(markets: CgMarket[], cdcSymbols: string[] | nul
   let smallCaps: CgMarket[] | null | undefined;
   return {
     daily: async (coinId) => { const s = symbolOf(coinId); return s ? loadDailyHistory(s) : []; },
-    hourly: async (coinId, fromMs, toMs) => {
-      const s = symbolOf(coinId);
-      if (!s) return [];
-      const out: Candle[] = [];
-      let cursor = Math.floor(fromMs / 3600_000) * 3600_000;
-      for (let page = 0; page < 12 && cursor < toMs; page++) {
-        const chunk = await getKlines(s, '1h', 1000, cursor);
-        if (!chunk.length) break;
-        out.push(...chunk);
-        cursor = (chunk[chunk.length - 1].time + 3600) * 1000;
-        if (chunk.length < 1000) break;
-      }
-      return out.filter((c) => c.time * 1000 < toMs);
-    },
+    hourly: async (coinId, fromMs, toMs) => { const s = symbolOf(coinId); return s ? hourlyBetween(s, fromMs, toMs) : []; },
     temperatureAt: (day) => temps.get(day) ?? null,
     universe: async () => autoBaseUniverse(markets).map((u) => ({ coinId: u.id, symbol: u.symbol, name: u.name, rank: u.rank, available: cdcSymbols ? cdcSymbols.includes(u.symbol.toUpperCase()) : null })),
     live: async () => {

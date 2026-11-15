@@ -18,7 +18,7 @@ const PASS = 'phrase de passe du runner';
 const CFG: RunnerConfig = {
   syncRepo: 'Nikola17/boussole-sync', syncPath: 'boussole-sync.enc', syncToken: 'tok', passphrase: PASS,
   telegramToken: 'tg', telegramChatId: '42', coingeckoKey: null, currency: 'EUR',
-  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, smartMoneyEnabled: false, emergingEnabled: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', quietStart: 0, quietEnd: 0, stateDir: '', device: 'vps-test',
+  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, smartMoneyEnabled: false, emergingEnabled: false, autopilotEnabled: false, autopilotTelegram: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', quietStart: 0, quietEnd: 0, stateDir: '', device: 'vps-test',
 };
 
 const txSol: Transaction = { id: 't1', coinId: 'solana', symbol: 'sol', name: 'Solana', date: '2026-01-10', type: 'buy', quantity: 100, price: 2, currency: 'USD', fee: 0, fxEurPerUsd: 0.87, updatedAt: '2026-01-10T00:00:00Z' };
@@ -534,5 +534,46 @@ describe('cycle du runner — silence nocturne', () => {
     expect(morning.result.error).toContain('Telegram');
     expect(Object.keys(morning.state.quietQueue)).toHaveLength(2);
     expect(morning.state.sent).toEqual({}); // rien de marqué : le suivant retentera
+  });
+});
+
+describe('autopilotes dans le cycle du serveur', () => {
+  const CFG_AP = { ...CFG, autopilotEnabled: true, autopilotTelegram: true };
+  const fakeAutopilot = (calls: { n: number }) => async (b: { data: Record<string, unknown>; deletions: unknown[]; stamps: Record<string, string> }) => {
+    calls.n++;
+    return { bundle: { ...b, data: { ...b.data, paperDays: [{ id: 'a1:2026-11-20', portfolioId: 'a1', day: '2026-11-20' }] } } as never, changed: 1, events: [{ key: 'auto:a1:2026-11-20', text: 'Autopilote « Test » — ordres du 20/11 (papier)' }], briefLines: ['Test : 100 USDC (+1,0 %) — en observation'] };
+  };
+  it('message envoyé une fois, journaux écrits dans la même écriture', async () => {
+    const calls = { n: 0 };
+    const { deps, sent, pushes } = makeDeps({ transactions: [] }, { prices: FLAT });
+    deps.autopilot = fakeAutopilot(calls);
+    const first = await runCycle(CFG_AP, emptyState(), { dry: false, forceBrief: false }, deps, H(10));
+    expect(sent.filter((t) => t.startsWith('Autopilote'))).toHaveLength(1);
+    expect(pushes).toHaveLength(1);
+    const remote = await unseal(pushes[0].text, PASS) as { data: { paperDays: unknown[] } };
+    expect(remote.data.paperDays).toHaveLength(1);
+    await runCycle(CFG_AP, first.state, { dry: false, forceBrief: false }, deps, H(10, 5));
+    expect(sent.filter((t) => t.startsWith('Autopilote'))).toHaveLength(1);
+  });
+  it('conflit d’écriture : rien n’est perdu, aucun message en double au cycle suivant', async () => {
+    const calls = { n: 0 };
+    const { deps, sent } = makeDeps({ transactions: [] }, { prices: FLAT, pushError: CONFLICT });
+    deps.autopilot = fakeAutopilot(calls);
+    const first = await runCycle(CFG_AP, emptyState(), { dry: false, forceBrief: false }, deps, H(10));
+    expect(first.result.error).toContain('l’autre appareil');
+    await runCycle(CFG_AP, first.state, { dry: false, forceBrief: false }, deps, H(10, 5));
+    expect(sent.filter((t) => t.startsWith('Autopilote'))).toHaveLength(1);
+  });
+  it('à blanc : ni écriture ni envoi ; désactivé : non appelé ; brief avec les autopilotes', async () => {
+    const calls = { n: 0 };
+    const { deps, sent, pushes } = makeDeps({ transactions: [] }, { prices: FLAT });
+    deps.autopilot = fakeAutopilot(calls);
+    const dry: string[] = [];
+    await runCycle(CFG_AP, emptyState(), { dry: true, forceBrief: true, onDry: (t) => dry.push(t) }, deps, H(10));
+    expect(pushes).toHaveLength(0);
+    expect(sent).toHaveLength(0);
+    expect(dry.some((t) => t.includes('Test : 100 USDC'))).toBe(true);
+    await runCycle({ ...CFG_AP, autopilotEnabled: false }, emptyState(), { dry: false, forceBrief: false }, deps, H(10));
+    expect(calls.n).toBe(1);
   });
 });

@@ -23,6 +23,9 @@
   "smartMoneyEnabled": true,
   "_emerging": "digest des nouvelles paires Solana/Base en traction dans le brief du matin",
   "emergingEnabled": true,
+  "_autopilot": "autopilotes du Labo : calculés aussi sur le serveur, ordres et stops envoyés sur Telegram",
+  "autopilotEnabled": true,
+  "autopilotTelegram": true,
   "timeZone": "Europe/Paris",
   "stateDir": "",
   "device": "hermes-vps"

@@ -18,6 +18,7 @@ import { isHotNews, newsKey, type NewsItem, type RatedNews, type WatchedCoin } f
 import { eventKey, refsOf, relevantEvents, smartBriefLines, smartMessage, type SmartEvent } from '../lib/smartmoney';
 import { nextMacroEvents } from '../lib/macro';
 import type { SmartWallet } from '../types';
+import type { AutopilotRun } from './autopilot';
 
 const DAY_MS = 24 * 3600_000;
 /** Une même zone de marché ne re-sonne pas plus d'une fois par semaine (les allers-retours rapides restent silencieux). */
@@ -56,6 +57,8 @@ export interface CycleDeps {
   smartEvents?: (wallets: SmartWallet[], sinceMs: number, nowMs: number) => Promise<SmartEvent[]>;
   /** Digest « pépites émergentes » du brief du matin (facultatif) : une ligne par candidate, déjà rédigée. */
   emerging?: (wallets: SmartWallet[]) => Promise<string[]>;
+  /** Autopilotes et ordres papier (facultatif) : faisceau mis à jour, messages et lignes du brief. */
+  autopilot?: (bundle: SyncBundle, nowMs: number) => Promise<AutopilotRun>;
 }
 
 export interface CycleOptions {
@@ -135,6 +138,15 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
 
   const bundle = asBundle(await unseal(remote.content, cfg.passphrase));
   const watch = watchOf(bundle);
+  // Autopilotes du Labo : même calcul que l'application ; leurs journaux partent dans l'écriture unique du faisceau.
+  let working: SyncBundle = bundle;
+  let autopilotChanged = 0;
+  let autopilotLines: string[] = [];
+  let autopilotEvents: { key: string; text: string }[] = [];
+  if (cfg.autopilotEnabled && deps.autopilot) {
+    const r = await deps.autopilot(bundle, nowMs).catch(() => null);
+    if (r) { working = r.bundle; autopilotChanged = r.changed; autopilotLines = r.briefLines; autopilotEvents = r.events; }
+  }
   // Mode vacances : veille critique uniquement (alertes de prix, paliers), le bruit s'arrête.
   const onVacation = !!watch.vacationUntil && watch.vacationUntil >= dayKey;
   const priceRows = await deps.prices(coinsOf(bundle, watch));
@@ -253,6 +265,9 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
   }
   queue.push(...smartAlerts);
 
+  // 1 quint. Autopilotes (papier) : ordres du jour, stops et objectifs, ordres manuels exécutés. Pas en vacances.
+  if (cfg.autopilotTelegram && !onVacation) for (const e of autopilotEvents) if (shouldSend(state, e.key)) queue.push(e);
+
   // 2. Envoi. Silence nocturne : rien ne part entre quietStart et quietEnd — les alertes attendent en file
   //    (regroupées par clé, heures réelles conservées) et partent en un seul message à la fin de la nuit.
   const consumedIds: string[] = [];
@@ -321,15 +336,15 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
 
   // 3. Consommation des alertes de prix dans le faisceau distant : l'application les verra déclenchées à
   //    sa propre synchronisation et ne les re-notifiera pas. Conflit (l'autre appareil vient d'écrire) : on n'insiste pas.
-  if (consumedIds.length && !opts.dry) {
+  if ((consumedIds.length || autopilotChanged) && !opts.dry) {
     try {
-      const next = consumeAlerts(bundle, consumedIds, now.toISOString());
+      const next = consumedIds.length ? consumeAlerts(working, consumedIds, now.toISOString()) : working;
       const sealed = await seal({ ...next, device: cfg.device, savedAt: now.toISOString() }, cfg.passphrase);
       await deps.pushRemote(sealed, remote.sha);
       result.consumed = consumedIds.length;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      result.error = result.error ?? (msg === CONFLICT ? 'l’autre appareil vient d’écrire la synchronisation : la consommation passera au prochain cycle' : msg);
+      result.error = result.error ?? (msg === CONFLICT ? 'l’autre appareil vient d’écrire la synchronisation : l’écriture passera au prochain cycle' : msg);
     }
   }
 
@@ -350,7 +365,7 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
       temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
       cycleMetrics: temperature ? { mvrv: temperature.mvrv, stableShare: temperature.stableShare, halvingDaysToNext: temperature.halvingDaysToNext } : null,
       slot: slot.id, news: ratedNews.slice(0, 6), smart: smartBriefLines(smartRecent, nowMs),
-      emerging: emergingLines, vacationUntil: onVacation ? watch.vacationUntil : null,
+      emerging: emergingLines, vacationUntil: onVacation ? watch.vacationUntil : null, autopilots: autopilotLines,
     });
     try {
       await send(brief);
