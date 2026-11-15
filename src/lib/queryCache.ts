@@ -4,6 +4,7 @@
 // concurrencer tes vraies données (journal, plans…) pour la place limitée du stockage local.
 
 import type { QueryClient } from '@tanstack/react-query';
+import { idbGet, idbPut } from './idb';
 
 /** Requêtes conservées (premier élément de leur clé) : celles qui alimentent le Cockpit, le portefeuille et le cycle. */
 export const PERSISTED_ROOTS = new Set(['markets', 'global', 'fng', 'btc-history', 'funding', 'fx']);
@@ -43,43 +44,16 @@ export function restoreSnapshot(qc: Pick<QueryClient, 'setQueryData'>, snap: unk
   return n;
 }
 
-// ------------------------------------------------------------------ IndexedDB (sans dépendance)
+// ------------------------------------------------------------------ IndexedDB (src/lib/idb.ts)
 
-const DB_NAME = 'boussole-cache';
-const STORE = 'kv';
 const KEY = 'queries';
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') { reject(new Error('IndexedDB indisponible')); return; }
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error('IndexedDB'));
-  });
-}
-
-async function idb<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T>): Promise<T | null> {
-  try {
-    const db = await openDb();
-    return await new Promise<T | null>((resolve) => {
-      const tx = db.transaction(STORE, mode);
-      const req = run(tx.objectStore(STORE));
-      req.onsuccess = () => resolve(req.result ?? null);
-      req.onerror = () => resolve(null);
-      tx.oncomplete = () => db.close();
-    });
-  } catch {
-    return null; // le cache est un confort : son absence ne doit jamais gêner l'application
-  }
-}
-
 export async function loadSnapshot(): Promise<unknown> {
-  return idb('readonly', (s) => s.get(KEY));
+  return idbGet(KEY);
 }
 
 export async function saveSnapshot(snap: CacheSnapshot): Promise<void> {
-  await idb('readwrite', (s) => s.put(snap, KEY));
+  await idbPut(KEY, snap);
 }
 
 /** Restaure les dernières données connues avant l'affichage (au plus `timeoutMs` d'attente). */
