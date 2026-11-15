@@ -27,6 +27,7 @@ import { loadSecrets, saveSecrets, secretsSealed } from './lib/secure';
 import Dashboard from './pages/Dashboard';
 import { usePaperSettle } from './hooks/usePaperSettle';
 import { useAutopilot } from './hooks/useAutopilot';
+import { useSnapshots } from './hooks/useSnapshots';
 
 const Market = lazy(() => import('./pages/Market'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
@@ -87,6 +88,7 @@ function AppEffects() {
   useSmartAlerts();
   usePaperSettle();
   useAutopilot();
+  useSnapshots();
   useAutoBackup();
   useSyncLifecycle();
   const exit = useExitPlan();

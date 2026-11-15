@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
-  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, HotNote, ImpulseWait, PaperConfig, PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PriceAlert, Profile, ProfileChange, Settings, SmartWallet, SyncDeletion, Thesis,
+  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, HotNote, ImpulseWait, PaperConfig, PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PickSnapshot, PortfolioSnapshot, SmartMove, PriceAlert, Profile, ProfileChange, Settings, SmartWallet, SyncDeletion, Thesis,
   TradeEntry, Transaction, WalletAddress, WatchedToken,
 } from '../types';
 import { defaultProfile, rulesOf } from '../lib/profile';
@@ -49,6 +49,9 @@ export interface AppState {
   paperPortfolios: PaperPortfolio[];
   paperOrders: PaperOrder[];
   paperDays: PaperDayLog[];
+  portfolioSnapshots: PortfolioSnapshot[];
+  smartMoves: SmartMove[];
+  pickSnapshots: PickSnapshot[];
   smartWallets: SmartWallet[];
   hotNotes: HotNote[];
   /** Attentes anti-FOMO : achats sur une crypto qui a trop monté en 7 jours, bloqués 24 h. */
@@ -124,6 +127,8 @@ export interface AppState {
   removePaperOrder: (id: string) => void;
   /** Enregistre des journaux d'autopilote (seuls ceux dont le contenu change sont réécrits). */
   applyPaperDays: (days: PaperDayLog[]) => void;
+  upsertPortfolioSnapshot: (s: PortfolioSnapshot) => void;
+  upsertPickSnapshot: (s: PickSnapshot) => void;
   upsertDefiBet: (b: DefiBet) => void;
   removeDefiBet: (id: string) => void;
   /** Ajoute des transactions importées ; celles dont l'identifiant existe déjà sont ignorées (aucun doublon). */
@@ -239,6 +244,9 @@ const initialData = () => ({
   paperPortfolios: [{ id: 'manuel', name: 'Papier manuel', kind: 'manual', startingUsd: 1000, createdAt: new Date().toISOString(), costs: { preset: 'exchange', feePct: 0.1, spreadPct: 0.05 } }] as PaperPortfolio[],
   paperOrders: [] as PaperOrder[],
   paperDays: [] as PaperDayLog[],
+  portfolioSnapshots: [] as PortfolioSnapshot[],
+  smartMoves: [] as SmartMove[],
+  pickSnapshots: [] as PickSnapshot[],
   defiBets: [] as DefiBet[],
   cdcSeen: [] as string[],
   deletions: [] as SyncDeletion[],
@@ -426,6 +434,8 @@ export const useStore = create<AppState>()(
           deletions,
         };
       }),
+      upsertPortfolioSnapshot: (x) => set((s) => ({ portfolioSnapshots: upsert(s.portfolioSnapshots, touch(x)) })),
+      upsertPickSnapshot: (x) => set((s) => ({ pickSnapshots: upsert(s.pickSnapshots, touch(x)) })),
       upsertPaperOrder: (o) => set((s) => ({ paperOrders: upsert(s.paperOrders, touch(o)) })),
       removePaperOrder: (id) => set((s) => ({ paperOrders: s.paperOrders.filter((x) => x.id !== id), ...dropped(s, `paperOrders/${id}`) })),
       applyPaperDays: (days) => set((s) => {

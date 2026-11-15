@@ -60,3 +60,12 @@ describe('journaux d’autopilote', () => {
     expect(useStore.getState().paperDays[0].depositUsd).toBe(30);
   });
 });
+
+describe('migration 3 → 4', () => {
+  it('ajoute les relevés, les mouvements suivis et les relevés de pépites', () => {
+    const out = migrateState({ paperTrades: [], paperPortfolios: [], paperOrders: [], paperDays: [] }, 3) as Record<string, unknown>;
+    expect(out.portfolioSnapshots).toEqual([]);
+    expect(out.smartMoves).toEqual([]);
+    expect(out.pickSnapshots).toEqual([]);
+  });
+});

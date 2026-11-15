@@ -7,20 +7,21 @@ import { sanitizeReportData } from './reportData';
 /**
  * Version du format des données (stockage et fichiers de sauvegarde). À augmenter avec une migration dans store/persistence.ts.
  * v2 (1.8.0) : horodatages des éléments (`updatedAt`), suppressions à propager (`deletions`) et horodatages par rubrique (`syncStamp`).
+ * v4 (1.28.0) : relevés quotidiens du portefeuille, mouvements des wallets suivis, relevés des pépites.
  * v3 (1.28.0) : plusieurs portefeuilles papier (`paperPortfolios`), ordres en attente (`paperOrders`), journaux des autopilotes (`paperDays`).
  */
-export const DATA_VERSION = 3;
+export const DATA_VERSION = 4;
 
 /** Toutes les données de l'utilisateur : le stockage et la sauvegarde partent de cette seule liste. */
 export const BACKUP_KEYS = [
   'settings', 'profile', 'watchlist', 'watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions',
-  'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'checklist', 'accounts', 'basket', 'basketExecutions', 'exitDone', 'coreTrims', 'envelope', 'defiBets', 'cdcSeen', 'paperTrades', 'paper', 'paperPortfolios', 'paperOrders', 'paperDays', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory',
+  'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'checklist', 'accounts', 'basket', 'basketExecutions', 'exitDone', 'coreTrims', 'envelope', 'defiBets', 'cdcSeen', 'paperTrades', 'paper', 'paperPortfolios', 'paperOrders', 'paperDays', 'portfolioSnapshots', 'smartMoves', 'pickSnapshots', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory',
   'deletions', 'syncStamp',
 ] as const;
 export type BackupKey = (typeof BACKUP_KEYS)[number];
 
 const STRING_LISTS: BackupKey[] = ['watchlist', 'cdcSeen'];
-const OBJECT_LISTS: BackupKey[] = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'accounts', 'basketExecutions', 'defiBets', 'paperTrades', 'paperPortfolios', 'paperOrders', 'paperDays', 'deletions', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory'];
+const OBJECT_LISTS: BackupKey[] = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'theses', 'reports', 'chat', 'accounts', 'basketExecutions', 'defiBets', 'paperTrades', 'paperPortfolios', 'paperOrders', 'paperDays', 'portfolioSnapshots', 'smartMoves', 'pickSnapshots', 'deletions', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory'];
 const PLAIN_OBJECTS: BackupKey[] = ['settings', 'profile', 'checklist', 'exitDone', 'coreTrims', 'envelope', 'syncStamp'];
 
 /**

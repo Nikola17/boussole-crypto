@@ -434,6 +434,15 @@ export interface PaperFill {
   stopOnClose?: boolean;
 }
 
+/** Relevé quotidien de la valeur du vrai portefeuille (identifiant = jour). */
+export interface PortfolioSnapshot { updatedAt?: UpdatedAt; id: string; day: string; valueUsd: number; byBucket: Record<string, number>; complete: boolean }
+
+/** Mouvement d'un wallet suivi, noté ensuite sur ce que le prix a fait (identifiant = clé du mouvement). */
+export interface SmartMove { updatedAt?: UpdatedAt; id: string; walletId: string; coinId?: string; mint?: string; symbol: string | null; side: 'buy' | 'sell'; priceUsd: number; at: string }
+
+/** Relevé hebdomadaire des pépites proposées (identifiant = semaine ISO), suivi en avant à 30 et 90 jours. */
+export interface PickSnapshot { updatedAt?: UpdatedAt; id: string; week: string; picks: { coinId: string; symbol: string; source: 'gems' | 'basket'; score: number | null; priceUsd: number }[] }
+
 /** Journal d'un jour d'exécution d'un autopilote : l'état du portefeuille se rejoue à partir de ces journaux. */
 export interface PaperDayLog {
   /** `${portfolioId}:${day}` */

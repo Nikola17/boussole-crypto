@@ -56,6 +56,11 @@ export function migrateState(persisted: unknown, version: number): unknown {
     if (!Array.isArray(s.paperOrders)) s.paperOrders = [];
     if (!Array.isArray(s.paperDays)) s.paperDays = [];
   }
+  if (version < 4 && typeof persisted === 'object' && persisted !== null) {
+    // v3 → v4 (1.28.0) : relevés du portefeuille, mouvements des wallets suivis, relevés des pépites.
+    const s = persisted as Record<string, unknown>;
+    for (const k of ['portfolioSnapshots', 'smartMoves', 'pickSnapshots']) if (!Array.isArray(s[k])) s[k] = [];
+  }
   return persisted;
 }
 
