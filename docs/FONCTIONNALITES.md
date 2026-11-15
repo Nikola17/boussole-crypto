@@ -248,6 +248,17 @@ Point de départ : un Ledger (Bitcoin et Ethereum), un panier de 19 lignes sur C
 
 - **Après « J’ai passé ces ordres », le panier reproposait d’autres cryptos** : il recalculait l’ordre avec le portefeuille d’après l’achat (les lignes achetées comptent alors comme détenues, la réserve a bougé) et l’affichait comme un nouvel ordre. La carte montre maintenant l’échéance validée telle qu’enregistrée (cryptos, montants, quantités) ; l’aperçu de la prochaine échéance est replié et présenté comme indicatif, sans bouton ni optimisation IA. Le brief du jour reçoit lui aussi l’échéance passée au lieu de l’ordre recalculé, et ne propose plus d’autre achat DCA avant la prochaine.
 
+### v1.28.0 — Le Labo : banc d'essai, papier complet, autopilotes, signaux sur preuves
+
+Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/2026-11-15-labo-banc-d-essai-autopilote-design.md`.
+
+**Banc d'essai (lot 1)**
+- **Chaque signal affiche sa fiabilité mesurée** : sous le libellé (fiche d'une crypto) et au survol (liste Signaux), « Depuis 2019 : vu 383 fois. En hausse 90 jours après dans 60 % des cas (un jour quelconque : 44 %). Verdict : validé. » Les setups que l'historique ne soutient pas sont regroupés à part, sous « Peu fiables d'après l'historique ».
+- **Page Labo** (remplace « Papier ») : onglets Papier, Achats fantômes et Banc d'essai — le tableau de tous les signaux mesurés, « Rejouer sur une crypto » sur son seul historique, et la méthode avec ses limites.
+- **Outil `npm run bench`** : rejoue les signaux et les stratégies sur l'historique Binance depuis 2017 (une centaine de cryptos, paires retirées comprises), écrit des rapports datés dans `docs/bench/` et la table embarquée `src/data/reliability.json`. Réglage jusqu'à fin 2022, verdict sur 2023 et après.
+- **Signaux figés une fois par jour** : calculés sur les bougies closes, comme ce que mesure le banc d'essai (le cours affiché reste celui du moment).
+- **Correctif** : un ordre papier payait 10 % de frais au lieu de 0,1 % ; les anciens ordres sont corrigés automatiquement.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute
