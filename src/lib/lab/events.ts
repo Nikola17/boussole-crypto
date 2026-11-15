@@ -10,6 +10,7 @@ import { median, wilson } from './stats';
 import { pendingHit } from './fills';
 import { COSTS } from './types';
 import { dayOf, universeAt, type Asset } from './universe';
+import type { AssetKeyStats } from './journal';
 
 export type Bias = 'bull' | 'bear' | 'neutral';
 export interface KeyMeta {
@@ -146,7 +147,7 @@ export interface StudyInput {
   onProgress?: (done: number, total: number) => void;
 }
 
-export function studySignals(input: StudyInput): { keys: KeyStats[]; observations: number; dataThrough: string } {
+export function studySignals(input: StudyInput): { keys: KeyStats[]; observations: number; dataThrough: string; byAsset: Record<string, AssetKeyStats[]> } {
   const metas = new Map((input.metas ?? SIGNAL_KEYS).map((m) => [m.key, m]));
   const extractors = input.extractors ?? DEFAULT_EXTRACTORS;
   const horizons = [...new Set([...metas.values()].flatMap((m) => m.horizons))].sort((a, b) => a - b);
@@ -164,6 +165,9 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
   const forced = new Map<string, number>();
   const lastActive = new Map<string, number>();
   let observations = 0;
+  // Par crypto (horizon principal) : les épisodes de chaque clé et tous les jours de la crypto (sa référence).
+  const perAsset = new Map<string, Map<string, number[]>>();
+  const assetBase = new Map<string, number[]>();
   let btcObservations = 0;
 
   days.forEach((day, n) => {
@@ -201,6 +205,9 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
         const x = r[h];
         if (!x) continue;
         push('all', String(h), period, x.ret);
+        const ab = assetBase.get(`${h}|${a.id}`) ?? [];
+        ab.push(x.ret);
+        assetBase.set(`${h}|${a.id}`, ab);
         if (a.id === input.btc.id) push('btc', String(h), period, x.ret);
       }
       const btcWindow = bi != null ? input.btc.candles.slice(Math.max(0, bi - 399), bi + 1) : [];
@@ -231,6 +238,7 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
           const x = r[h];
           if (!x) continue;
           b.ret.push(x.ret);
+          if (h === meta.horizon) { const m = perAsset.get(key) ?? new Map<string, number[]>(); const l = m.get(a.id) ?? []; l.push(x.ret); m.set(a.id, l); perAsset.set(key, m); }
           b.worst.push(x.worst);
           if (Number.isFinite(dayMean[h])) b.excess.push(x.ret - dayMean[h]);
           if (x.forced) forced.set(key, (forced.get(key) ?? 0) + 1);
@@ -270,5 +278,10 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
     keys.push({ meta, byHorizon, verdict: verdictOf(byHorizon[meta.horizon] ?? byHorizon[meta.horizons[0]], meta), frequencyPct: denom ? ((freq.get(key) ?? 0) / denom) * 100 : 0, forcedExits: forced.get(key) ?? 0 });
   }
   keys.sort((a, b) => a.meta.key.localeCompare(b.meta.key));
-  return { keys, observations, dataThrough };
+  const byAsset: Record<string, AssetKeyStats[]> = {};
+  for (const [key, m] of perAsset) {
+    const h = metas.get(key)!.horizon;
+    byAsset[key] = [...m.entries()].map(([asset, rets]) => ({ asset, episodes: rets.length, medianPct: median(rets), baselineMedianPct: median(assetBase.get(`${h}|${asset}`) ?? []) }));
+  }
+  return { keys, observations, dataThrough, byAsset };
 }

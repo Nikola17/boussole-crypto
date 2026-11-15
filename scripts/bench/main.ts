@@ -6,7 +6,10 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadDaily, loadFng, loadMvrv } from './fetch';
-import { reliabilityTable, r4, signalsReport, strategiesReport, type RunInfo, type StrategiesBench, type StrategyRun } from './report';
+import { candidatesReport, reliabilityTable, r4, signalsReport, strategiesReport, type RunInfo, type StrategiesBench, type StrategyRun } from './report';
+import { existsSync, readFileSync } from 'node:fs';
+import { CANDIDATES, candidateExtractor } from '../../src/lib/lab/candidates';
+import { appendJournal, consistencyPct, JOURNAL_HEADER } from '../../src/lib/lab/journal';
 import type { Candle } from '../../src/lib/indicators';
 import { buildAssets, UNIVERSE_SYMBOLS, type Asset } from '../../src/lib/lab/universe';
 import { temperatureSeries } from '../../src/lib/lab/replayTemp';
@@ -92,16 +95,39 @@ async function cmdStrategies(ids: string[]): Promise<void> {
   } else process.stdout.write(report);
 }
 
+async function cmdCandidates(control: boolean): Promise<void> {
+  const d = await loadData();
+  const study = studySignals({ assets: d.assets, btc: d.btc, temperature: d.temperature, top: 50, from: FROM, extractors: [candidateExtractor], metas: CANDIDATES, onProgress: (k, n) => { if (k % 500 === 0) log(`  ${k}/${n} jours`); } });
+  const info: RunInfo = { day: today, dataThrough: study.dataThrough, assets: d.assets.length, from: FROM, top: 50, observations: study.observations, notes: d.notes };
+  const bias = new Map(CANDIDATES.map((c) => [c.key, c.bias]));
+  const consistency = (key: string) => consistencyPct(study.byAsset[key] ?? [], bias.get(key) ?? 'neutral');
+  const file = join('docs', 'bench', `${today}-candidats-${control ? 'controle' : 'reglage'}.md`);
+  writeFileSync(file, candidatesReport(study.keys, study.byAsset, consistency, info, control));
+  if (control) {
+    const jf = join('docs', 'bench', 'journal.md');
+    const text = existsSync(jf) ? readFileSync(jf, 'utf-8') : JOURNAL_HEADER;
+    const entries = study.keys.map((k) => {
+      const c = k.byHorizon[k.meta.horizon]?.control;
+      const cons = consistency(k.meta.key);
+      const res = !c ? 'aucune observation' : k.meta.key.startsWith('plan:') ? `${k.verdict} (espérance ${(c.expectancyR ?? NaN).toFixed(2)} R)` : `${k.verdict} (contrôle ${c.hitPct.toFixed(1)} % / ${c.baselineHitPct.toFixed(1)} %, cohérence ${cons == null ? '—' : `${cons.toFixed(0)} %`})`;
+      return { day: today, key: k.meta.key, period: 'contrôle', result: res };
+    });
+    writeFileSync(jf, appendJournal(text, entries));
+  }
+  log(`Écrit : ${file}${control ? ' et une ligne par candidat dans docs/bench/journal.md' : ''}`);
+}
+
 async function main(): Promise<void> {
   const [cmd, ...args] = process.argv.slice(2);
   if (cmd === 'signals') return cmdSignals();
   if (cmd === 'strategies') return cmdStrategies(Object.keys(STRATEGIES));
+  if (cmd === 'candidates') return cmdCandidates(args.includes('--control'));
   if (cmd === 'compare') {
     const unknown = args.filter((a) => !STRATEGIES[a]);
     if (args.length !== 2 || unknown.length) throw new Error(`Usage : compare <a> <b> parmi ${Object.keys(STRATEGIES).join(', ')}`);
     return cmdStrategies(args);
   }
-  throw new Error('Commandes : signals, strategies, compare <a> <b>');
+  throw new Error('Commandes : signals, strategies, compare <a> <b>, candidates [--control]');
 }
 
 main().catch((e) => { log(`Erreur : ${e instanceof Error ? e.message : String(e)}`); process.exit(1); });

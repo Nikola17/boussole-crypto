@@ -91,5 +91,7 @@ describe('étude complète', () => {
     expect(k.byHorizon[30].control.episodes).toBeGreaterThanOrEqual(12);
     expect(k.verdict).toBe('validé');
     expect(r.dataThrough).toBe(dayOf(T0 + 1099 * D));
+    expect(r.byAsset['test:up']).toHaveLength(6);
+    expect(r.byAsset['test:up'].every((x) => x.medianPct > x.baselineMedianPct)).toBe(true);
   });
 });

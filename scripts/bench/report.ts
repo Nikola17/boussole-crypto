@@ -106,3 +106,27 @@ export function strategiesReport(b: StrategiesBench, info: RunInfo, labels: Reco
   lines.push('', 'Une simulation flatte toujours un peu : seuls les résultats en direct comptent pour la confiance.', '');
   return lines.join('\n');
 }
+
+/** Rapport des candidats : période de réglage seule, ou réglage et contrôle (ce dernier cas s'inscrit au journal). */
+export function candidatesReport(keys: KeyStats[], byAsset: Record<string, { asset: string; episodes: number; medianPct: number; baselineMedianPct: number }[]>, consistency: (key: string) => number | null, info: RunInfo, control: boolean): string {
+  const lines = [
+    `# Banc d'essai — candidats du lot 3 (${info.day}, ${control ? 'réglage et contrôle' : 'réglage seul'})`,
+    '',
+    `Données jusqu'au ${info.dataThrough}. Univers : les ${info.top} premiers par volume chaque jour depuis le ${info.from}. Conventions identiques au rapport des signaux.`,
+    control ? 'Ce passage regarde la période de contrôle : il est inscrit au journal des essais.' : 'Ce passage ne regarde que la période de réglage (jusqu’au 31/12/2022) : il sert à choisir les paramètres.',
+    '',
+    `| Candidat | Horizon | Épisodes (réglage) | Hausse / réf. (réglage) | Médiane / réf. (réglage) | Cohérence entre cryptos |${control ? ' Contrôle : épisodes, hausse / réf. | Médiane / réf. (contrôle) | Verdict |' : ''}`,
+    `|---|---|---|---|---|---|${control ? '---|---|---|' : ''}`,
+  ];
+  for (const k of [...keys].sort((a, b) => a.meta.key.localeCompare(b.meta.key))) {
+    const s = k.byHorizon[k.meta.horizon];
+    if (!s) continue;
+    const plan = k.meta.key.startsWith('plan:');
+    const hit = (p: PeriodStats) => (plan ? `${f2(p.expectancyR)} R` : `${f1(p.hitPct)} % / ${f1(p.baselineHitPct)} %`);
+    const med = (p: PeriodStats) => (plan ? '—' : `${f1(p.medianPct, true)} % / ${f1(p.baselineMedianPct, true)} %`);
+    const c = consistency(k.meta.key);
+    lines.push(`| ${k.meta.label} | ${k.meta.horizon} j | ${s.tuning.episodes} | ${hit(s.tuning)} | ${med(s.tuning)} | ${c == null ? '—' : `${f1(c)} %`} (${(byAsset[k.meta.key] ?? []).filter((x) => x.episodes >= 5).length} cryptos) |${control ? ` ${s.control.episodes} : ${hit(s.control)} | ${med(s.control)} | ${k.verdict} |` : ''}`);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
