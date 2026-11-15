@@ -42,6 +42,7 @@ export function simulate<P extends Record<string, ParamValue>>(s: Strategy<P>, p
 
   let book: Book = { cashUsd: cfg.startCashUsd, positions: {} };
   let peak = cfg.startCashUsd;
+  let trough = cfg.startCashUsd;
   const fills: Fill[] = [];
   const skipped: SimResult['skipped'] = [];
   const series: DayPoint[] = [];
@@ -89,7 +90,7 @@ export function simulate<P extends Record<string, ParamValue>>(s: Strategy<P>, p
       temperature: data.temperature.get(D) ?? null,
       btcAboveSma200: btc && bi != null && Number.isFinite(btcSma[bi]) ? btc.candles[bi].close > btcSma[bi] : null,
       portfolio: {
-        cashUsd: book.cashUsd, equityUsd: equity(D), peakEquityUsd: peak,
+        cashUsd: book.cashUsd, equityUsd: equity(D), peakEquityUsd: peak, minSincePeakUsd: trough,
         positions: Object.values(book.positions),
         lastFillOn: (tag, coinId) => lastFill.get(coinId ? `${tag}|${coinId}` : tag) ?? null,
       },
@@ -106,7 +107,7 @@ export function simulate<P extends Record<string, ParamValue>>(s: Strategy<P>, p
     }
     if (cfg.fill === 'nextOpen') settle(E, openedToday);
     const value = equity(E);
-    peak = Math.max(peak, value);
+    if (value >= peak) { peak = value; trough = value; } else trough = Math.min(trough, value);
     series.push({ day: E, valueUsd: value, cashUsd: book.cashUsd, flowUsd: dep });
   }
   return { series, fills, skipped };

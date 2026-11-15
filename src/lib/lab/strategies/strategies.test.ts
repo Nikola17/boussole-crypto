@@ -9,7 +9,7 @@ function ctx(over: { temperature?: number | null; execDay?: string; lastTrim?: s
   return {
     decidedOn: '2026-11-16', execDay, scheduled: (d) => d.includes(dow), universe: [], candles: () => [],
     temperature: over.temperature === undefined ? 50 : over.temperature, btcAboveSma200: null,
-    portfolio: { cashUsd: over.cash ?? 1000, equityUsd: 1000, peakEquityUsd: 1000, positions: over.positions ?? [], lastFillOn: (tag) => (tag === 'trim' ? over.lastTrim ?? null : null) },
+    portfolio: { cashUsd: over.cash ?? 1000, equityUsd: 1000, peakEquityUsd: 1000, minSincePeakUsd: 1000, positions: over.positions ?? [], lastFillOn: (tag) => (tag === 'trim' ? over.lastTrim ?? null : null) },
   };
 }
 const pos = (coinId: string): Position => ({ coinId, symbol: coinId.slice(0, 3), name: coinId, quantity: 2, costUsd: 100, openedOn: '2026-01-01' });

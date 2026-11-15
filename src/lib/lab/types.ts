@@ -74,6 +74,8 @@ export interface StrategyContext {
   btcAboveSma200: boolean | null;
   portfolio: {
     cashUsd: number; equityUsd: number; peakEquityUsd: number;
+    /** Plus basse valeur atteinte depuis le dernier sommet (pause et reprise de « Trader »). */
+    minSincePeakUsd: number;
     positions: Position[];
     /** Dernier jour où une exécution porte ce tag (et cette crypto, si précisée) ; null si jamais. */
     lastFillOn: (tag: string, coinId?: string) => string | null;

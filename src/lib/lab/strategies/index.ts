@@ -7,10 +7,14 @@ import { AUTO_BASKET_VERSION } from '../../autoBasket';
 import type { ParamValue, Strategy } from '../types';
 import { dcaBtc } from './dcaBtc';
 import { investisseur } from './investisseur';
+import { dcaBoussole } from './dcaBoussole';
+import { trader } from './trader';
 
 export const STRATEGIES: Record<string, Strategy<Record<string, ParamValue>>> = {
   [dcaBtc.id]: dcaBtc as unknown as Strategy<Record<string, ParamValue>>,
   [investisseur.id]: investisseur as unknown as Strategy<Record<string, ParamValue>>,
+  [dcaBoussole.id]: dcaBoussole as unknown as Strategy<Record<string, ParamValue>>,
+  [trader.id]: trader as unknown as Strategy<Record<string, ParamValue>>,
 };
 
 const COMPONENT_VERSION = { signals: SIGNALS_VERSION, cycle: CYCLE_VERSION, autoBasket: AUTO_BASKET_VERSION } as const;
