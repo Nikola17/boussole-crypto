@@ -171,7 +171,7 @@ export default function Market() {
         <div className="grid gap-4 text-sm text-ink-2 md:grid-cols-3">
           <div>
             <p className="font-medium text-ink">Investisseur</p>
-            <p className="mt-1">Seules des conditions mesurées sur l’historique décident du libellé : « Accumuler » quand la température du marché est sous 40, « Accumuler fort » quand tendance, valorisation et cycle sont alignés, « Alléger » sur un excès (RSI hebdomadaire au-dessus de 80, prix à plus de 2 fois sa moyenne 200 jours) ou pour une altcoin en marché chaud, « Prendre des profits » en euphorie. Le score sert au tri.</p>
+            <p className="mt-1">Seules des conditions mesurées sur l’historique décident du libellé : « Accumuler » quand la température du marché est sous 40 ou quand tendance, valorisation et cycle sont alignés, « Alléger » sur un excès (RSI hebdomadaire au-dessus de 80, prix à plus de 2 fois sa moyenne 200 jours) ou pour une altcoin en marché chaud, « Prendre des profits » en euphorie. Le score sert au tri.</p>
           </div>
           <div>
             <p className="font-medium text-ink">Trader</p>

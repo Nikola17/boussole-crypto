@@ -74,13 +74,14 @@ describe('planAutoBasket', () => {
     expect(p.orders[0]).toMatchObject({ coinId: 'solana', kind: 'core', usd: 60 });
   });
 
-  it('écarte FOMO, absence sur Crypto.com et signal « Alléger », en le disant', () => {
+  it('écarte FOMO, absence sur Crypto.com et score investisseur bas, en le disant', () => {
     const p = planAutoBasket(settings(), ctx({
       base: [c('bitcoin', { rank: 1, score: -30 }), c('ethereum', { rank: 2, score: 20, change7d: 80 }), c('solana', { rank: 5, score: 10, cdc: 'unknown' }), c('xrp', { rank: 4, score: 5 })],
     }));
     expect(p.orders.filter((o) => o.kind === 'core').map((o) => o.coinId)).toEqual(['xrp']);
     const reasons = p.excluded.map((e) => e.reason).join(' | ');
-    expect(reasons).toMatch(/Alléger/);
+    expect(reasons).toContain('(bas)');
+    expect(reasons).toContain('score investisseur');
     expect(reasons).toMatch(/FOMO/);
     expect(reasons).toMatch(/Crypto\.com/);
   });
@@ -149,5 +150,15 @@ describe('calcul extrait du crochet useBasket', () => {
     );
     expect(r).toEqual(direct);
     expect(r.orders.length).toBeGreaterThan(0);
+  });
+});
+
+describe('raisons du panier : le score, pas les libellés de la version 1', () => {
+  it('ni « Accumuler fort » ni « Alléger » dans les raisons', () => {
+    const r = planAutoBasket(settings(), ctx({ base: [c('bitcoin', { rank: 1, score: 58 }), c('ethereum', { rank: 2, score: -40 })] }));
+    const text = JSON.stringify([r.orders.map((o) => o.reason), r.excluded]);
+    expect(text).toContain('score investisseur +58');
+    expect(text).toContain('score investisseur −40 (bas)');
+    expect(text).not.toMatch(/Accumuler fort|Alléger/);
   });
 });

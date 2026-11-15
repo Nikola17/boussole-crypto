@@ -97,8 +97,7 @@ function split(picks: AutoCandidate[], maxLines: number, amount: number, minOrde
   }));
 }
 
-const investorLabel = (s: number): string => (s >= 45 ? 'Accumuler fort' : s >= 15 ? 'Accumuler' : s > -15 ? 'Conserver' : s > -45 ? 'Alléger' : 'Prendre des profits');
-const signed = (s: number) => `${s > 0 ? '+' : ''}${s}`;
+const signed = (s: number) => `${s > 0 ? '+' : s < 0 ? '−' : ''}${Math.abs(s)}`;
 
 export function planAutoBasket(s: AutoBasketSettings, ctx: AutoBasketContext): BasketPlanResult {
   const notes: string[] = [];
@@ -125,7 +124,7 @@ export function planAutoBasket(s: AutoBasketSettings, ctx: AutoBasketContext): B
       const sym = c.coin.symbol.toUpperCase();
       if (c.cdc === 'unknown') excluded.push({ symbol: sym, reason: 'absente de la liste Crypto.com' });
       else if (c.change7d != null && c.change7d > FOMO_7D_PCT) excluded.push({ symbol: sym, reason: `+${Math.round(c.change7d)} % en 7 jours (FOMO)` });
-      else if (side === 'base' && c.score != null && c.score <= AUTO_MIN_INVESTOR_SCORE) excluded.push({ symbol: sym, reason: `signal investisseur « ${investorLabel(c.score)} » (${signed(c.score)})` });
+      else if (side === 'base' && c.score != null && c.score <= AUTO_MIN_INVESTOR_SCORE) excluded.push({ symbol: sym, reason: `score investisseur ${signed(c.score)} (bas)` });
       else if (side === 'discovery' && total >= 20 * amount && total > 0 && (c.heldUsd / total) * 100 >= ctx.maxPerGemPct) excluded.push({ symbol: sym, reason: `plafond de ${pct(ctx.maxPerGemPct)} par pépite atteint` });
       else ok.push(c);
     }
@@ -170,7 +169,7 @@ export function planAutoBasket(s: AutoBasketSettings, ctx: AutoBasketContext): B
     const basePool = keepOpen(screen(ctx.base, 'base'), ctx.canOpenBase, 'Base');
     remember(basePool, 'core');
     baseOrders = split(basePool, Math.min(AUTO_MAX_LINES, s.maxBaseLines), base, s.minOrderUsd, 'core', (c) => {
-      const sig = c.score != null ? ` · signal investisseur « ${investorLabel(c.score)} » (${signed(c.score)})` : ' · signal indisponible';
+      const sig = c.score != null ? ` · score investisseur ${signed(c.score)}` : ' · score indisponible';
       return `${c.rank != null ? `Rang ${c.rank} (20 premières hors stablecoins)` : '20 premières hors stablecoins'}${sig}${c.heldUsd > 0 ? ' · tu en détiens déjà' : ''}`;
     });
     if (!baseOrders.length) notes.push(base < Math.max(s.minOrderUsd, 0.01) ? `Part base (${usdc(base)}) sous le minimum de ${usdc(s.minOrderUsd)} : mise en réserve.` : 'Aucune crypto du top 20 ne passe les règles aujourd’hui : le montant part en réserve.');

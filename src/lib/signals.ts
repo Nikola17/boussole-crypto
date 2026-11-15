@@ -146,10 +146,11 @@ export const INVESTOR_TABLE: { label: string; tone: Tone; strength: 0 | 1 | 2; w
     why: (f) => (f.excess
       ? 'Excès (RSI hebdomadaire au-dessus de 80 ou prix à plus de 2 fois sa moyenne 200 jours) : dans l’historique, la baisse qui a suivi a été nettement plus profonde qu’un jour quelconque.'
       : `Marché chaud (température ${Math.round(f.temperature ?? 0)}/100) : pour une altcoin, la suite a été nettement moins bonne qu’un jour quelconque dans l’historique, avec une baisse plus profonde.`) },
-  { label: 'Accumuler fort', tone: 'up', strength: 2, when: (f) => f.enoughHistory && f.strongScore,
-    why: () => 'Score composite fort (≥ 45) : tendance, valorisation et cycle alignés. Validé sur la période de contrôle.' },
-  { label: 'Accumuler', tone: 'up', strength: 1, when: (f) => f.enoughHistory && f.temperature != null && f.temperature < TEMPERATURE.fear,
-    why: (f) => `Température du marché sous 40 (${Math.round(f.temperature ?? 0)}/100) : zone d’accumulation ou de peur, validée sur la période de contrôle.` },
+  // « Accumuler fort » a manqué sa condition de sortie (+7,4 points au lieu de +8) : sa condition rejoint « Accumuler ».
+  { label: 'Accumuler', tone: 'up', strength: 1, when: (f) => f.enoughHistory && (f.strongScore || (f.temperature != null && f.temperature < TEMPERATURE.fear)),
+    why: (f) => (f.temperature != null && f.temperature < TEMPERATURE.fear
+      ? `Température du marché sous 40 (${Math.round(f.temperature)}/100) : zone d’accumulation ou de peur, validée sur la période de contrôle.`
+      : 'Score composite fort (≥ 45) : tendance, valorisation et cycle alignés, validé sur la période de contrôle.') },
   { label: 'Conserver', tone: 'neutral', strength: 0, when: () => true, why: () => 'Aucune condition mesurée comme fiable n’est réunie : rien à faire.' },
 ];
 

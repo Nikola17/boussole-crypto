@@ -36,3 +36,6 @@ Chaque ligne est un regard sur la période de contrôle (à partir du 01/01/2023
 | 2026-11-15 | plan:F13:close@3 | contrôle | validé (espérance 0.32 R) |
 | 2026-11-15 | plan:F14:atr15@3 | contrôle | validé (espérance 0.19 R) |
 | 2026-11-15 | plan:F14:atr20@3 | contrôle | validé (espérance 0.24 R) |
+| 2026-11-15 | plan:F13:close@3 | contrôle | sans effet (espérance 0.69 R) |
+| 2026-11-15 | plan:F13:close@3 | contrôle | sans effet (espérance 0.31 R) |
+| 2026-11-15 | plan:F13:close@3 | contrôle | sans effet (espérance -0.02 R) |

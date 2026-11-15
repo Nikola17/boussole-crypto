@@ -96,7 +96,8 @@ describe('signaux sur bougies closes (banc d’essai)', () => {
 describe('signaux v2 : seulement ce que le banc d’essai soutient', () => {
   const flat = () => series(300, 100, 100.5);
   it('table de décision investisseur, dans l’ordre', () => {
-    expect(INVESTOR_TABLE.map((l) => l.label)).toEqual(['Prendre des profits', 'Alléger', 'Accumuler fort', 'Accumuler', 'Conserver']);
+    // « Accumuler fort » n'a pas atteint sa condition de sortie (+8 points) : fondu dans « Accumuler ».
+    expect(INVESTOR_TABLE.map((l) => l.label)).toEqual(['Prendre des profits', 'Alléger', 'Accumuler', 'Conserver']);
   });
   it('« Prendre des profits » est atteignable : état de risque en euphorie', () => {
     const a = analyze(flat(), { temperature: 85 }, { closedOnly: true })!;

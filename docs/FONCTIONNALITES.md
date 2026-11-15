@@ -267,6 +267,15 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Serveur veilleur** : mêmes autopilotes calculés application fermée, ordres, stops et objectifs sur Telegram, une ligne par autopilote dans le brief du matin (`autopilotEnabled`, `autopilotTelegram`).
 - **Mesuré sur 2019-2026** (`docs/bench/2026-11-15-strategies.md`) : la température seule fait jeu égal avec le DCA Bitcoin simple, avec une pire baisse plus faible (−65 % contre −77 %) ; le panier automatique (base seule) fait moins bien que Bitcoin ; Trader perd (−0,10 R par trade). À confirmer en direct : c'est le rôle des autopilotes.
 
+**Signaux sur preuves (lot 3)**
+- **Seize critères candidats mesurés** selon un protocole écrit (`docs/bench/protocole.md`) : paramètres choisis sur 2019-2022, jugés sur 2023 et après, chaque regard inscrit au journal (`docs/bench/journal.md`), trois essais au plus, et un effet de même sens sur 60 % des cryptos au moins. Décisions : `docs/bench/2026-11-15-candidats.md`.
+- **Méthode corrigée en cours de route** : comparer des épisodes à des jours faisait paraître presque tout signal meilleur qu'un jour quelconque. Les taux se calculent désormais sur tous les jours, la marge d'erreur sur les épisodes, et un test garantit qu'un état et son complément ne peuvent plus battre tous deux la référence.
+- **Signal investisseur v2**, en table de décision : « Accumuler » (température sous 40, ou tendance, valorisation et cycle alignés : 49 % de hausses à 90 jours contre 41 % au contrôle), « Alléger » (excès — RSI hebdomadaire au-dessus de 80 ou prix à plus de 2 fois sa moyenne 200 jours — ou altcoin en marché chaud : 21 % contre 41 %), « Prendre des profits » (euphorie), « Conserver ». « Accumuler fort » a manqué sa condition de sortie (+7,4 points au lieu de +8) : il rejoint « Accumuler ».
+- **Signal trader v2** : seule la cassure des plus hauts 20 jours avec du volume est validée (« Achat », et « Achat fort » avec un volume double) ; aucun signal de vente n'est validé, le trader reste « Neutre » le reste du temps. Plan : stop jugé à la clôture, objectif à 3 R (+0,32 R par trade au contrôle, nul sur 2025-2026).
+- **Setups** : seuls la cassure avec volume, la relance MACD et la survente avec rebond restent ; repli en tendance haussière et surachat (inversés), croisements, cassure baissière et compression (sans effet) disparaissent.
+- **Chaque signal explique pourquoi** (la condition mesurée) sous son libellé, avec sa fiabilité ; l'IA reçoit la fiabilité de chaque signal cité et a pour consigne de ne jamais le présenter comme plus fiable qu'elle ne le dit.
+- **Conditions de sortie** documentées une par une (`docs/bench/2026-11-15-signaux-v1-v2.md`) : quatre atteintes, une partielle (la stratégie Trader v2 est meilleure par trade, moins rentable au total en exécution à la clôture). Les autopilotes créés avec les règles v1 sont archivés et recréés.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute
