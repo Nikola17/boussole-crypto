@@ -10,7 +10,7 @@ export type Interval = '1h' | '4h' | '1d' | '1w';
 type RawKline = [number, string, string, string, string, string, number, string, number, string, string, string];
 
 function toCandle(k: RawKline): Candle {
-  return { time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[7] };
+  return { time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[7], ...(k[10] != null ? { takerBuyQuote: +k[10] } : {}) };
 }
 
 // Cache mémoire : les mêmes bougies servent au cockpit, aux signaux, au scanner et aux fiches.

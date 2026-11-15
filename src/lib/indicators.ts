@@ -8,6 +8,8 @@ export interface Candle {
   low: number;
   close: number;
   volume: number;
+  /** Volume (en dollars) des achats « au marché » : la pression acheteuse (Binance, champ 10 d'une bougie). */
+  takerBuyQuote?: number;
 }
 
 export function sma(values: number[], period: number): number[] {

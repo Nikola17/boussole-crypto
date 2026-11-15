@@ -12,8 +12,12 @@ import { COSTS } from './types';
 import { dayOf, universeAt, type Asset } from './universe';
 
 export type Bias = 'bull' | 'bear' | 'neutral';
-export interface KeyMeta { key: string; label: string; bias: Bias; horizon: number; horizons: number[] }
-export interface ObsCtx { asset: Asset; i: number; window: Candle[]; analysis: Analysis; temperature: number | null; btcAboveSma200: boolean | null }
+export interface KeyMeta {
+  key: string; label: string; bias: Bias; horizon: number; horizons: number[];
+  /** Plan de trade d'un candidat : stop du plan ou à N × la volatilité moyenne, objectif en R, sortie à la clôture sous le stop. */
+  plan?: { targetR: number; stop: 'plan' | { atr: number }; exitOnClose?: boolean };
+}
+export interface ObsCtx { asset: Asset; i: number; window: Candle[]; analysis: Analysis; temperature: number | null; btcAboveSma200: boolean | null; /** Bougies closes de Bitcoin jusqu'au même jour (400 au plus). */ btc: Candle[] }
 export type Extractor = (o: ObsCtx) => string[];
 export type Verdict = 'validé' | 'prometteur' | 'sans effet' | 'inversé' | 'trop peu de cas';
 
@@ -76,7 +80,7 @@ export function episodeStarts(activeIdx: number[]): number[] {
  * Résultat en R d'un plan : entrée à l'ouverture de t+1, stop, objectif à `targetR` R, sortie à la clôture du
  * `maxDays`-ième jour ; stop prioritaire ; frais aller-retour `costPct` (en % du prix) retirés. Null si l'entrée est sous le stop.
  */
-export function planR(c: Candle[], t: number, stop: number, targetR: number, maxDays = 30, costPct = 0): number | null {
+export function planR(c: Candle[], t: number, stop: number, targetR: number, maxDays = 30, costPct = 0, opts: { exitOnClose?: boolean } = {}): number | null {
   const entry = c[t + 1]?.open;
   if (!(entry > stop)) return null;
   const risk = entry - stop;
@@ -85,8 +89,12 @@ export function planR(c: Candle[], t: number, stop: number, targetR: number, max
   const last = Math.min(c.length - 1, t + maxDays);
   for (let k = t + 1; k <= last; k++) {
     const gapRule = k > t + 1;
-    const s = pendingHit('stop', stop, c[k], { gapRule });
-    if (s != null) return (s - entry) / risk - fee;
+    if (opts.exitOnClose) {
+      if (c[k].close <= stop) return (c[k].close - entry) / risk - fee; // stop jugé à la clôture : pas d'ordre stop en séance
+    } else {
+      const s = pendingHit('stop', stop, c[k], { gapRule });
+      if (s != null) return (s - entry) / risk - fee;
+    }
     const g = pendingHit('target', target, c[k], { gapRule });
     if (g != null) return (g - entry) / risk - fee;
   }
@@ -195,7 +203,8 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
         push('all', String(h), period, x.ret);
         if (a.id === input.btc.id) push('btc', String(h), period, x.ret);
       }
-      const keys = [...new Set(extractors.flatMap((e) => e({ asset: a, i, window, analysis, temperature, btcAboveSma200: btcAbove })))].filter((k) => metas.has(k));
+      const btcWindow = bi != null ? input.btc.candles.slice(Math.max(0, bi - 399), bi + 1) : [];
+      const keys = [...new Set(extractors.flatMap((e) => e({ asset: a, i, window, analysis, temperature, btcAboveSma200: btcAbove, btc: btcWindow })))].filter((k) => metas.has(k));
       if (analysis.plan) for (const t of PLAN_TARGETS) {
         const pr = planR(a.candles, i, analysis.plan.stop, t, 30, 2 * (COSTS.exchange.feePct + COSTS.exchange.spreadPct));
         if (pr != null) push('plan', String(t), period, pr);
@@ -213,8 +222,9 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
           b.days++;
           if (!isStart) continue;
           if (isPlan(key)) {
-            const target = Number(key.split('@')[1]);
-            const pr = analysis.plan ? planR(a.candles, i, analysis.plan.stop, target, 30, 2 * (COSTS.exchange.feePct + COSTS.exchange.spreadPct)) : null;
+            const target = meta.plan?.targetR ?? Number(key.split('@')[1]);
+            const stop = !analysis.plan ? null : meta.plan && meta.plan.stop !== 'plan' ? analysis.price - meta.plan.stop.atr * analysis.plan.atr : analysis.plan.stop;
+            const pr = stop != null ? planR(a.candles, i, stop, target, 30, 2 * (COSTS.exchange.feePct + COSTS.exchange.spreadPct), { exitOnClose: meta.plan?.exitOnClose }) : null;
             if (pr != null) { b.planR.push(pr); b.ret.push(pr); }
             continue;
           }
