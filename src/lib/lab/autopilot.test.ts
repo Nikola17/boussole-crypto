@@ -122,5 +122,5 @@ describe('tick de l’autopilote', () => {
     expect(r.changed.length).toBeGreaterThan(100);
     expect(st.cashUsd).toBeGreaterThan(0);
     expect(JSON.stringify(r.changed).length).toBeLessThan(150_000);
-  });
+  }, 30_000); // une année d'heures simulées : lent quand toute la suite tourne en parallèle
 });
