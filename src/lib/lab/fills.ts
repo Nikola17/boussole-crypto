@@ -43,8 +43,9 @@ export function applyIntent(book: Book, intent: Intent, marketUsd: number, costs
       openedOn: prev?.openedOn ?? opts.day,
       ...(intent.stop != null ? { stop: intent.stop } : prev?.stop != null ? { stop: prev.stop } : {}),
       ...(target != null ? { target } : prev?.target != null ? { target: prev.target } : {}),
+      ...(intent.stopOnClose ? { stopOnClose: true } : prev?.stopOnClose ? { stopOnClose: true } : {}),
     };
-    const fill: Fill = { ...base, side: 'buy', kind: 'market', quantity, priceUsd: price, feeUsd: fee, ...(intent.stop != null ? { stop: intent.stop } : {}), ...(target != null ? { target } : {}) };
+    const fill: Fill = { ...base, side: 'buy', kind: 'market', quantity, priceUsd: price, feeUsd: fee, ...(intent.stop != null ? { stop: intent.stop } : {}), ...(target != null ? { target } : {}), ...(intent.stopOnClose ? { stopOnClose: true } : {}) };
     return { book: { cashUsd: book.cashUsd - amount, positions: { ...book.positions, [intent.coinId]: pos } }, fill, skip: null };
   }
 
@@ -85,7 +86,7 @@ export function settleBar(book: Book, coinId: string, bar: Candle, costs: CostMo
   const pos = book.positions[coinId];
   if (!pos) return { book, fill: null };
   const base = { coinId, symbol: pos.symbol, name: pos.name, at };
-  const stopAt = pos.stop != null ? pendingHit('stop', pos.stop, bar, opts) : null;
+  const stopAt = pos.stop != null && !pos.stopOnClose ? pendingHit('stop', pos.stop, bar, opts) : null;
   if (stopAt != null) {
     const r = sellOut(book, pos, 1, stopAt, costs, { ...base, marketUsd: stopAt, kind: 'stop', reason: 'stop touché', tag: 'stop' });
     return { book: r.book, fill: r.fill };

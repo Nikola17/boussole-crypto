@@ -20,6 +20,7 @@ describe('état d’un autopilote', () => {
     expect(s.positions.bitcoin.costUsd).toBeCloseTo(50.05 / 2, 9);
     expect(s.positions.bitcoin.openedOn).toBe('2026-11-03');
     expect(s.positions.bitcoin.stop).toBe(40);
+    expect(autoState(pf, [logs[0], log('2026-11-03', { fills: [fill('buy', 1, 50, 0.05, { stop: 40, stopOnClose: true })] })]).positions.bitcoin.stopOnClose).toBe(true);
     expect(s.lastFill.trim).toBe('2026-11-05');
     expect(s.lastFill['dca|bitcoin']).toBe('2026-11-03');
   });

@@ -88,10 +88,12 @@ describe('signaux', () => {
     expect(a.plan!.tp1).toBeGreaterThan(a.price);
   });
 
-  it('une tendance baissière régulière donne un signal négatif', () => {
+  it('une tendance baissière régulière : tendance de fond négative, pas de signal de vente non validé', () => {
     const closes = Array.from({ length: 400 }, (_, i) => 1000 * 0.997 ** i);
     const a = analyze(makeCandles(closes))!;
-    expect(a.trader.score).toBeLessThan(0);
+    // v2 : aucun signal de vente n'est validé par le banc d'essai : le trader reste « Neutre ».
+    expect(a.trader.label).toBe('Neutre');
+    expect(a.trader.score).toBe(0);
     expect(a.investor.factors.find((f) => f.key === 'trend200')!.vote).toBe(-2);
   });
 

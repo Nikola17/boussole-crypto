@@ -203,7 +203,7 @@ export function useScan(coins: cg.CgMarket[], temperature: number | undefined, e
         if (!sym) return { id: c.id, analysis: null } as ScanRow;
         const candles = await getKlines(sym, '1d', 400);
         // Bougies closes seulement : le signal change une fois par jour, comme ce que mesure le banc d'essai.
-        return { id: c.id, analysis: analyze(closedCandles(candles, Date.now()), { temperature, athChangePct: c.ath_change_percentage }, { closedOnly: true }) } as ScanRow;
+        return { id: c.id, analysis: analyze(closedCandles(candles, Date.now()), { temperature, athChangePct: c.ath_change_percentage, isBitcoin: c.id === 'bitcoin' }, { closedOnly: true }) } as ScanRow;
       });
       // Tout a échoué (réseau coupé, Binance injoignable) : c'est une erreur à montrer, pas « aucune crypto à analyser ».
       if (failed > 0 && failed === coins.length) throw firstError instanceof Error ? firstError : new Error('Analyse technique indisponible pour le moment.');

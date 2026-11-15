@@ -18,11 +18,15 @@ export function appendJournal(text: string, entries: JournalEntry[]): string {
   return base + entries.map((e) => `| ${e.day} | ${e.key} | ${e.period} | ${e.result} |`).join('\n') + (entries.length ? '\n' : '');
 }
 
-/** Nombre de regards par candidat (F1, F2…), lus dans le journal. */
+/** Nombre d'essais par candidat (F1, F2…) : jeux de paramètres distincts regardés sur le contrôle, lus dans le journal. */
 export function trialsPerCandidate(text: string): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const m of text.matchAll(/^\| [^|]+ \| (?:cand|plan):(F\d+)[^|]* \|/gm)) out[m[1]] = (out[m[1]] ?? 0) + 1;
-  return out;
+  const keys = new Map<string, Set<string>>();
+  for (const m of text.matchAll(/^\| [^|]+ \| ((?:cand|plan):(F\d+)[^|]*?) \|/gm)) {
+    const set = keys.get(m[2]) ?? new Set<string>();
+    set.add(m[1]);
+    keys.set(m[2], set);
+  }
+  return Object.fromEntries([...keys].map(([k, v]) => [k, v.size]));
 }
 
 export interface AssetKeyStats { asset: string; episodes: number; medianPct: number; baselineMedianPct: number }

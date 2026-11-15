@@ -12,7 +12,7 @@ import { TEMPERATURE } from './thresholds';
 export type Tone = 'up' | 'neutral' | 'down';
 
 /** Version des règles des signaux : toute modification qui change un libellé l'augmente (table de fiabilité et autopilotes suivent). */
-export const SIGNALS_VERSION = 1;
+export const SIGNALS_VERSION = 2;
 
 /** Options de calcul : `closedOnly` = toutes les bougies reçues sont closes (banc d'essai, scan, fiches). */
 export interface AnalyzeOptions { closedOnly?: boolean }
@@ -37,6 +37,8 @@ export interface SignalResult {
   confidence: 'haute' | 'moyenne' | 'faible';
   /** Renseigné quand le signal a été limité (historique trop court) : à afficher à côté du libellé. */
   limitedBy?: string;
+  /** Pourquoi ce libellé (version 2 : la condition mesurée qui l'a déclenché). */
+  why?: string;
 }
 
 export interface TradePlan {
@@ -48,6 +50,8 @@ export interface TradePlan {
   atr: number;
   support: number | null;
   resistance: number | null;
+  /** Version 2 : le stop se juge à la clôture (pas d'ordre stop en séance) ; objectif principal à 3 R (tp2). */
+  exitOnClose?: boolean;
 }
 
 export interface Setup {
@@ -83,6 +87,8 @@ export interface AnalysisContext {
   temperature?: number;
   /** Variation vs plus haut historique (%, négatif) */
   athChangePct?: number;
+  /** La crypto est Bitcoin (la zone « marché chaud » n'y est pas validée). */
+  isBitcoin?: boolean;
 }
 
 function labelFor(score: number, horizon: 'investor' | 'trader'): { label: string; tone: Tone; strength: 0 | 1 | 2 } {
@@ -114,6 +120,53 @@ function combine(factors: Factor[], horizon: 'investor' | 'trader', bars: number
 
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1).replace('.', ',')} %`;
 const num = (v: number, d = 2) => v.toFixed(d).replace('.', ',');
+
+// ---------------- Version 2 : seulement ce que le banc d'essai soutient (docs/bench/2026-11-15-candidats.md) ----------------
+
+export interface InvestorFeatures {
+  /** Score composite fort (≥ 45) : « Accumuler fort » de la version 1, validé sur la période de contrôle. */
+  strongScore: boolean;
+  /** Température du marché du jour (null : indisponible). */
+  temperature: number | null;
+  /** Au moins 200 jours d'historique (sinon aucun signal d'achat). */
+  enoughHistory: boolean;
+  /** Excès (F10, validé) : RSI hebdomadaire > 80 ou multiple de Mayer > 2. */
+  excess: boolean;
+  /** Bitcoin : la zone « marché chaud » n'y est que prometteuse (validée seulement pour les altcoins). */
+  isBitcoin: boolean;
+}
+
+const isHot = (t: number | null) => t != null && t >= TEMPERATURE.warm && t < TEMPERATURE.euphoria;
+
+/** Table de décision du signal investisseur : la première ligne vraie l'emporte (docs/bench/2026-11-15-candidats.md). */
+export const INVESTOR_TABLE: { label: string; tone: Tone; strength: 0 | 1 | 2; when: (f: InvestorFeatures) => boolean; why: (f: InvestorFeatures) => string }[] = [
+  { label: 'Prendre des profits', tone: 'down', strength: 2, when: (f) => f.temperature != null && f.temperature >= TEMPERATURE.euphoria,
+    why: (f) => `Euphorie (température ${Math.round(f.temperature ?? 0)}/100) : état de risque, une tranche peut être allégée. Trop peu de cas historiques pour mesurer sa fiabilité.` },
+  { label: 'Alléger', tone: 'down', strength: 1, when: (f) => f.excess || (!f.isBitcoin && isHot(f.temperature)),
+    why: (f) => (f.excess
+      ? 'Excès (RSI hebdomadaire au-dessus de 80 ou prix à plus de 2 fois sa moyenne 200 jours) : dans l’historique, la baisse qui a suivi a été nettement plus profonde qu’un jour quelconque.'
+      : `Marché chaud (température ${Math.round(f.temperature ?? 0)}/100) : pour une altcoin, la suite a été nettement moins bonne qu’un jour quelconque dans l’historique, avec une baisse plus profonde.`) },
+  { label: 'Accumuler fort', tone: 'up', strength: 2, when: (f) => f.enoughHistory && f.strongScore,
+    why: () => 'Score composite fort (≥ 45) : tendance, valorisation et cycle alignés. Validé sur la période de contrôle.' },
+  { label: 'Accumuler', tone: 'up', strength: 1, when: (f) => f.enoughHistory && f.temperature != null && f.temperature < TEMPERATURE.fear,
+    why: (f) => `Température du marché sous 40 (${Math.round(f.temperature ?? 0)}/100) : zone d’accumulation ou de peur, validée sur la période de contrôle.` },
+  { label: 'Conserver', tone: 'neutral', strength: 0, when: () => true, why: () => 'Aucune condition mesurée comme fiable n’est réunie : rien à faire.' },
+];
+
+function investorV2(v1: SignalResult, temperature: number | null, bars: number, excess: boolean, isBitcoin: boolean): SignalResult {
+  const f: InvestorFeatures = { strongScore: v1.score >= 45, temperature, enoughHistory: bars >= MIN_BARS_FOR_BUY, excess, isBitcoin };
+  const line = INVESTOR_TABLE.find((l) => l.when(f))!;
+  const blocked = !f.enoughHistory && line.tone === 'neutral' && (v1.score >= 45 || (temperature != null && temperature < TEMPERATURE.fear));
+  return { ...v1, label: line.label, tone: line.tone, strength: line.strength, why: line.why(f), limitedBy: blocked ? v1.limitedBy ?? `Seulement ${bars} jours d’historique : moins de 200, donc pas de signal d’achat.` : undefined };
+}
+
+/** Signal trader v2 : seule la cassure des plus hauts 20 jours avec volume est validée (pas de signal de vente validé). */
+function traderV2(v1: SignalResult, breakoutVolume: number | null): SignalResult {
+  if (breakoutVolume == null) return { ...v1, label: 'Neutre', tone: 'neutral', strength: 0, score: 0, why: 'Pas de cassure validée : aucun signal trader fiable.' };
+  const strong = breakoutVolume >= 2;
+  const score = Math.round(Math.min(100, 40 + (breakoutVolume - 1.5) * 40));
+  return { ...v1, label: strong ? 'Achat fort' : 'Achat', tone: 'up', strength: strong ? 2 : 1, score, why: `Cassure des plus hauts 20 jours avec un volume ×${breakoutVolume.toFixed(1).replace('.', ',')}${strong ? ' (×2 ou plus)' : ''} : validée sur la période de contrôle. Aucun plan de trade n’a d’espérance positive mesurée après frais.` };
+}
 
 export function analyze(candles: Candle[], ctx: AnalysisContext = {}, opts: AnalyzeOptions = {}): Analysis | null {
   if (candles.length < 30) return null;
@@ -277,8 +330,16 @@ export function analyze(candles: Candle[], ctx: AnalysisContext = {}, opts: Anal
     tr.push({ key: 'breakout', label: 'Cassure & volume', detail, vote, weight: 2 });
   }
 
-  const investor = combine(inv, 'investor', candles.length);
-  const trader = combine(tr, 'trader', candles.length);
+  const investorV1 = combine(inv, 'investor', candles.length);
+  const traderV1 = combine(tr, 'trader', candles.length);
+  let breakoutVolume: number | null = null;
+  if (candles.length > 22) {
+    const vr = volumeRatio(candles, 20, opts);
+    if (price > highest(candles.map((c) => c.high), 20, candles.length - 2) && vr >= 1.5) breakoutVolume = vr;
+  }
+  const excess = (Number.isFinite(rsiWeekly) && rsiWeekly > 80) || (Number.isFinite(mayer) && mayer > 2);
+  const investor = investorV2(investorV1, ctx.temperature ?? null, candles.length, excess, !!ctx.isBitcoin);
+  const trader = traderV2(traderV1, breakoutVolume);
 
   // ---------------- Niveaux ----------------
   const levels = supportResistance(candles, 5, 2.5, 365);
@@ -299,6 +360,7 @@ export function analyze(candles: Candle[], ctx: AnalysisContext = {}, opts: Anal
       stop,
       tp1: entry + 1.5 * risk,
       tp2: entry + 3 * risk,
+      exitOnClose: true,
       riskPct: (risk / entry) * 100,
       atr: atr14,
       support,
@@ -328,6 +390,10 @@ interface SetupSeries {
   bbWidth: number[];
 }
 
+/**
+ * Setups de la version 2 : seuls ceux que l'historique soutient (docs/bench/2026-11-15-candidats.md).
+ * Retirés : repli en tendance haussière et surachat (inversés), croisements, cassure baissière, compression (sans effet).
+ */
 export function detectSetups(candles: Candle[], s: SetupSeries, opts: AnalyzeOptions = {}): Setup[] {
   const out: Setup[] = [];
   const n = candles.length;
@@ -336,42 +402,19 @@ export function detectSetups(candles: Candle[], s: SetupSeries, opts: AnalyzeOpt
   const prev = candles[n - 2];
   const price = c.close;
   const sma50 = s.s50[n - 1];
-  const sma200 = s.s200[n - 1];
   const rsi14 = s.r[n - 1];
   const highs = candles.map((k) => k.high);
-  const lows = candles.map((k) => k.low);
   const vr = volumeRatio(candles, 20, opts);
-
-  if (Number.isFinite(sma200) && Number.isFinite(sma50) && price > sma200 && sma50 > sma200 && rsi14 < 42) {
-    out.push({ key: 'pullback', label: 'Repli en tendance haussière', bias: 'bull', detail: `Tendance de fond haussière et RSI à ${Math.round(rsi14)} : zone d’achat sur repli. Attends un signe de reprise (bougie verte, RSI qui repasse 40) avant d’entrer.` });
-  }
-  const gc = lastCross(s.s50, s.s200, 10);
-  if (gc?.dir === 1) out.push({ key: 'golden', label: 'Croisement doré', bias: 'bull', detail: `MM50 au-dessus de la MM200 depuis ${gc.barsAgo} j.` });
-  if (gc?.dir === -1) out.push({ key: 'death', label: 'Croisement de la mort', bias: 'bear', detail: `MM50 sous la MM200 depuis ${gc.barsAgo} j.` });
   const prevHigh = highest(highs, 20, n - 2);
-  const prevLow = lowest(lows, 20, n - 2);
   if (price > prevHigh && vr > 1.5) out.push({ key: 'breakout', label: 'Cassure avec volume', bias: 'bull', detail: `Plus haut 20 j cassé, volume ×${num(vr, 1)}.` });
-  if (price < prevLow && vr > 1.5) out.push({ key: 'breakdown', label: 'Cassure baissière', bias: 'bear', detail: `Plus bas 20 j enfoncé, volume ×${num(vr, 1)}.` });
-  const w = s.bbWidth.slice(-120).filter(Number.isFinite);
-  const wNow = s.bbWidth[n - 1];
-  if (w.length > 60 && Number.isFinite(wNow) && wNow <= Math.min(...w) * 1.08) {
-    out.push({ key: 'squeeze', label: 'Compression de volatilité', bias: 'neutral', detail: 'Bandes de Bollinger au plus serré depuis 4 mois : un mouvement violent se prépare (sens à confirmer).' });
-  }
-  if (rsi14 < 30 && price > prev.close) out.push({ key: 'oversold', label: 'Survente + rebond', bias: 'bull', detail: `RSI ${Math.round(rsi14)} et première bougie verte.` });
-  if (rsi14 > 75) out.push({ key: 'overbought', label: 'Surachat', bias: 'bear', detail: `RSI ${Math.round(rsi14)} : prise de profits probable à court terme.` });
+  if (rsi14 < 30 && price > prev.close) out.push({ key: 'oversold', label: 'Survente + rebond', bias: 'bull', detail: `RSI ${Math.round(rsi14)} et première bougie verte (prometteur sur 14 jours, pas validé).` });
   const mc = lastCross(s.m.macd, s.m.signal, 3);
-  if (mc?.dir === 1 && Number.isFinite(sma50) && price > sma50) out.push({ key: 'macd', label: 'Relance MACD', bias: 'bull', detail: 'MACD repasse au-dessus de son signal, prix au-dessus de la MM50.' });
+  if (mc?.dir === 1 && Number.isFinite(sma50) && price > sma50) out.push({ key: 'macd', label: 'Relance MACD', bias: 'bull', detail: 'MACD repasse au-dessus de son signal, prix au-dessus de la MM50 (prometteur, pas validé).' });
   return out;
 }
 
 export const SETUP_KEYS: Record<string, string> = {
-  pullback: 'Repli en tendance haussière',
-  golden: 'Croisement doré',
   breakout: 'Cassure avec volume',
-  squeeze: 'Compression de volatilité',
   oversold: 'Survente + rebond',
   macd: 'Relance MACD',
-  death: 'Croisement de la mort',
-  breakdown: 'Cassure baissière',
-  overbought: 'Surachat',
 };

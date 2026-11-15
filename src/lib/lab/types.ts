@@ -24,6 +24,8 @@ export interface Intent {
   fraction?: number;
   /** Ordres attachés à un achat, posés à son exécution. `targetR` se calcule sur le prix réellement obtenu. */
   stop?: number; targetR?: number;
+  /** Le stop se juge à la clôture par la stratégie (pas d'ordre stop en séance) ; il sert aussi à la taille. */
+  stopOnClose?: boolean;
   /** L'ordre est abandonné si le prix d'exécution sort de ces bornes (le marché a trop bougé depuis la clôture). */
   skipAbove?: number; skipBelow?: number;
   /** Une phrase, affichée et envoyée telle quelle. */
@@ -45,6 +47,7 @@ export interface Fill {
   reason: string; tag?: string;
   /** Ordres attachés créés par cet achat. */
   stop?: number; target?: number;
+  stopOnClose?: boolean;
 }
 
 export interface Position {
@@ -54,6 +57,8 @@ export interface Position {
   costUsd: number;
   openedOn: string;
   stop?: number; target?: number;
+  /** Stop jugé à la clôture par la stratégie : settleBar ne l'exécute pas en séance. */
+  stopOnClose?: boolean;
 }
 
 export interface Book { cashUsd: number; positions: Record<string, Position> }

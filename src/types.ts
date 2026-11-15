@@ -430,6 +430,8 @@ export interface PaperFill {
   tag?: string;
   stop?: number;
   target?: number;
+  /** Stop jugé à la clôture par la stratégie (pas d'ordre stop en séance). */
+  stopOnClose?: boolean;
 }
 
 /** Journal d'un jour d'exécution d'un autopilote : l'état du portefeuille se rejoue à partir de ces journaux. */

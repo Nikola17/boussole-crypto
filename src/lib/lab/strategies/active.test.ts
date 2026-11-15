@@ -47,32 +47,39 @@ describe('stratégie Trader', () => {
     const a = analyze(series.sol, { temperature: 50 }, { closedOnly: true })!;
     expect(a.trader.tone).toBe('up');
     expect(a.setups.map((s) => s.key)).toContain('breakout');
-    expect(analyze(series.down, { temperature: 50 }, { closedOnly: true })!.trader.label).toBe('Vente forte');
+    expect(analyze(series.down, { temperature: 50 }, { closedOnly: true })!.trader.tone).not.toBe('up');
   });
   it('entre seulement sur un setup listé avec un signal haussier, taille plafonnée', () => {
     const o = trader.decide(ctx(), P);
     expect(o).toHaveLength(1);
     const a = analyze(series.sol, { temperature: 50 }, { closedOnly: true })!;
     const c = series.sol[series.sol.length - 1].close;
-    expect(o[0]).toMatchObject({ coinId: 'sol', side: 'buy', stop: a.plan!.stop, targetR: 2, sizing: { riskUsd: 10, maxUsd: 200 }, tag: 'setup:breakout' });
+    expect(o[0]).toMatchObject({ coinId: 'sol', side: 'buy', stop: a.plan!.stop, targetR: 3, stopOnClose: true, sizing: { riskUsd: 10, maxUsd: 200 }, tag: 'setup:breakout' });
     expect(o[0].skipAbove).toBeCloseTo(c * 1.03, 9);
     expect(o[0].skipBelow).toBe(a.plan!.stop);
     expect(o[0].reason).toContain('Cassure avec volume');
     expect(trader.decide(ctx(), { ...P, setups: [] })).toEqual([]);
     expect(trader.decide(ctx({ cash: 50 }), P)[0].sizing).toEqual({ riskUsd: 10, maxUsd: 50 });
   });
-  it('aucune entrée quand Bitcoin est sous sa moyenne 200 jours', () => {
-    expect(trader.decide(ctx({ btcUp: false }), P)).toEqual([]);
-    expect(trader.decide(ctx({ btcUp: false }), { ...P, regime: false })).toHaveLength(1);
+  it('filtre de régime facultatif, désactivé par défaut (F1 non validé au contrôle)', () => {
+    expect(trader.defaults.regime).toBe(false);
+    expect(trader.decide(ctx({ btcUp: false }), P)).toHaveLength(1);
+    expect(trader.decide(ctx({ btcUp: false }), { ...P, regime: true })).toEqual([]);
+  });
+  it('stop jugé à la clôture : sortie quand la dernière clôture passe sous le stop', () => {
+    const lastClose = series.down[series.down.length - 1].close;
+    const o = trader.decide(ctx({ positions: [{ ...pos('down', '2025-10-20'), stop: lastClose * 1.05, stopOnClose: true }] }), P);
+    expect(o.find((x) => x.coinId === 'down')).toMatchObject({ side: 'sell', fraction: 1, tag: 'stop' });
+    expect(trader.decide(ctx({ positions: [{ ...pos('down', '2025-10-20'), stop: lastClose * 0.9, stopOnClose: true }] }), P).find((x) => x.coinId === 'down')).toBeUndefined();
   });
   it('délai de 5 jours après une sortie au stop', () => {
     expect(trader.decide(ctx({ lastStop: '2025-10-25' }), P)).toEqual([]);
     expect(trader.decide(ctx({ lastStop: '2025-10-22' }), P)).toHaveLength(1);
   });
-  it('sorties : durée maximale, puis signal « Vente forte »', () => {
+  it('sortie à la durée maximale (le stop et l’objectif font le reste ; aucun signal de vente n’est validé)', () => {
     const o = trader.decide(ctx({ positions: [pos('sol', '2025-09-28'), pos('down', '2025-10-20')] }), P);
     expect(o.find((x) => x.coinId === 'sol')).toMatchObject({ side: 'sell', fraction: 1, tag: 'time-exit', reason: 'Durée maximale atteinte (30 jours)' });
-    expect(o.find((x) => x.coinId === 'down')).toMatchObject({ side: 'sell', fraction: 1, tag: 'signal-exit', reason: 'Signal trader passé à « Vente forte »' });
+    expect(o.find((x) => x.coinId === 'down' && x.side === 'sell')).toBeUndefined();
   });
   it('pause à −20 % depuis le sommet, reprise à −10 %', () => {
     expect(trader.decide(ctx({ equity: 790, min: 790 }), P)).toEqual([]);

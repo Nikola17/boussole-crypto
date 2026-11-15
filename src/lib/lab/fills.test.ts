@@ -81,4 +81,10 @@ describe('règles d’exécution', () => {
     const r = settleBar(b, 'btc', bar(85, 101, 84, 95), ex, 'T', { gapRule: false });
     expect(r.fill?.marketUsd).toBe(90);
   });
+  it('stop jugé à la clôture : pas d’exécution en séance', () => {
+    const b = applyIntent(empty(), buy({ stop: 90, stopOnClose: true }), 100, ex, opts).book;
+    expect(b.positions.btc.stop).toBe(90);
+    expect(b.positions.btc.stopOnClose).toBe(true);
+    expect(settleBar(b, 'btc', bar(95, 96, 80, 92), ex, 'T').fill).toBeNull();
+  });
 });

@@ -36,7 +36,7 @@ export const dcaBoussole: Strategy<DcaBoussoleParams> = {
       const cs = ctx.candles(u.coinId);
       if (!cs.length) continue;
       change7d[u.coinId] = cs.length > 7 ? (cs[cs.length - 1].close / cs[cs.length - 8].close - 1) * 100 : null;
-      const a = cs.length >= 30 ? analyze(cs, { temperature: ctx.temperature ?? undefined }, { closedOnly: true }) : null;
+      const a = cs.length >= 30 ? analyze(cs, { temperature: ctx.temperature ?? undefined, isBitcoin: u.coinId === 'bitcoin' }, { closedOnly: true }) : null;
       if (a) scores[u.coinId] = a.investor.score;
     }
     const heldUsd: Record<string, number> = {};

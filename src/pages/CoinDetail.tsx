@@ -100,7 +100,7 @@ export default function CoinDetail({ id }: { id: string }) {
 
   const candlesQ = useCoinCandles(priceUsd ? { id, symbol: symbol.toLowerCase(), priceUsd } : null, tf);
   const dailyQ = useCoinCandles(priceUsd ? { id, symbol: symbol.toLowerCase(), priceUsd } : null, '1d');
-  const analysis = useMemo(() => (dailyQ.data?.candles.length ? analyze(closedCandles(dailyQ.data.candles, Date.now()), { temperature: cycle.data?.temperature, athChangePct: athChange }, { closedOnly: true }) : null), [dailyQ.data, cycle.data, athChange]);
+  const analysis = useMemo(() => (dailyQ.data?.candles.length ? analyze(closedCandles(dailyQ.data.candles, Date.now()), { temperature: cycle.data?.temperature, athChangePct: athChange, isBitcoin: id === 'bitcoin' }, { closedOnly: true }) : null), [dailyQ.data, cycle.data, athChange]);
 
   const levels: ChartLevel[] = useMemo(() => {
     if (!analysis?.plan) return [];

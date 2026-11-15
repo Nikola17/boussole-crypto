@@ -130,8 +130,11 @@ export function verdictOf(s: HorizonStats, meta: KeyMeta): Verdict {
 
 // ------------------------------------------------------------------ accumulation
 
-interface Bucket { ret: number[]; worst: number[]; excess: number[]; planR: number[]; days: number }
-const emptyBucket = (): Bucket => ({ ret: [], worst: [], excess: [], planR: [], days: 0 });
+// Taux et médianes sur TOUS les jours actifs (comme la référence, qui compte des jours) ; la marge d'erreur, elle, se calcule
+// sur le nombre d'épisodes (jours qui se suivent ne sont pas des cas indépendants). Comparer des épisodes à des jours
+// favorisait n'importe quel état qui change souvent : un état et son complément battaient tous deux la référence.
+interface Bucket { ret: number[]; worst: number[]; excess: number[]; planR: number[]; days: number; episodes: number }
+const emptyBucket = (): Bucket => ({ ret: [], worst: [], excess: [], planR: [], days: 0, episodes: 0 });
 const periodOf = (day: string): 'tuning' | 'control' => (day <= TUNING_END ? 'tuning' : 'control');
 const pct = (xs: number[]) => (xs.length ? (xs.filter((x) => x > 0).length / xs.length) * 100 : NaN);
 const meanOf = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : NaN);
@@ -166,7 +169,7 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
   const lastActive = new Map<string, number>();
   let observations = 0;
   // Par crypto (horizon principal) : les épisodes de chaque clé et tous les jours de la crypto (sa référence).
-  const perAsset = new Map<string, Map<string, number[]>>();
+  const perAsset = new Map<string, Map<string, { rets: number[]; episodes: number }>>();
   const assetBase = new Map<string, number[]>();
   let btcObservations = 0;
 
@@ -196,7 +199,7 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
       const i = a.dayIndex.get(day)!;
       const window = a.candles.slice(Math.max(0, i - 399), i + 1);
       const athChangePct = (a.candles[i].close / athPrefix.get(a.id)![i] - 1) * 100;
-      const analysis = analyze(window, { temperature: temperature ?? undefined, athChangePct }, { closedOnly: true });
+      const analysis = analyze(window, { temperature: temperature ?? undefined, athChangePct, isBitcoin: a.id === 'BTC' }, { closedOnly: true });
       if (!analysis) continue;
       observations++;
       if (a.id === 'BTC' || uni.length === 1) btcObservations++;
@@ -226,9 +229,10 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
         buckets.set(key, bk);
         for (const h of meta.horizons) {
           const b = (bk[period][h] ??= emptyBucket());
-          b.days++;
-          if (!isStart) continue;
           if (isPlan(key)) {
+            b.days++;
+            if (!isStart) continue; // un plan de trade : un trade par épisode
+            b.episodes++;
             const target = meta.plan?.targetR ?? Number(key.split('@')[1]);
             const stop = !analysis.plan ? null : meta.plan && meta.plan.stop !== 'plan' ? analysis.price - meta.plan.stop.atr * analysis.plan.atr : analysis.plan.stop;
             const pr = stop != null ? planR(a.candles, i, stop, target, 30, 2 * (COSTS.exchange.feePct + COSTS.exchange.spreadPct), { exitOnClose: meta.plan?.exitOnClose }) : null;
@@ -236,12 +240,14 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
             continue;
           }
           const x = r[h];
-          if (!x) continue;
+          if (!x) continue; // horizon dans le futur : jour non observable, ni compté ni mesuré
+          b.days++;
+          if (isStart) b.episodes++;
           b.ret.push(x.ret);
-          if (h === meta.horizon) { const m = perAsset.get(key) ?? new Map<string, number[]>(); const l = m.get(a.id) ?? []; l.push(x.ret); m.set(a.id, l); perAsset.set(key, m); }
+          if (h === meta.horizon) { const m = perAsset.get(key) ?? new Map<string, { rets: number[]; episodes: number }>(); const l = m.get(a.id) ?? { rets: [], episodes: 0 }; l.rets.push(x.ret); if (isStart) l.episodes++; m.set(a.id, l); perAsset.set(key, m); }
           b.worst.push(x.worst);
           if (Number.isFinite(dayMean[h])) b.excess.push(x.ret - dayMean[h]);
-          if (x.forced) forced.set(key, (forced.get(key) ?? 0) + 1);
+          if (x.forced && isStart) forced.set(key, (forced.get(key) ?? 0) + 1);
         }
       }
     }
@@ -255,15 +261,16 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
     for (const h of meta.horizons) {
       const stat = (p: 'tuning' | 'control' | 'all'): PeriodStats => {
         const parts = p === 'all' ? [bk.tuning[h], bk.control[h]] : [bk[p][h]];
-        const b = parts.reduce<Bucket>((acc, x) => (x ? { ret: [...acc.ret, ...x.ret], worst: [...acc.worst, ...x.worst], excess: [...acc.excess, ...x.excess], planR: [...acc.planR, ...x.planR], days: acc.days + x.days } : acc), emptyBucket());
+        const b = parts.reduce<Bucket>((acc, x) => (x ? { ret: [...acc.ret, ...x.ret], worst: [...acc.worst, ...x.worst], excess: [...acc.excess, ...x.excess], planR: [...acc.planR, ...x.planR], days: acc.days + x.days, episodes: acc.episodes + x.episodes } : acc), emptyBucket());
         const ref = (kind: 'all' | 'btc' | 'plan', k: string) => (p === 'all' ? [...(base[kind][k]?.tuning ?? []), ...(base[kind][k]?.control ?? [])] : base[kind][k]?.[p] ?? []);
         const baseline = isPlan(key) ? ref('plan', key.split('@')[1]) : ref(refKind, String(h));
-        const w = wilson(b.ret.filter((x) => x > 0).length, b.ret.length);
+        const hit = pct(b.ret);
+        const w = wilson(Number.isFinite(hit) ? Math.round((hit / 100) * b.episodes) : 0, b.episodes);
         const med = median(b.ret);
         const baseMed = median(baseline);
         return {
-          days: b.days, episodes: b.ret.length,
-          hitPct: pct(b.ret), hitLow: w.low * 100, hitHigh: w.high * 100,
+          days: b.days, episodes: b.episodes,
+          hitPct: hit, hitLow: w.low * 100, hitHigh: w.high * 100,
           medianPct: med, meanPct: meanOf(b.ret),
           // Sans univers du jour suffisant (une seule crypto), l'excès est l'écart de médiane avec la référence.
           excessMedianPct: b.excess.length ? median(b.excess) : med - baseMed,
@@ -281,7 +288,7 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
   const byAsset: Record<string, AssetKeyStats[]> = {};
   for (const [key, m] of perAsset) {
     const h = metas.get(key)!.horizon;
-    byAsset[key] = [...m.entries()].map(([asset, rets]) => ({ asset, episodes: rets.length, medianPct: median(rets), baselineMedianPct: median(assetBase.get(`${h}|${asset}`) ?? []) }));
+    byAsset[key] = [...m.entries()].map(([asset, v]) => ({ asset, episodes: v.episodes, medianPct: median(v.rets), baselineMedianPct: median(assetBase.get(`${h}|${asset}`) ?? []) }));
   }
   return { keys, observations, dataThrough, byAsset };
 }

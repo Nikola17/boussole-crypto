@@ -37,6 +37,7 @@ export function autoState(portfolio: PaperPortfolio, logs: PaperDayLog[], closeO
           openedOn: p?.openedOn ?? l.day,
           ...(f.stop != null ? { stop: f.stop } : p?.stop != null ? { stop: p.stop } : {}),
           ...(f.target != null ? { target: f.target } : p?.target != null ? { target: p.target } : {}),
+          ...(f.stopOnClose || p?.stopOnClose ? { stopOnClose: true } : {}),
         };
       } else {
         cash += f.quantity * f.priceUsd - f.feeUsd;

@@ -1,5 +1,27 @@
 # Candidats du lot 3 — décisions (15 novembre 2026)
 
+> **Méthode corrigée (même jour).** Le premier passage comparait des épisodes (un par série de jours) à une référence de jours : n'importe quel état qui change souvent paraissait meilleur qu'un jour quelconque (« Conserver » et ses compléments battaient tous la référence). Les taux et médianes se calculent désormais sur tous les jours actifs, la marge d'erreur sur le nombre d'épisodes ; un test vérifie qu'un état et son complément ne peuvent plus battre tous deux la référence. Les mêmes candidats ont été remesurés au contrôle (`2026-11-15-candidats-controle-retenus.md`, inscrit au journal) ; **les décisions ci-dessous sont celles de la méthode corrigée**. Le tableau d'origine est conservé plus bas pour mémoire.
+
+## Décisions (méthode corrigée)
+
+| Candidat | Décision | Raison chiffrée (contrôle, pondération par jour) |
+|---|---|---|
+| F3 · cassure 20 jours, volume ×1,5 | **Retenu** (« Achat ») | 51,1 % contre 43,1 % ; cohérence 66,3 % |
+| F3 · cassure 20 jours, volume ×2 | **Retenu** (« Achat fort ») | 52,7 % contre 43,1 % ; cohérence 68,1 % |
+| F10 · excès (RSI hebdo > 80 ou Mayer > 2) | **Retenu** (« Alléger ») | 33,2 % contre 41,2 % ; médiane −24,9 % contre −9,0 % ; cohérence 75 % |
+| F8 · altcoins en « Marché chaud » (60 à 80) | **Retenu** (« Alléger », hors Bitcoin) | 18,9 % contre 41,2 % ; médiane −31,8 % ; cohérence 89,4 % |
+| F8 · altcoins en « Peur extrême » (< 20) | **Retenu** (« Accumuler ») | 56,7 % contre 41,2 % ; médiane +5,6 % contre −9,0 % ; cohérence 77,6 % |
+| Zone 20 à 40 (libellé « Accumuler », toutes cryptos) | **Retenu** | le libellé lui-même : 46,5 % contre 41,2 % au contrôle (rapport des signaux v2) ; le candidat F8 restreint aux altcoins est « sans effet » (borne d'erreur) |
+| F13 · plan, stop jugé à la clôture, objectif 3 R | **Retenu** (plan v2) | +0,32 R par trade, frais compris (entrées du signal trader v2) ; meilleure variante au contrôle |
+| F14 · stop à 1,5 ou 2 × la volatilité, objectif 3 R | Abandonné | validés (+0,19 et +0,24 R) mais moins bons que F13 |
+| F12 · tendance hebdomadaire et signal trader | Information seulement | validé, cohérence 58,9 % (sous 60 %) |
+| F4 · pression acheteuse, F6 · survente avec rebond | Information seulement | prometteurs |
+| F1 · régime Bitcoin, F2 · tendance 200 jours, F7 · Mayer < 0,8, F9 · compression puis baisse | Abandonnés | sans effet au contrôle |
+| F5, F9 hausse, F4 > 55 %, F6 en tendance, F11 | Abandonnés ou non mesurés | comme ci-dessous |
+
+## Premier passage (pondération par épisode, abandonné)
+
+
 Mesures : `2026-11-15-candidats-reglage.md` (période de réglage seule, tous les candidats) et `2026-11-15-candidats-controle.md` (période de contrôle, variantes retenues sur le réglage). Chaque regard sur le contrôle est inscrit dans `journal.md`. Règle d'entrée : verdict « validé » et même sens sur 60 % ou plus des cryptos ayant au moins 5 épisodes (protocole, point 4).
 
 | Candidat | Décision | Raison chiffrée (contrôle, sauf mention) |

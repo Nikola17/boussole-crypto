@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyze, MIN_BARS_FOR_BUY, SIGNALS_VERSION } from './signals';
+import { analyze, INVESTOR_TABLE, MIN_BARS_FOR_BUY, SETUP_KEYS, SIGNALS_VERSION } from './signals';
 import { closedCandles, volumeRatio, type Candle } from './indicators';
 
 /** Série synthétique : tendance linéaire + légère oscillation, volume constant. */
@@ -42,7 +42,8 @@ describe('signal investisseur : pas d’achat sans 200 jours d’historique', ()
   });
 
   it('avec 300 jours et le même contexte : le signal d’achat est possible', () => {
-    const a = analyze(fall(300), ctx)!;
+    // v2 : la peur extrême n'est pas validée pour un achat ; la zone d'accumulation (20 à 40) l'est.
+    const a = analyze(fall(300), { ...ctx, temperature: 30 })!;
     expect(a.bars).toBeGreaterThanOrEqual(MIN_BARS_FOR_BUY);
     expect(a.investor.limitedBy).toBeUndefined();
     expect(['Accumuler', 'Accumuler fort']).toContain(a.investor.label);
@@ -88,6 +89,54 @@ describe('signaux sur bougies closes (banc d’essai)', () => {
     expect(at10h?.price).toBe(closed[closed.length - 1].close);
   });
   it('numéros de version des règles', () => {
-    expect(SIGNALS_VERSION).toBe(1);
+    expect(SIGNALS_VERSION).toBe(2);
+  });
+});
+
+describe('signaux v2 : seulement ce que le banc d’essai soutient', () => {
+  const flat = () => series(300, 100, 100.5);
+  it('table de décision investisseur, dans l’ordre', () => {
+    expect(INVESTOR_TABLE.map((l) => l.label)).toEqual(['Prendre des profits', 'Alléger', 'Accumuler fort', 'Accumuler', 'Conserver']);
+  });
+  it('« Prendre des profits » est atteignable : état de risque en euphorie', () => {
+    const a = analyze(flat(), { temperature: 85 }, { closedOnly: true })!;
+    expect(a.investor.label).toBe('Prendre des profits');
+    expect(a.investor.tone).toBe('down');
+    expect(a.investor.why).toContain('Euphorie');
+  });
+  it('« Accumuler » sous 40 de température, « Conserver » entre 40 et 60', () => {
+    const acc = analyze(flat(), { temperature: 30 }, { closedOnly: true })!;
+    expect(acc.investor.label).toBe('Accumuler');
+    expect(acc.investor.why).toContain('sous 40');
+    expect(analyze(flat(), { temperature: 12 }, { closedOnly: true })!.investor.label).toBe('Accumuler');
+    expect(analyze(flat(), { temperature: 50 }, { closedOnly: true })!.investor.label).toBe('Conserver');
+  });
+  it('« Alléger » : excès mesuré (Mayer > 2 ou RSI hebdo > 80), ou altcoin en marché chaud', () => {
+    const parabola = series(300, 20, 400).map((c, i) => ({ ...c, close: 20 * Math.exp(i / 80), high: 20 * Math.exp(i / 80) * 1.01, low: 20 * Math.exp(i / 80) * 0.99 }));
+    const a = analyze(parabola, { temperature: 50 }, { closedOnly: true })!;
+    expect(a.investor.label).toBe('Alléger');
+    expect(a.investor.why).toContain('baisse');
+    expect(analyze(flat(), { temperature: 70 }, { closedOnly: true })!.investor.label).toBe('Alléger');
+    expect(analyze(flat(), { temperature: 70, isBitcoin: true }, { closedOnly: true })!.investor.label).toBe('Conserver');
+  });
+  it('plan de trade v2 : objectif à 3 R, stop jugé à la clôture', () => {
+    const base = series(260, 100, 140);
+    const last = base[base.length - 1];
+    const a = analyze([...base, { ...last, time: last.time + 86400, close: last.close * 1.08, high: last.close * 1.09, volume: 2500 }], {}, { closedOnly: true })!;
+    expect(a.plan?.exitOnClose).toBe(true);
+    expect(a.plan!.tp2).toBeCloseTo(a.plan!.entry + 3 * (a.plan!.entry - a.plan!.stop), 9);
+  });
+  it('trader : « Achat » seulement sur une cassure validée, « Achat fort » avec un volume ×2', () => {
+    const base = series(260, 100, 140);
+    const last = base[base.length - 1];
+    const strong = [...base, { ...last, time: last.time + 86400, close: last.close * 1.08, high: last.close * 1.09, volume: 2500 }];
+    const mild = [...base, { ...last, time: last.time + 86400, close: last.close * 1.08, high: last.close * 1.09, volume: 1700 }];
+    expect(analyze(strong, {}, { closedOnly: true })!.trader.label).toBe('Achat fort');
+    expect(analyze(mild, {}, { closedOnly: true })!.trader.label).toBe('Achat');
+    expect(analyze(base, {}, { closedOnly: true })!.trader.label).toBe('Neutre');
+    for (const s of [series(300, 300, 50), base, strong]) expect(['Vente', 'Vente forte']).not.toContain(analyze(s, {}, { closedOnly: true })!.trader.label);
+  });
+  it('setups : seuls ceux que l’historique soutient', () => {
+    expect(Object.keys(SETUP_KEYS).sort()).toEqual(['breakout', 'macd', 'oversold']);
   });
 });

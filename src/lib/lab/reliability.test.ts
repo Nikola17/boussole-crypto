@@ -30,7 +30,7 @@ describe('table de fiabilité', () => {
 describe('setups peu fiables', () => {
   it('repérés d’après la table embarquée', async () => {
     const { isUnreliable } = await import('./reliability');
-    expect(isUnreliable('setup:pullback')).toBe(true); // « Repli en tendance haussière » : inversé
+    expect(isUnreliable('setup:oversold')).toBe(true); // « Survente + rebond » : sans effet à 30 jours (v2)
     expect(isUnreliable('setup:breakout')).toBe(false); // « Cassure avec volume » : validée
     expect(isUnreliable('setup:inconnu')).toBe(false);
   });

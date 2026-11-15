@@ -309,7 +309,7 @@
       ]
     },
     "dca-boussole": {
-      "rules": "dca-boussole@1+signals1+cycle1+autoBasket1",
+      "rules": "dca-boussole@1+signals2+cycle1+autoBasket1",
       "runs": [
         {
           "fill": "nextOpen",
@@ -462,17 +462,17 @@
       ]
     },
     "trader": {
-      "rules": "trader@1+signals1",
+      "rules": "trader@2+signals2",
       "runs": [
         {
           "fill": "nextOpen",
           "costs": "exchange",
-          "twrPct": -11.6303,
-          "twrPerYearPct": -1.5575,
-          "maxDrawdownPct": -20.3917,
+          "twrPct": 14.7679,
+          "twrPerYearPct": 1.7641,
+          "maxDrawdownPct": -21.1173,
           "referenceTwrPct": 1589.4294,
-          "trades": 99,
-          "expectancyR": -0.1003,
+          "trades": 68,
+          "expectancyR": 0.257,
           "windows": {
             "30": {
               "p10": 0,
@@ -480,22 +480,22 @@
               "p90": 0
             },
             "60": {
-              "p10": -0.4469,
+              "p10": 0,
               "p50": 0,
               "p90": 0
             },
             "90": {
-              "p10": -1.5832,
+              "p10": 0,
               "p50": 0,
               "p90": 0
             },
             "180": {
-              "p10": -3.903,
+              "p10": 0,
               "p50": 0,
               "p90": 0
             },
             "365": {
-              "p10": -6.4856,
+              "p10": -1.6629,
               "p50": 0,
               "p90": 0
             }
@@ -504,12 +504,12 @@
         {
           "fill": "nextOpen",
           "costs": "app",
-          "twrPct": -22.0455,
-          "twrPerYearPct": -3.1123,
-          "maxDrawdownPct": -24.2813,
+          "twrPct": 5.4503,
+          "twrPerYearPct": 0.676,
+          "maxDrawdownPct": -21.2986,
           "referenceTwrPct": 1589.4294,
-          "trades": 77,
-          "expectancyR": -0.2961,
+          "trades": 62,
+          "expectancyR": 0.1312,
           "windows": {
             "30": {
               "p10": 0,
@@ -517,22 +517,22 @@
               "p90": 0
             },
             "60": {
-              "p10": -2.2576,
+              "p10": 0,
               "p50": 0,
               "p90": 0
             },
             "90": {
-              "p10": -3.9624,
+              "p10": 0,
               "p50": 0,
               "p90": 0
             },
             "180": {
-              "p10": -7.2692,
+              "p10": 0,
               "p50": 0,
               "p90": 0
             },
             "365": {
-              "p10": -11.6344,
+              "p10": -2.8459,
               "p50": 0,
               "p90": 0
             }
@@ -541,49 +541,49 @@
         {
           "fill": "nextClose",
           "costs": "exchange",
-          "twrPct": 73.7087,
-          "twrPerYearPct": 7.2623,
-          "maxDrawdownPct": -20.497,
+          "twrPct": 8.5327,
+          "twrPerYearPct": 1.045,
+          "maxDrawdownPct": -20.3492,
           "referenceTwrPct": 1589.4294,
-          "trades": 520,
-          "expectancyR": 0.0474,
+          "trades": 51,
+          "expectancyR": 0.4139,
           "windows": {
             "30": {
-              "p10": -3.1768,
+              "p10": 0,
               "p50": 0,
-              "p90": 6.3704
+              "p90": 0
             },
             "60": {
-              "p10": -4.1559,
+              "p10": 0,
               "p50": 0,
-              "p90": 9.3972
+              "p90": 0
             },
             "90": {
-              "p10": -5.1328,
+              "p10": 0,
               "p50": 0,
-              "p90": 12.1389
+              "p90": 0
             },
             "180": {
-              "p10": -6.7667,
+              "p10": 0,
               "p50": 0,
-              "p90": 17.2633
+              "p90": 0
             },
             "365": {
-              "p10": -7.7346,
-              "p50": 2.1152,
-              "p90": 36.9426
+              "p10": 0,
+              "p50": 0,
+              "p90": 0
             }
           }
         },
         {
           "fill": "nextClose",
           "costs": "app",
-          "twrPct": -3.4982,
-          "twrPerYearPct": -0.4511,
-          "maxDrawdownPct": -20.4306,
+          "twrPct": 3.1846,
+          "twrPerYearPct": 0.3988,
+          "maxDrawdownPct": -23.1198,
           "referenceTwrPct": 1589.4294,
-          "trades": 60,
-          "expectancyR": -0.075,
+          "trades": 51,
+          "expectancyR": 0.1794,
           "windows": {
             "30": {
               "p10": 0,
@@ -606,7 +606,7 @@
               "p90": 0
             },
             "365": {
-              "p10": -0.9161,
+              "p10": 0,
               "p50": 0,
               "p90": 0
             }

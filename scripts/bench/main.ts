@@ -95,13 +95,15 @@ async function cmdStrategies(ids: string[]): Promise<void> {
   } else process.stdout.write(report);
 }
 
-async function cmdCandidates(control: boolean): Promise<void> {
+async function cmdCandidates(control: boolean, only: string[] | null, period = 'contrôle'): Promise<void> {
   const d = await loadData();
-  const study = studySignals({ assets: d.assets, btc: d.btc, temperature: d.temperature, top: 50, from: FROM, extractors: [candidateExtractor], metas: CANDIDATES, onProgress: (k, n) => { if (k % 500 === 0) log(`  ${k}/${n} jours`); } });
+  const metas = only ? CANDIDATES.filter((c) => only.includes(c.key)) : CANDIDATES;
+  if (only && metas.length !== only.length) throw new Error(`Candidats inconnus : ${only.filter((k) => !CANDIDATES.some((c) => c.key === k)).join(', ')}`);
+  const study = studySignals({ assets: d.assets, btc: d.btc, temperature: d.temperature, top: 50, from: FROM, extractors: [candidateExtractor], metas, onProgress: (k, n) => { if (k % 500 === 0) log(`  ${k}/${n} jours`); } });
   const info: RunInfo = { day: today, dataThrough: study.dataThrough, assets: d.assets.length, from: FROM, top: 50, observations: study.observations, notes: d.notes };
   const bias = new Map(CANDIDATES.map((c) => [c.key, c.bias]));
   const consistency = (key: string) => consistencyPct(study.byAsset[key] ?? [], bias.get(key) ?? 'neutral');
-  const file = join('docs', 'bench', `${today}-candidats-${control ? 'controle' : 'reglage'}.md`);
+  const file = join('docs', 'bench', `${today}-candidats-${control ? 'controle' : 'reglage'}${only ? '-retenus' : ''}.md`);
   writeFileSync(file, candidatesReport(study.keys, study.byAsset, consistency, info, control));
   if (control) {
     const jf = join('docs', 'bench', 'journal.md');
@@ -110,7 +112,7 @@ async function cmdCandidates(control: boolean): Promise<void> {
       const c = k.byHorizon[k.meta.horizon]?.control;
       const cons = consistency(k.meta.key);
       const res = !c ? 'aucune observation' : k.meta.key.startsWith('plan:') ? `${k.verdict} (espérance ${(c.expectancyR ?? NaN).toFixed(2)} R)` : `${k.verdict} (contrôle ${c.hitPct.toFixed(1)} % / ${c.baselineHitPct.toFixed(1)} %, cohérence ${cons == null ? '—' : `${cons.toFixed(0)} %`})`;
-      return { day: today, key: k.meta.key, period: 'contrôle', result: res };
+      return { day: today, key: k.meta.key, period, result: res };
     });
     writeFileSync(jf, appendJournal(text, entries));
   }
@@ -121,7 +123,7 @@ async function main(): Promise<void> {
   const [cmd, ...args] = process.argv.slice(2);
   if (cmd === 'signals') return cmdSignals();
   if (cmd === 'strategies') return cmdStrategies(Object.keys(STRATEGIES));
-  if (cmd === 'candidates') return cmdCandidates(args.includes('--control'));
+  if (cmd === 'candidates') return cmdCandidates(args.includes('--control'), args.find((a) => a.startsWith('--keys='))?.slice('--keys='.length).split(',') ?? null, args.find((a) => a.startsWith('--period='))?.slice('--period='.length));
   if (cmd === 'compare') {
     const unknown = args.filter((a) => !STRATEGIES[a]);
     if (args.length !== 2 || unknown.length) throw new Error(`Usage : compare <a> <b> parmi ${Object.keys(STRATEGIES).join(', ')}`);

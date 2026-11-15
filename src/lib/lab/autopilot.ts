@@ -40,7 +40,7 @@ export function needsArchive(p: PaperPortfolio, strategies: Registry = STRATEGIE
 const toPaperFill = (f: Fill): PaperFill => ({
   coinId: f.coinId, symbol: f.symbol, name: f.name, side: f.side, kind: f.kind === 'limit' ? 'market' : f.kind, quantity: f.quantity,
   marketUsd: f.marketUsd, priceUsd: f.priceUsd, feeUsd: f.feeUsd, at: f.at, reason: f.reason,
-  ...(f.tag ? { tag: f.tag } : {}), ...(f.stop != null ? { stop: f.stop } : {}), ...(f.target != null ? { target: f.target } : {}),
+  ...(f.tag ? { tag: f.tag } : {}), ...(f.stop != null ? { stop: f.stop } : {}), ...(f.target != null ? { target: f.target } : {}), ...(f.stopOnClose ? { stopOnClose: true } : {}),
 });
 
 export async function tickAutopilot(

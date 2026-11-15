@@ -1,6 +1,6 @@
 // « Trader (setups avec stop) » : entre seulement sur un setup que le banc d'essai valide, avec un signal trader
 // haussier et Bitcoin au-dessus de sa moyenne 200 jours ; risque fixe par trade, stop, objectif en R ; sortie au bout
-// de 30 jours ou sur « Vente forte » ; pause automatique après −20 % depuis le sommet.
+// de 30 jours (pas de signal de vente validé) ; pause automatique après −20 % depuis le sommet.
 
 import { analyze, SETUP_KEYS } from '../../signals';
 import { SIGNAL_KEYS } from '../events';
@@ -24,10 +24,10 @@ const signed = (x: number) => `${x > 0 ? '+' : ''}${x}`;
 
 export const trader: Strategy<TraderParams> = {
   id: 'trader',
-  version: 1,
+  version: 2,
   label: 'Trader (setups avec stop)',
-  describe: 'Entre sur les seuls setups validés par le banc d’essai, avec un stop et un objectif à 2 R ; risque 1 % par trade, 5 positions au plus, pause après −20 %.',
-  defaults: { riskPct: 1, maxPositions: 5, maxPositionPct: 20, targetR: 2, maxHoldDays: 30, cooldownDays: 5, maxChasePct: 3, regime: true, pauseDrawdownPct: 20, onlyAvailable: true, setups: validatedBullSetups() },
+  describe: 'Entre sur les seuls setups validés par le banc d’essai ; stop jugé à la clôture, objectif à 3 R (le plan le mieux mesuré) ; risque 1 % par trade, 5 positions au plus, pause après −20 %.',
+  defaults: { riskPct: 1, maxPositions: 5, maxPositionPct: 20, targetR: 3, maxHoldDays: 30, cooldownDays: 5, maxChasePct: 3, regime: false, pauseDrawdownPct: 20, onlyAvailable: true, setups: validatedBullSetups() },
   uses: ['signals'],
   replayable: true,
   kind: 'trades',
@@ -37,13 +37,17 @@ export const trader: Strategy<TraderParams> = {
     const pf = ctx.portfolio;
     const analysisOf = (coinId: string) => {
       const cs = ctx.candles(coinId);
-      return cs.length >= 30 ? analyze(cs, { temperature: ctx.temperature ?? undefined }, { closedOnly: true }) : null;
+      return cs.length >= 30 ? analyze(cs, { temperature: ctx.temperature ?? undefined, isBitcoin: coinId === 'bitcoin' }, { closedOnly: true }) : null;
     };
     for (const pos of pf.positions) {
+      const cs = ctx.candles(pos.coinId);
+      if (pos.stopOnClose && pos.stop != null && cs.length && cs[cs.length - 1].close <= pos.stop) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: 'sell', fraction: 1, tag: 'stop', reason: 'Clôture sous le stop : sortie' });
+        continue;
+      }
+      // Version 2 : aucun signal de vente n'est validé ; on sort au stop, à l'objectif, ou au bout de la durée maximale.
       if (daysBetween(pos.openedOn, ctx.execDay) >= p.maxHoldDays) {
         out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: 'sell', fraction: 1, tag: 'time-exit', reason: `Durée maximale atteinte (${p.maxHoldDays} jours)` });
-      } else if (analysisOf(pos.coinId)?.trader.label === 'Vente forte') {
-        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: 'sell', fraction: 1, tag: 'signal-exit', reason: 'Signal trader passé à « Vente forte »' });
       }
     }
     const paused = pf.minSincePeakUsd <= pf.peakEquityUsd * (1 - p.pauseDrawdownPct / 100) && pf.equityUsd < pf.peakEquityUsd * (1 - p.pauseDrawdownPct / 200);
@@ -65,7 +69,7 @@ export const trader: Strategy<TraderParams> = {
       const maxUsd = Math.min(pf.equityUsd * (p.maxPositionPct / 100), cash);
       const riskUsd = pf.equityUsd * (p.riskPct / 100);
       out.push({
-        coinId: u.coinId, symbol: u.symbol, name: u.name, side: 'buy', sizing: { riskUsd, maxUsd }, stop, targetR: p.targetR,
+        coinId: u.coinId, symbol: u.symbol, name: u.name, side: 'buy', sizing: { riskUsd, maxUsd }, stop, targetR: p.targetR, stopOnClose: true,
         skipAbove: c * (1 + p.maxChasePct / 100), skipBelow: stop, tag: `setup:${setup.key}`,
         reason: `${SETUP_KEYS[setup.key] ?? setup.label} · signal trader « ${a!.trader.label} » (${signed(a!.trader.score)})`,
       });

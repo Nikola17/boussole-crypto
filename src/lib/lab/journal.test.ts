@@ -18,5 +18,8 @@ describe('protocole du lot 3', () => {
     expect(one.trim().split('\n').length).toBe(JOURNAL_HEADER.trim().split('\n').length + 1);
     const two = appendJournal(one, [{ day: '2026-11-16', key: 'cand:F3:h55v15', period: 'contrôle', result: 'sans effet' }]);
     expect(trialsPerCandidate(two)).toEqual({ F3: 2 });
+    // Même jeu de paramètres regardé une seconde fois (méthode corrigée) : ce n'est pas un nouvel essai.
+    const again = appendJournal(two, [{ day: '2026-11-17', key: 'cand:F3:h20v15', period: 'contrôle (méthode corrigée)', result: 'validé' }]);
+    expect(trialsPerCandidate(again)).toEqual({ F3: 2 });
   });
 });

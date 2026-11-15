@@ -95,3 +95,22 @@ describe('étude complète', () => {
     expect(r.byAsset['test:up'].every((x) => x.medianPct > x.baselineMedianPct)).toBe(true);
   });
 });
+
+describe('pondération par jour', () => {
+  it('un état et son complément ne peuvent pas battre tous les deux la référence', () => {
+    // Une longue baisse (un seul épisode « long ») et des hausses courtes et fréquentes : pondérés par épisode, les deux
+    // états semblaient meilleurs qu'un jour quelconque ; pondérés par jour, leur moyenne redonne la référence.
+    const closes: number[] = [];
+    let p = 100;
+    for (let k = 0; k < 1100; k++) { p *= k % 200 < 120 ? 0.998 : (k % 4 === 0 ? 1.01 : 0.999); closes.push(p); }
+    const asset = makeAsset('A0', closes.map((x, i) => c(i, x, x * 1.001, x * 0.999, x)));
+    const metas: KeyMeta[] = [{ key: 'x:long', label: 'Long', bias: 'bull', horizon: 30, horizons: [30] }, { key: 'x:short', label: 'Court', bias: 'bull', horizon: 30, horizons: [30] }];
+    const r = studySignals({ assets: [asset], btc: asset, temperature: new Map(), top: 1, metas, extractors: [(o) => [o.i % 200 < 120 ? 'x:long' : 'x:short']] });
+    const [a, b] = ['x:long', 'x:short'].map((k) => r.keys.find((x) => x.meta.key === k)!.byHorizon[30].all);
+    const ref = a.baselineHitPct;
+    expect(Math.min(a.hitPct, b.hitPct)).toBeLessThanOrEqual(ref + 1e-9);
+    expect((a.hitPct * a.days + b.hitPct * b.days) / (a.days + b.days)).toBeCloseTo(ref, 6);
+    expect(a.episodes).toBeLessThan(a.days);
+  });
+});
+
