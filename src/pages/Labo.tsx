@@ -7,9 +7,10 @@ import { setQuery, useHashPath } from '../router';
 import { useMarkets } from '../hooks/useMarket';
 import { GhostCard } from './Paper';
 import { PortfoliosTab } from './labo/Portfolios';
+import { AutopilotCards, AutopilotDetail, LeaderboardTab } from './labo/Autopilots';
 import { BenchTab } from './labo/BenchTab';
 
-type Tab = 'papier' | 'fantomes' | 'banc';
+type Tab = 'papier' | 'classement' | 'fantomes' | 'banc';
 
 function Ghosts() {
   const markets = useMarkets();
@@ -25,10 +26,12 @@ export default function Labo({ initialTab }: { initialTab?: Tab }) {
       <PageHeader title="Labo" subtitle="Teste sans risquer un euro : ordres fictifs aux prix réels, achats que tu n’as pas faits, et ce que valent vraiment les signaux de Boussole sur l’historique." />
       <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[
         { value: 'papier', label: 'Portefeuilles papier' },
+        { value: 'classement', label: 'Classement' },
         { value: 'fantomes', label: 'Achats fantômes' },
         { value: 'banc', label: 'Banc d’essai' },
       ]} />
-      {tab === 'papier' && <PortfoliosTab />}
+      {tab === 'papier' && <PortfoliosTab autoCards={(open) => <AutopilotCards open={open} />} renderAuto={(p, back) => <AutopilotDetail p={p} onBack={back} />} />}
+      {tab === 'classement' && <LeaderboardTab />}
       {tab === 'fantomes' && <Ghosts />}
       {tab === 'banc' && <BenchTab />}
     </div>

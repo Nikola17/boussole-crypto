@@ -21,6 +21,7 @@ import { AiProgress, CostHint, NeedKey } from '../components/AiBlocks';
 import { Markdown } from '../components/Markdown';
 import { fngLabel } from '../api/feargreed';
 import { WeeklyCard } from '../components/WeeklyCard';
+import { AutopilotCard } from '../components/AutopilotCard';
 import { DisciplineCard } from '../components/DisciplineCard';
 
 function greeting(name: string) {
@@ -228,6 +229,7 @@ export default function Dashboard() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <WeeklyCard />
+        <AutopilotCard />
         <DisciplineCard />
       </div>
 

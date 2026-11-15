@@ -26,6 +26,7 @@ import { updateAssetUrl, useLatestVersion } from './hooks/useUpdate';
 import { loadSecrets, saveSecrets, secretsSealed } from './lib/secure';
 import Dashboard from './pages/Dashboard';
 import { usePaperSettle } from './hooks/usePaperSettle';
+import { useAutopilot } from './hooks/useAutopilot';
 
 const Market = lazy(() => import('./pages/Market'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
@@ -85,6 +86,7 @@ function AppEffects() {
   const autoStart = useStore((s) => s.settings.autoStart);
   useSmartAlerts();
   usePaperSettle();
+  useAutopilot();
   useAutoBackup();
   useSyncLifecycle();
   const exit = useExitPlan();
