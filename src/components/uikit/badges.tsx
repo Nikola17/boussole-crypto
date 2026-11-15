@@ -2,6 +2,7 @@ import { clsx } from 'clsx';
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { type ReactNode } from 'react';
 import { fmtPct } from '../../lib/format';
+import { reliabilityOf, reliabilityPhrase } from '../../lib/lab/reliability';
 // Badges, signaux, variations : les pastilles qui parlent (découpage du grand ui.tsx, lot 18).
 
 export type Tone = 'up' | 'down' | 'neutral' | 'warn' | 'accent' | 'bad';
@@ -26,14 +27,17 @@ export function Badge({ tone = 'neutral', children, className, icon }: { tone?: 
   );
 }
 
-export function SignalBadge({ label, tone, strength, score, compact, confidence, limited }: { label: string; tone: 'up' | 'down' | 'neutral'; strength?: number; score?: number; compact?: boolean; confidence?: 'haute' | 'moyenne' | 'faible'; limited?: string }) {
+export function SignalBadge({ label, tone, strength, score, compact, confidence, limited, reliabilityKey }: { label: string; tone: 'up' | 'down' | 'neutral'; strength?: number; score?: number; compact?: boolean; confidence?: 'haute' | 'moyenne' | 'faible'; limited?: string; reliabilityKey?: string }) {
+  const phrase = reliabilityKey ? reliabilityPhrase(reliabilityOf(reliabilityKey)) : undefined;
   const Icon = tone === 'up' ? ArrowUpRight : tone === 'down' ? ArrowDownRight : Minus;
   return (
+    <span title={phrase} className="inline-flex">
     <Badge tone={tone === 'up' ? 'up' : tone === 'down' ? 'down' : 'neutral'} className={clsx(strength === 2 && 'ring-1 ring-current/40')} icon={<Icon className="size-3.5" aria-hidden />}>
       {label}
       {!compact && score != null && <span className="tnum opacity-70">{score > 0 ? `+${score}` : score}</span>}
       {confidence && confidence !== 'haute' && <span className="text-[0.65rem] font-normal opacity-80" title={limited}>· confiance {confidence}</span>}
     </Badge>
+    </span>
   );
 }
 

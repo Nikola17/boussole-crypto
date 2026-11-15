@@ -7,7 +7,8 @@ import { clsx } from 'clsx';
 import { useStore } from '../store/useStore';
 import { useCoin, useCoinCandles, useCycle, useFx, useMarkets } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
-import { analyze, type Factor, type SignalResult } from '../lib/signals';
+import { analyze, type Factor, type Setup, type SignalResult } from '../lib/signals';
+import { isUnreliable, reliabilityOf, reliabilityPhrase } from '../lib/lab/reliability';
 import { closedCandles } from '../lib/indicators';
 import { bucketOf } from '../lib/portfolio';
 import { fmtCompact, fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtQty } from '../lib/format';
@@ -32,10 +33,23 @@ function VoteIcon({ vote }: { vote: number }) {
   return <MinusCircle className="size-4 shrink-0 text-muted" aria-label="Neutre" />;
 }
 
-function SignalCard({ title, help, result }: { title: string; help: string; result: SignalResult }) {
+function SignalCard({ title, help, result, reliabilityKey, setups }: { title: string; help: string; result: SignalResult; reliabilityKey: string; setups?: Setup[] }) {
+  const reliable = (setups ?? []).filter((s) => !isUnreliable(`setup:${s.key}`));
+  const weak = (setups ?? []).filter((s) => isUnreliable(`setup:${s.key}`));
   return (
-    <Card title={<span className="inline-flex items-center gap-1">{title}<InfoTip>{help}</InfoTip></span>} actions={<SignalBadge label={result.label} tone={result.tone} strength={result.strength} score={result.score} confidence={result.confidence} limited={result.limitedBy} />}>
+    <Card title={<span className="inline-flex items-center gap-1">{title}<InfoTip>{help}</InfoTip></span>} actions={<SignalBadge label={result.label} tone={result.tone} strength={result.strength} score={result.score} confidence={result.confidence} limited={result.limitedBy} reliabilityKey={reliabilityKey} />}>
+      <p className="mb-1 text-xs text-ink-2">Fiabilité de « {result.label} » : {reliabilityPhrase(reliabilityOf(reliabilityKey))}</p>
       <p className="mb-2 text-xs text-muted">Score {result.score > 0 ? '+' : ''}{result.score} sur ±100 · confiance {result.confidence}</p>
+      {reliable.length > 0 && (
+        <ul className="mb-3 space-y-1.5">
+          {reliable.map((s) => <li key={s.key} className="text-sm"><Badge tone={s.bias === 'bull' ? 'up' : s.bias === 'bear' ? 'down' : 'neutral'}>{s.label}</Badge> <span className="text-xs text-ink-2">{s.detail} {reliabilityPhrase(reliabilityOf(`setup:${s.key}`))}</span></li>)}
+        </ul>
+      )}
+      {weak.length > 0 && (
+        <details className="mb-3 text-xs text-muted"><summary className="cursor-pointer">Peu fiables d’après l’historique ({weak.length})</summary>
+          <ul className="mt-1 space-y-1">{weak.map((s) => <li key={s.key}>{s.label} : {reliabilityPhrase(reliabilityOf(`setup:${s.key}`))}</li>)}</ul>
+        </details>
+      )}
       <ul className="space-y-2.5">
         {result.factors.map((f: Factor) => (
           <li key={f.key} className="flex gap-2.5">
@@ -198,8 +212,8 @@ export default function CoinDetail({ id }: { id: string }) {
 
       {analysis ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <SignalCard title="Signal investisseur" help="Horizon de plusieurs mois : tendance de fond, valorisation par rapport à la moyenne 200 jours, cycle de marché. Sert à décider quand accumuler ou prendre des profits." result={analysis.investor} />
-          <SignalCard title="Signal trader" help="Horizon de quelques jours à quelques semaines : momentum, excès, cassures. Sert au timing d’une entrée ou d’une sortie." result={analysis.trader} />
+          <SignalCard title="Signal investisseur" help="Horizon de plusieurs mois : tendance de fond, valorisation par rapport à la moyenne 200 jours, cycle de marché. Sert à décider quand accumuler ou prendre des profits." result={analysis.investor} reliabilityKey={`inv:${analysis.investor.label}`} />
+          <SignalCard title="Signal trader" help="Horizon de quelques jours à quelques semaines : momentum, excès, cassures. Sert au timing d’une entrée ou d’une sortie." result={analysis.trader} reliabilityKey={`tr:${analysis.trader.label}`} setups={analysis.setups} />
         </div>
       ) : dailyQ.isLoading ? <Spinner label="Calcul des signaux…" /> : <Banner tone="info">Pas assez d’historique pour calculer des signaux fiables sur cette crypto.</Banner>}
 
@@ -217,7 +231,7 @@ export default function CoinDetail({ id }: { id: string }) {
               {analysis.plan && analysis.trader.tone === 'up' && (
                 <>
                   <div className="col-span-2 text-xs text-ink-2">Si tu entres (le signal trader est haussier) :</div>
-                  <div><div className="text-xs text-muted">Entrée (cours actuel)</div><div className="tnum font-medium text-ink">{fmtPrice(analysis.plan.entry * rate, currency)}</div></div>
+                  <div><div className="text-xs text-muted">Entrée (dernière clôture)</div><div className="tnum font-medium text-ink">{fmtPrice(analysis.plan.entry * rate, currency)}</div></div>
                   <div><div className="text-xs text-muted">Stop suggéré</div><div className="tnum font-medium text-down">{fmtPrice(analysis.plan.stop * rate, currency)} <span className="text-xs text-muted">(−{fmtNum(analysis.plan.riskPct, 1)} %)</span></div></div>
                   <div><div className="text-xs text-muted">Objectif 1 (1,5 R)</div><div className="tnum font-medium text-up">{fmtPrice(analysis.plan.tp1 * rate, currency)}</div></div>
                   <div><div className="text-xs text-muted">Objectif 2 (3 R)</div><div className="tnum font-medium text-up">{fmtPrice(analysis.plan.tp2 * rate, currency)}</div></div>

@@ -41,6 +41,12 @@ export function reliabilityOf(key: string): ReliabilityEntry | null {
   return RELIABILITY.entries[key] ?? null;
 }
 
+/** Setup ou facteur que l'historique ne soutient pas (sans effet ou inversé) : affiché à part, replié. */
+export function isUnreliable(key: string): boolean {
+  const v = reliabilityOf(key)?.verdict;
+  return v === 'sans effet' || v === 'inversé';
+}
+
 export const reliabilityFromYear = (): number => Number(RELIABILITY.universe.from.slice(0, 4)) || 2019;
 
 const fr0 = (x: number) => String(Math.round(x));

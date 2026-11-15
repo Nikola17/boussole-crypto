@@ -11,7 +11,8 @@ import {
 } from '../components/ui';
 import { CdcBadge } from '../components/CdcBadge';
 import { useCryptoCom } from '../hooks/useCryptoCom';
-import type { Analysis } from '../lib/signals';
+import type { Analysis, Setup } from '../lib/signals';
+import { isUnreliable } from '../lib/lab/reliability';
 
 type Universe = 'top' | 'watch' | 'mine' | 'setups';
 type Horizon = 'investor' | 'trader';
@@ -62,7 +63,18 @@ export default function Market() {
   const sig = (a: Analysis | null, h: Horizon) => {
     if (!a) return <span className="text-xs text-muted">—</span>;
     const r = h === 'investor' ? a.investor : a.trader;
-    return <SignalBadge label={r.label} tone={r.tone} strength={r.strength} score={r.score} confidence={r.confidence} limited={r.limitedBy} />;
+    return <SignalBadge label={r.label} tone={r.tone} strength={r.strength} score={r.score} confidence={r.confidence} limited={r.limitedBy} reliabilityKey={`${h === 'investor' ? 'inv' : 'tr'}:${r.label}`} />;
+  };
+  /** Setups soutenus par l'historique d'abord ; les autres sont seulement comptés (« peu fiables »). */
+  const setupBadges = (setups: Setup[], max = 9) => {
+    const ok = setups.filter((s) => !isUnreliable(`setup:${s.key}`));
+    const weak = setups.length - ok.length;
+    return (
+      <>
+        {ok.slice(0, max).map((s) => <Badge key={s.key} tone={s.bias === 'bull' ? 'up' : s.bias === 'bear' ? 'down' : 'neutral'}>{s.label}</Badge>)}
+        {weak > 0 && <span className="text-[0.7rem] text-muted" title="Setups que l’historique ne soutient pas : voir la fiche de la crypto ou le banc d’essai (Labo).">+{weak} peu fiable{weak > 1 ? 's' : ''}</span>}
+      </>
+    );
   };
 
   return (
@@ -113,7 +125,7 @@ export default function Market() {
               <span>Trader</span>{sig(a, 'trader')}
               <CdcBadge status={cdc.status(m.id)} ready={cdc.ready} />
             </div>
-            {a && a.setups.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{a.setups.map((s) => <Badge key={s.key} tone={s.bias === 'bull' ? 'up' : s.bias === 'bear' ? 'down' : 'neutral'}>{s.label}</Badge>)}</div>}
+            {a && a.setups.length > 0 && <div className="mt-2 flex flex-wrap items-center gap-1">{setupBadges(a.setups)}</div>}
           </Link>
         ))}
       </div>
@@ -132,7 +144,7 @@ export default function Market() {
                 </Link>
                 <div className="mt-1 flex flex-wrap gap-1 pl-[3.6rem]">
                   <CdcBadge status={cdc.status(m.id)} ready={cdc.ready} />
-                  {a && a.setups.slice(0, 2).map((s) => <Badge key={s.key} tone={s.bias === 'bull' ? 'up' : s.bias === 'bear' ? 'down' : 'neutral'}>{s.label}</Badge>)}
+                  {a && setupBadges(a.setups, 2)}
                 </div>
               </Td>
               <Td className="text-ink">{fmtPrice(m.current_price * rate, currency)}</Td>
@@ -167,7 +179,7 @@ export default function Market() {
           </div>
           <div>
             <p className="font-medium text-ink">Les limites</p>
-            <p className="mt-1">Aucun indicateur ne prédit l’avenir : ce sont des probabilités. Combine toujours le signal avec ta taille de position et un niveau d’invalidation. Ouvre une crypto pour voir le détail de chaque facteur.</p>
+            <p className="mt-1">Aucun indicateur ne prédit l’avenir : ce sont des probabilités. Combine toujours le signal avec ta taille de position et un niveau d’invalidation. Ouvre une crypto pour voir le détail de chaque facteur. Chaque libellé affiche sa fiabilité mesurée sur l’historique (au survol, et dans Labo → Banc d’essai).</p>
           </div>
         </div>
       </Card>
