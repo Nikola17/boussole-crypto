@@ -12,12 +12,14 @@ import {
   Badge, Banner, Button, Card, CoinIcon, ErrorNote, Field, Modal, NumberInput, PageHeader, Select, Spinner, Table, Td,
 } from '../components/ui';
 import { DcaPlanModal } from '../components/forms';
+import { BasketReplay } from '../components/BasketReplay';
 import { BasketSection } from '../components/Basket';
 import { LineChart } from '../components/LineChart';
 import type { DcaExecution, DcaPlan, Transaction } from '../types';
 
 export default function Dca() {
   const plans = useStore((s) => s.dcaPlans);
+  const basket = useStore((s) => s.basket);
   const executions = useStore((s) => s.dcaExecutions);
   const upsert = useStore((s) => s.upsertDcaPlan);
   const remove = useStore((s) => s.removeDcaPlan);
@@ -48,22 +50,22 @@ export default function Dca() {
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="DCA — investissement programmé"
-        subtitle="Le panier est ton parcours principal : en mode automatique, tu règles le montant, les jours et la part base / découverte, et Boussole te dit quoi acheter. Les plans à une seule crypto, pour les cas particuliers, restent en « avancé »."
+        subtitle="Le panier est ton parcours principal : en mode automatique, tu règles le montant, les jours et la part base / découverte, et Boussole te dit quoi acheter."
       />
 
       <BasketSection />
+      {basket && <BasketReplay bk={basket} />}
 
+      {/* Plans sur une seule crypto : remplacés par le panier. La section n'apparaît que s'il en reste. */}
+      {plans.length > 0 && (
       <div className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-ink">Avancé : plans sur une seule crypto</h2>
-            <p className="text-xs text-muted">Si ton cœur est déjà couvert par le panier, ne crée pas un plan par crypto : tu achèterais Bitcoin et Ethereum deux fois. Ces plans servent aux stratégies propres à une ligne (multiple de Mayer, Fear & Greed, température).</p>
+            <h2 className="text-base font-semibold text-ink">Plans sur une seule crypto <Badge>remplacés par le panier</Badge></h2>
+            <p className="text-xs text-muted">Ils restent utilisables. Si ton cœur est déjà couvert par le panier, n’en crée pas un par crypto : tu achèterais Bitcoin et Ethereum deux fois.</p>
           </div>
-          <Button icon={<Plus className="size-4" />} onClick={() => setCreate(true)}>Nouveau plan avancé</Button>
+          <Button icon={<Plus className="size-4" />} onClick={() => setCreate(true)}>Nouveau plan</Button>
         </div>
-        {!plans.length ? (
-          <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">Aucun plan avancé : parfait si le panier couvre déjà tes achats.</p>
-        ) : (
           <div className="grid gap-4 lg:grid-cols-2">
           {status.map((s) => {
             const t = totals.get(s.plan.id);
@@ -102,8 +104,8 @@ export default function Dca() {
             );
           })}
           </div>
-        )}
       </div>
+      )}
 
       {executions.length > 0 && (
         <Card padded={false} title="Historique des achats DCA">

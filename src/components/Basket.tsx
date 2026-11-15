@@ -17,7 +17,9 @@ import { useAiConfig } from './AiBlocks';
 import { runBasketOptimize, runBasketReview } from '../ai/tasks';
 import { applyDcaAiAdvice, dcaAiPayload, parseDcaAiReply, type AppliedAdvice, type DcaAiAdvice, type PoolCoin } from '../lib/dcaAi';
 import { Badge, Banner, Button, Card, CoinIcon, Empty, ErrorNote, Field, Input, Modal, NumberInput, Segmented, Select, Spinner, Toggle } from './ui';
-import { AUTO_BASE_TOP, AUTO_MAX_LINES } from '../lib/autoBasket';
+import { AUTO_BASE_TOP, AUTO_MAX_LINES, BASE_MODES, BASE_MODE_LABEL, DEFAULT_ANCHOR_PCT, measuredBaseMode, newBasketBase, type BaseMode } from '../lib/autoBasket';
+import { pickPerformance } from '../lib/pickTracking';
+import dcaVariants from '../data/dca-variants.json';
 
 const SHORT = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const BTC: CoinRef = { coinId: 'bitcoin', symbol: 'btc', name: 'Bitcoin' };
@@ -30,7 +32,7 @@ function defaultBasket(held: { coinId?: string; symbol: string; name: string; im
     .map((h) => ({ coinId: h.coinId as string, symbol: h.symbol.toLowerCase(), name: h.name, image: h.image }));
   return {
     id: newId(), name: 'Mon panier DCA', active: true, amountUsd: 25, daysOfWeek: [2, 5], startDate: isoDay(), discoveryMaxPct: 50,
-    mode: 'auto', basePct: 70, maxBaseLines: AUTO_MAX_LINES, maxDiscoveryLines: AUTO_MAX_LINES, discoverySource: 'both',
+    mode: 'auto', basePct: 70, maxBaseLines: AUTO_MAX_LINES, maxDiscoveryLines: AUTO_MAX_LINES, discoverySource: 'both', ...newBasketBase(),
     core: [{ ...BTC, weight: 70 }, { ...ETH, weight: 30 }], discovery, reserveUsd: 0, minOrderUsd: 5, reminder: true, createdAt: new Date().toISOString(),
   };
 }
@@ -90,6 +92,7 @@ export function BasketEditor({ open, onClose, initial }: { open: boolean; onClos
         </div>
         {auto && (
           <>
+            <BaseModeField d={d} set={set} />
             <div className="grid grid-cols-2 gap-3">
               <Field label={`Base (%) — top ${AUTO_BASE_TOP} hors stablecoins`}><NumberInput value={basePct} onChange={(v) => set({ basePct: v === '' ? 0 : Math.min(100, Math.max(0, v)) })} /></Field>
               <Field label="Découverte (%) — pépites ou autres"><NumberInput value={100 - basePct} onChange={(v) => set({ basePct: 100 - (v === '' ? 0 : Math.min(100, Math.max(0, v))) })} /></Field>
@@ -182,6 +185,56 @@ export function BasketEditor({ open, onClose, initial }: { open: boolean; onClos
 }
 
 /** Supprimer le DCA : ses échéances partent avec lui ; les achats du journal restent (ils ont eu lieu), sauf si tu demandes leur retrait. */
+/** Règle de la base, avec ce que chacune a fait en contrôle (banc d'essai, 2023 et après). */
+function BaseModeField({ d, set }: { d: BasketPlan; set: (p: Partial<BasketPlan>) => void }) {
+  const m = measuredBaseMode();
+  const mode: BaseMode = d.baseMode ?? 'top3';
+  const twr = dcaVariants.controlTwrPct as Record<string, number>;
+  const pctTxt = (x: number | undefined) => (x == null ? '' : ` — ${x >= 0 ? '+' : ''}${Math.round(x)} % depuis ${m.since.slice(0, 4)}`);
+  return (
+    <div className="space-y-1.5">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Règle de la base">
+          <Select value={mode} onChange={(e) => set({ baseMode: e.target.value as BaseMode, anchorPct: e.target.value === 'anchor' ? d.anchorPct ?? DEFAULT_ANCHOR_PCT : d.anchorPct })}>
+            {BASE_MODES.map((x) => <option key={x} value={x}>{BASE_MODE_LABEL[x]}{x === m.mode ? ' (retenue par la mesure)' : ''}{pctTxt(twr[x])}</option>)}
+          </Select>
+        </Field>
+        {mode === 'anchor' && <Field label="Part en Bitcoin et Ethereum (%)"><NumberInput value={d.anchorPct ?? DEFAULT_ANCHOR_PCT} onChange={(v) => set({ anchorPct: v === '' ? 0 : Math.min(100, Math.max(0, v)) })} /></Field>}
+      </div>
+      <p className="text-xs text-muted">
+        Mesuré sur l’historique (base seule, 25 $ deux fois par semaine, température et réserve, depuis {m.since.slice(0, 4)}) : le DCA Bitcoin simple a fait {m.dcaBtcPct >= 0 ? '+' : ''}{Math.round(m.dcaBtcPct)} %.
+        {m.beatsBtc ? ` « ${BASE_MODE_LABEL[m.mode]} » fait jeu égal ou mieux ; les autres règles font moins bien.` : ' Aucune règle ne fait mieux que le DCA Bitcoin simple : l’ancre Bitcoin et Ethereum est proposée par défaut.'}
+      </p>
+    </div>
+  );
+}
+
+/** Panier existant resté sur l'ancienne règle : la mesure est montrée, le changement se fait en un clic, jamais d'office. */
+function BaseModeBanner({ bk }: { bk: BasketPlan }) {
+  const setBasket = useStore((s) => s.setBasket);
+  const m = measuredBaseMode();
+  if (bk.mode !== 'auto' || bk.baseMode != null || m.mode === 'top3') return null;
+  const sign = (x: number) => `${x >= 0 ? '+' : ''}${Math.round(x)} %`;
+  return (
+    <Banner tone="info" title="Mesuré sur l’historique">
+      Depuis {m.since.slice(0, 4)}, « {BASE_MODE_LABEL[m.mode]} » a fait {sign(m.measuredPct)} contre {sign(m.top3Pct)} pour ton réglage (trois meilleurs scores), base seule, frais compris.
+      <span className="mt-2 flex flex-wrap gap-2">
+        <Button size="sm" variant="primary" onClick={() => setBasket({ ...bk, ...newBasketBase() })}>Passer à cette règle</Button>
+        <Button size="sm" variant="ghost" onClick={() => setBasket({ ...bk, baseMode: 'top3' })}>Garder ma règle</Button>
+      </span>
+    </Banner>
+  );
+}
+
+/** Découverte : le score des pépites n'a pas encore fait ses preuves tant que le suivi en avant ne bat pas Bitcoin à 90 jours. */
+function useDiscoveryMeasured(): boolean {
+  const snaps = useStore((s) => s.pickSnapshots);
+  return useMemo(() => {
+    const p = pickPerformance(snaps, isoDay()).at90;
+    return !!p && p.vsBtcPts > 0;
+  }, [snaps]);
+}
+
 function DeleteBasketModal({ open, basket, onClose, onDeleted }: { open: boolean; basket: BasketPlan; onClose: () => void; onDeleted: () => void }) {
   const removeBasket = useStore((s) => s.removeBasket);
   const execs = useStore((s) => s.basketExecutions);
@@ -287,6 +340,7 @@ export function BasketSection() {
   const [review, setReview] = useState<{ text: string; cost: string } | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
   const bk = b.basket;
+  const discoveryMeasured = useDiscoveryMeasured();
 
   async function askReview() {
     if (!cfg || !b.plan || !b.ctx) return;
@@ -342,6 +396,7 @@ export function BasketSection() {
           <span className="ml-auto inline-flex items-center gap-1 text-xs text-ink-2"><Shield className="size-3.5" />Réserve : <b className="text-ink">{n2(bk.reserveUsd)} USDC</b></span>
         </div>
 
+        {b.fullAuto && <BaseModeBanner bk={bk} />}
         {b.loading && <Spinner label="Calcul de l’ordre du jour (marché, portefeuille, disponibilité Crypto.com)…" />}
         {b.loadError && !b.ready && <ErrorNote error={b.loadError} onRetry={b.retry} />}
         {b.missingCoins && <Banner tone="warn">Les cours de certaines cryptos du panier n’ont pas pu être chargés (CoinGecko limite les requêtes : ajoute une clé « Demo » gratuite dans Réglages). Les règles qui dépendent de ces cours (anti-FOMO, prix indicatif) sont alors moins précises.</Banner>}
@@ -366,6 +421,7 @@ export function BasketSection() {
                     <CoinIcon src={o.image ?? b.markets.find((m) => m.id === o.coinId)?.image} symbol={o.symbol} size={26} />
                     <span className="min-w-0 flex-1 text-sm font-medium text-ink">{o.name} <span className="text-muted">{o.symbol.toUpperCase()}</span></span>
                     <Badge tone={o.kind === 'core' ? 'accent' : 'neutral'}>{kindLabel(o.kind)}</Badge>
+                    {o.kind === 'discovery' && !discoveryMeasured && <span title="Le score des pépites est suivi en avant (Pépites → « Ce que valaient les scores ») : il n’a pas encore battu Bitcoin à 90 jours."><Badge tone="warn">non mesuré</Badge></span>}
                     <CdcBadge status={cdc.status(o.coinId)} ready={cdc.ready} />
                     <span className="tnum text-lg font-semibold text-ink">{n2(o.usd)} <span className="text-xs font-normal text-muted">USDC</span></span>
                   </div>

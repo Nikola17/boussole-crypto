@@ -11,6 +11,7 @@ import type { CgMarket } from '../api/coingecko';
 import { autoDiscoveryCandidates, MIDCAP_FILTER, type AutoPick } from './discovery';
 import { discoveryTemperatureFactor, type BasketPlanResult, type CdcState, type PlannedOrder } from './basket';
 import { temperatureMultiplier } from './dca';
+import dcaVariants from '../data/dca-variants.json';
 import { FOMO_7D_PCT } from './thresholds';
 import { isGold, isStable, isWrappedOrStaked } from './portfolio';
 
@@ -296,4 +297,19 @@ export function buildAutoBasketPlan(i: AutoBasketInputs): BasketPlanResult {
       canOpenDiscovery: i.discoveryLinesOpen < i.rules.maxDiscoveryLines,
     },
   );
+}
+
+// ------------------------------------------------------------------ règle mesurée (rapport docs/bench/*-dca-variantes.md)
+
+/** La règle de base désignée par le banc d'essai : la variante retenue, ou l'ancre Bitcoin et Ethereum si aucune ne bat le DCA Bitcoin simple. */
+export function measuredBaseMode(): { mode: BaseMode; measuredPct: number; top3Pct: number; dcaBtcPct: number; beatsBtc: boolean; since: string } {
+  const v = dcaVariants as { chosen: string | null; beatsBtc: boolean; controlTwrPct: Record<string, number>; dcaBtcTwrPct: number; controlFrom: string };
+  const mode = (v.beatsBtc && v.chosen ? v.chosen : 'anchor') as BaseMode;
+  return { mode, measuredPct: v.controlTwrPct[mode], top3Pct: v.controlTwrPct.top3, dcaBtcPct: v.dcaBtcTwrPct, beatsBtc: v.beatsBtc, since: v.controlFrom };
+}
+
+/** Réglage de la base d'un nouveau panier. */
+export function newBasketBase(): Pick<BasketPlan, 'baseMode' | 'anchorPct'> {
+  const { mode } = measuredBaseMode();
+  return mode === 'anchor' ? { baseMode: mode, anchorPct: DEFAULT_ANCHOR_PCT } : { baseMode: mode };
 }

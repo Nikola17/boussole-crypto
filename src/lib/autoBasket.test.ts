@@ -1,6 +1,7 @@
 // Panier automatique : montant + jours + part base/découverte → les ordres exacts, avec les garde-fous du panier.
 import { describe, expect, it } from 'vitest';
-import { autoBaseUniverse, autoDiscoveryPicks, buildAutoBasketPlan, planAutoBasket, topBaseUniverse, type AutoBasketContext, type AutoBasketSettings, type AutoCandidate } from './autoBasket';
+import { autoBaseUniverse, autoDiscoveryPicks, buildAutoBasketPlan, measuredBaseMode, newBasketBase, planAutoBasket, topBaseUniverse, type AutoBasketContext, type AutoBasketSettings, type AutoCandidate } from './autoBasket';
+import variants from '../data/dca-variants.json';
 import type { CgMarket } from '../api/coingecko';
 
 const c = (id: string, over: Partial<AutoCandidate> = {}): AutoCandidate => ({
@@ -150,6 +151,18 @@ describe('calcul extrait du crochet useBasket', () => {
     );
     expect(r).toEqual(direct);
     expect(r.orders.length).toBeGreaterThan(0);
+  });
+  it('un panier existant (sans règle de base) garde exactement ses ordres', () => {
+    expect(buildAutoBasketPlan(inputs)).toEqual(buildAutoBasketPlan({ ...inputs, basket: { ...inputs.basket, baseMode: 'top3' } }));
+    expect(buildAutoBasketPlan({ ...inputs, basket: { ...inputs.basket, baseMode: 'btc' } }).orders.filter((o) => o.kind === 'core').map((o) => o.coinId)).toEqual(['bitcoin']);
+  });
+  it('un nouveau panier prend la règle désignée par le rapport des variantes', () => {
+    const m = measuredBaseMode();
+    expect(m.mode).toBe(variants.beatsBtc ? variants.chosen : 'anchor');
+    expect(m.mode).toBe('btc');
+    expect(m.measuredPct).toBeCloseTo(variants.controlTwrPct.btc, 3);
+    expect(m.top3Pct).toBeCloseTo(variants.controlTwrPct.top3, 3);
+    expect(newBasketBase()).toEqual({ baseMode: 'btc' });
   });
 });
 
