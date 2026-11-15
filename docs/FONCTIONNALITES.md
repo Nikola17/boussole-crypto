@@ -259,6 +259,14 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Signaux figés une fois par jour** : calculés sur les bougies closes, comme ce que mesure le banc d'essai (le cours affiché reste celui du moment).
 - **Correctif** : un ordre papier payait 10 % de frais au lieu de 0,1 % ; les anciens ordres sont corrigés automatiquement.
 
+**Papier complet et autopilotes (lot 2)**
+- **Plusieurs portefeuilles papier** : un « Papier manuel » repris de l'ancien papier, et autant d'autres que tu veux. Ordres au marché en montant ou en quantité, achats limites, stops et objectifs (liés, valables 90 jours) exécutés sur les bougies 1 heure, même application fermée grâce au serveur veilleur. Frais réalistes au choix (plateforme d'échange : 0,10 % + 0,05 % d'écart ; application grand public : 1,5 % d'écart ; personnalisés), courbe de valeur face à la même mise en Bitcoin, statistiques, et le résultat « avec les frais d'une application ».
+- **Autopilotes** : un portefeuille papier qui suit seul une stratégie de Boussole — DCA Bitcoin simple (la référence), Investisseur (température), DCA Boussole (le panier automatique), Trader (setups validés, stop, objectif à 2 R, pause après −20 %). Décision sur les bougies closes de la veille, exécution chaque jour à 8 h (heure de Paris) au prix de cette heure-là : copiable par un humain réveillé. Les jours manqués sont rattrapés à l'identique ; PC, téléphone et serveur écrivent les mêmes journaux.
+- **Verdict de confiance**, calculé sur le seul direct, frais compris : en observation (moins de 90 jours ou de 30 trades / 20 échéances), insuffisant, encourageant, fiable jusqu'ici, ou confiance retirée (baisse maximale dépassée, ou 10 points de retard sur la référence en 60 jours). Taille conseillée pour copier : 5 % puis 15 % du portefeuille réel. Seuils réglables (Labo → Classement → Règles de confiance).
+- **Classement** des autopilotes (30, 90, 180 jours, depuis le direct, pire baisse, écart avec Bitcoin), carte « Autopilotes » sur le Cockpit, simulation « ce qu'elle aurait fait depuis un an » (pointillé) pour les stratégies rejouables. Un autopilote dont les règles changent est archivé et recréé : son verdict repart de zéro.
+- **Serveur veilleur** : mêmes autopilotes calculés application fermée, ordres, stops et objectifs sur Telegram, une ligne par autopilote dans le brief du matin (`autopilotEnabled`, `autopilotTelegram`).
+- **Mesuré sur 2019-2026** (`docs/bench/2026-11-15-strategies.md`) : la température seule fait jeu égal avec le DCA Bitcoin simple, avec une pire baisse plus faible (−65 % contre −77 %) ; le panier automatique (base seule) fait moins bien que Bitcoin ; Trader perd (−0,10 R par trade). À confirmer en direct : c'est le rôle des autopilotes.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

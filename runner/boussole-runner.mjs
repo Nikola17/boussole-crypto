@@ -5667,6 +5667,312 @@ var strategies_bench_default = {
           }
         }
       ]
+    },
+    "dca-boussole": {
+      rules: "dca-boussole@1+signals1+cycle1+autoBasket1",
+      runs: [
+        {
+          fill: "nextOpen",
+          costs: "exchange",
+          twrPct: 1095.324,
+          twrPerYearPct: 37.0231,
+          maxDrawdownPct: -77.6388,
+          referenceTwrPct: 1577.7087,
+          trades: 2,
+          expectancyR: null,
+          windows: {
+            "30": {
+              p10: -19.6735,
+              p50: 1.7893,
+              p90: 33.3182
+            },
+            "60": {
+              p10: -26.0946,
+              p50: 4.1581,
+              p90: 56.921
+            },
+            "90": {
+              p10: -28.4503,
+              p50: 3.1996,
+              p90: 71.493
+            },
+            "180": {
+              p10: -39.0704,
+              p50: 9.0078,
+              p90: 117.856
+            },
+            "365": {
+              p10: -45.0088,
+              p50: 20.1794,
+              p90: 536.8646
+            }
+          }
+        },
+        {
+          fill: "nextOpen",
+          costs: "app",
+          twrPct: 1020.8393,
+          twrPerYearPct: 35.9084,
+          maxDrawdownPct: -77.6739,
+          referenceTwrPct: 1476.2386,
+          trades: 2,
+          expectancyR: null,
+          windows: {
+            "30": {
+              p10: -19.7719,
+              p50: 1.7538,
+              p90: 33.1933
+            },
+            "60": {
+              p10: -26.1493,
+              p50: 4.1212,
+              p90: 56.5786
+            },
+            "90": {
+              p10: -28.4819,
+              p50: 3.1821,
+              p90: 70.9723
+            },
+            "180": {
+              p10: -39.2264,
+              p50: 8.7309,
+              p90: 117.1653
+            },
+            "365": {
+              p10: -45.4571,
+              p50: 19.9194,
+              p90: 534.2384
+            }
+          }
+        },
+        {
+          fill: "nextClose",
+          costs: "exchange",
+          twrPct: 1042.7087,
+          twrPerYearPct: 36.2423,
+          maxDrawdownPct: -77.5869,
+          referenceTwrPct: 1577.7087,
+          trades: 2,
+          expectancyR: null,
+          windows: {
+            "30": {
+              p10: -19.638,
+              p50: 1.7886,
+              p90: 33.0107
+            },
+            "60": {
+              p10: -25.9971,
+              p50: 4.1299,
+              p90: 56.5795
+            },
+            "90": {
+              p10: -28.4298,
+              p50: 3.2327,
+              p90: 71.0456
+            },
+            "180": {
+              p10: -39.0616,
+              p50: 8.9968,
+              p90: 117.393
+            },
+            "365": {
+              p10: -45.1072,
+              p50: 20.1055,
+              p90: 535.054
+            }
+          }
+        },
+        {
+          fill: "nextClose",
+          costs: "app",
+          twrPct: 970.6784,
+          twrPerYearPct: 35.1207,
+          maxDrawdownPct: -77.6224,
+          referenceTwrPct: 1476.2386,
+          trades: 2,
+          expectancyR: null,
+          windows: {
+            "30": {
+              p10: -19.713,
+              p50: 1.7486,
+              p90: 32.919
+            },
+            "60": {
+              p10: -26.0644,
+              p50: 4.1189,
+              p90: 56.2873
+            },
+            "90": {
+              p10: -28.5657,
+              p50: 3.1816,
+              p90: 70.2969
+            },
+            "180": {
+              p10: -39.2085,
+              p50: 8.7812,
+              p90: 117.0712
+            },
+            "365": {
+              p10: -45.5119,
+              p50: 19.8183,
+              p90: 531.2529
+            }
+          }
+        }
+      ]
+    },
+    trader: {
+      rules: "trader@1+signals1",
+      runs: [
+        {
+          fill: "nextOpen",
+          costs: "exchange",
+          twrPct: -11.6303,
+          twrPerYearPct: -1.5575,
+          maxDrawdownPct: -20.3917,
+          referenceTwrPct: 1589.4294,
+          trades: 99,
+          expectancyR: -0.1003,
+          windows: {
+            "30": {
+              p10: 0,
+              p50: 0,
+              p90: 0
+            },
+            "60": {
+              p10: -0.4469,
+              p50: 0,
+              p90: 0
+            },
+            "90": {
+              p10: -1.5832,
+              p50: 0,
+              p90: 0
+            },
+            "180": {
+              p10: -3.903,
+              p50: 0,
+              p90: 0
+            },
+            "365": {
+              p10: -6.4856,
+              p50: 0,
+              p90: 0
+            }
+          }
+        },
+        {
+          fill: "nextOpen",
+          costs: "app",
+          twrPct: -22.0455,
+          twrPerYearPct: -3.1123,
+          maxDrawdownPct: -24.2813,
+          referenceTwrPct: 1589.4294,
+          trades: 77,
+          expectancyR: -0.2961,
+          windows: {
+            "30": {
+              p10: 0,
+              p50: 0,
+              p90: 0
+            },
+            "60": {
+              p10: -2.2576,
+              p50: 0,
+              p90: 0
+            },
+            "90": {
+              p10: -3.9624,
+              p50: 0,
+              p90: 0
+            },
+            "180": {
+              p10: -7.2692,
+              p50: 0,
+              p90: 0
+            },
+            "365": {
+              p10: -11.6344,
+              p50: 0,
+              p90: 0
+            }
+          }
+        },
+        {
+          fill: "nextClose",
+          costs: "exchange",
+          twrPct: 73.7087,
+          twrPerYearPct: 7.2623,
+          maxDrawdownPct: -20.497,
+          referenceTwrPct: 1589.4294,
+          trades: 520,
+          expectancyR: 0.0474,
+          windows: {
+            "30": {
+              p10: -3.1768,
+              p50: 0,
+              p90: 6.3704
+            },
+            "60": {
+              p10: -4.1559,
+              p50: 0,
+              p90: 9.3972
+            },
+            "90": {
+              p10: -5.1328,
+              p50: 0,
+              p90: 12.1389
+            },
+            "180": {
+              p10: -6.7667,
+              p50: 0,
+              p90: 17.2633
+            },
+            "365": {
+              p10: -7.7346,
+              p50: 2.1152,
+              p90: 36.9426
+            }
+          }
+        },
+        {
+          fill: "nextClose",
+          costs: "app",
+          twrPct: -3.4982,
+          twrPerYearPct: -0.4511,
+          maxDrawdownPct: -20.4306,
+          referenceTwrPct: 1589.4294,
+          trades: 60,
+          expectancyR: -0.075,
+          windows: {
+            "30": {
+              p10: 0,
+              p50: 0,
+              p90: 0
+            },
+            "60": {
+              p10: 0,
+              p50: 0,
+              p90: 0
+            },
+            "90": {
+              p10: 0,
+              p50: 0,
+              p90: 0
+            },
+            "180": {
+              p10: 0,
+              p50: 0,
+              p90: 0
+            },
+            "365": {
+              p10: -0.9161,
+              p50: 0,
+              p90: 0
+            }
+          }
+        }
+      ]
     }
   }
 };
