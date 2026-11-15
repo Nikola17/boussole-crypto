@@ -5,7 +5,7 @@
 // Les wallets lus sur la blockchain (xpub du Ledger, adresse Phantom…) ne sont pas relus par le runner :
 // ce que le journal ne décrit pas n'est pas vu, et le cœur (BTC, ETH) n'a de toute façon pas de paliers.
 
-import type { PaperConfig, PaperTrade, PriceAlert, SmartWallet, Thesis, Transaction, WatchedToken } from '../types';
+import type { PaperConfig, PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PriceAlert, SmartWallet, Thesis, Transaction, WatchedToken } from '../types';
 import type { SyncBundle } from '../lib/sync/merge';
 import { checkPriceAlerts } from '../lib/alerts';
 import { DEFAULT_LADDER, exitLadder, pendingRungs } from '../lib/exit';
@@ -20,6 +20,9 @@ export interface WatchData {
   /** Portefeuille papier (expérimentations) : ordres fictifs et ses réglages. */
   paperTrades: PaperTrade[];
   paper: PaperConfig | null;
+  paperPortfolios: PaperPortfolio[];
+  paperOrders: PaperOrder[];
+  paperDays: PaperDayLog[];
   /** Wallets publics suivis pour leurs résultats (smart money). */
   smartWallets: SmartWallet[];
   /** Tokens suivis des DEX (pépites) : l'autre liste qui importe au smart money. */
@@ -39,7 +42,7 @@ export function watchOf(bundle: SyncBundle): WatchData {
     : null;
   const profileRaw = stamps.profile as { vacationUntil?: unknown } | undefined;
   const vacationUntil = profileRaw && typeof profileRaw === 'object' && typeof profileRaw.vacationUntil === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(profileRaw.vacationUntil) ? profileRaw.vacationUntil : null;
-  return { alerts: list<PriceAlert>('alerts'), transactions: list<Transaction>('transactions'), theses: list<Thesis>('theses'), exitDone, paperTrades: list<PaperTrade>('paperTrades'), paper, smartWallets: list<SmartWallet>('smartWallets'), watchedTokens: list<WatchedToken>('watchedTokens'), vacationUntil };
+  return { alerts: list<PriceAlert>('alerts'), transactions: list<Transaction>('transactions'), theses: list<Thesis>('theses'), exitDone, paperTrades: list<PaperTrade>('paperTrades'), paper, paperPortfolios: list<PaperPortfolio>('paperPortfolios'), paperOrders: list<PaperOrder>('paperOrders'), paperDays: list<PaperDayLog>('paperDays'), smartWallets: list<SmartWallet>('smartWallets'), watchedTokens: list<WatchedToken>('watchedTokens'), vacationUntil };
 }
 
 export const alertKey = (id: string): string => `alert:${id}`;

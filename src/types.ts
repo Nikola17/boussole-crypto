@@ -349,6 +349,102 @@ export interface PaperTrade extends CoinRef {
   note?: string;
   /** Thèse fantôme : « j'aurais acheté ici » — comptée à part, jamais dans le cash ni laPosition papier. */
   ghost?: true;
+  /** Portefeuille papier de l'ordre (absent pour un achat fantôme). */
+  portfolioId?: string;
+  orderType?: 'market' | 'limit' | 'stop' | 'target';
+  /** Ordre en attente qui a produit cette exécution. */
+  orderId?: string;
+  /** Prix du marché à l'exécution (le prix payé inclut l'écart). */
+  marketUsd?: number;
+  reason?: string;
+}
+
+/** Frais et écart par côté (en %), avec le préréglage d'où ils viennent. */
+export interface PaperCosts { feePct: number; spreadPct: number; preset: 'exchange' | 'app' | 'measured' | 'custom' }
+
+/** Un portefeuille papier : manuel (tes ordres) ou en autopilote (une stratégie de Boussole). */
+export interface PaperPortfolio {
+  updatedAt?: UpdatedAt;
+  id: string;
+  name: string;
+  kind: 'manual' | 'auto';
+  startingUsd: number;
+  createdAt: string;
+  costs: PaperCosts;
+  archived?: boolean;
+  paused?: boolean;
+  // Autopilote seulement
+  strategyId?: string;
+  /** Empreinte des règles, figée à la création : si elle change, le portefeuille est archivé et un neuf démarre. */
+  rules?: string;
+  params?: Record<string, number | string | boolean | number[] | string[]>;
+  /** Premier jour d'exécution en direct (AAAA-MM-JJ). */
+  liveSince?: string;
+  /** Début de la partie simulée, si demandée. */
+  backfillFrom?: string;
+  executionHour?: number;
+  timeZone?: string;
+  /** Dernier jour d'exécution traité. */
+  cursorDay?: string;
+  /** Jusqu'où les ordres en attente ont été contrôlés (ISO). */
+  settledTo?: string;
+  universe?: { coinId: string; symbol: string; name: string; rank: number | null; available?: boolean | null }[];
+  universeWeek?: string;
+}
+
+/** Ordre en attente d'un portefeuille papier manuel. */
+export interface PaperOrder {
+  updatedAt?: UpdatedAt;
+  id: string;
+  portfolioId: string;
+  coinId: string; symbol: string; name: string;
+  side: 'buy' | 'sell';
+  type: 'limit' | 'stop' | 'target';
+  price: number;
+  usd?: number;
+  /** Vente sans quantité : toute la position. */
+  quantity?: number;
+  ocoGroup?: string;
+  /** Achat limite : stop et objectif posés à son exécution. */
+  attachStop?: number;
+  attachTarget?: number;
+  createdAt: string;
+  expiresAt: string;
+  status: 'open' | 'filled' | 'cancelled' | 'expired';
+  filledAt?: string;
+}
+
+/** Une exécution d'autopilote, telle qu'enregistrée dans son journal du jour. */
+export interface PaperFill {
+  coinId: string; symbol: string; name: string;
+  side: 'buy' | 'sell';
+  kind: 'market' | 'stop' | 'target' | 'delist';
+  quantity: number;
+  marketUsd: number;
+  priceUsd: number;
+  feeUsd: number;
+  at: string;
+  reason: string;
+  tag?: string;
+  stop?: number;
+  target?: number;
+}
+
+/** Journal d'un jour d'exécution d'un autopilote : l'état du portefeuille se rejoue à partir de ces journaux. */
+export interface PaperDayLog {
+  /** `${portfolioId}:${day}` */
+  id: string;
+  updatedAt?: UpdatedAt;
+  portfolioId: string;
+  day: string;
+  decidedOn: string;
+  rules: string;
+  depositUsd: number;
+  fills: PaperFill[];
+  skipped: { symbol: string; why: string }[];
+  /** Stratégie non rejouable exécutée en retard (jours). */
+  lateDays?: number;
+  by: string;
 }
 
 /** Réglages du portefeuille papier : solde de départ et date du dernier reset. */

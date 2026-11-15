@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
-  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, HotNote, ImpulseWait, PaperConfig, PaperTrade, PriceAlert, Profile, ProfileChange, Settings, SmartWallet, SyncDeletion, Thesis,
+  Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, HotNote, ImpulseWait, PaperConfig, PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PriceAlert, Profile, ProfileChange, Settings, SmartWallet, SyncDeletion, Thesis,
   TradeEntry, Transaction, WalletAddress, WatchedToken,
 } from '../types';
 import { defaultProfile, rulesOf } from '../lib/profile';
@@ -44,6 +44,10 @@ export interface AppState {
   /** Portefeuille papier : ordres fictifs aux prix réels (profil « expérimentations », sans risque). */
   paperTrades: PaperTrade[];
   paper: PaperConfig;
+  /** Portefeuilles papier (manuels ou en autopilote), leurs ordres en attente et les journaux des autopilotes. */
+  paperPortfolios: PaperPortfolio[];
+  paperOrders: PaperOrder[];
+  paperDays: PaperDayLog[];
   smartWallets: SmartWallet[];
   hotNotes: HotNote[];
   /** Attentes anti-FOMO : achats sur une crypto qui a trop monté en 7 jours, bloqués 24 h. */
@@ -112,6 +116,13 @@ export interface AppState {
   upsertPaperTrade: (t: PaperTrade) => void;
   removePaperTrade: (id: string) => void;
   setPaper: (patch: Partial<PaperConfig>) => void;
+  upsertPaperPortfolio: (p: PaperPortfolio) => void;
+  /** Supprime un portefeuille papier avec ses ordres, ses exécutions et ses journaux (suppressions propagées). */
+  removePaperPortfolio: (id: string) => void;
+  upsertPaperOrder: (o: PaperOrder) => void;
+  removePaperOrder: (id: string) => void;
+  /** Enregistre des journaux d'autopilote (seuls ceux dont le contenu change sont réécrits). */
+  applyPaperDays: (days: PaperDayLog[]) => void;
   upsertDefiBet: (b: DefiBet) => void;
   removeDefiBet: (id: string) => void;
   /** Ajoute des transactions importées ; celles dont l'identifiant existe déjà sont ignorées (aucun doublon). */
@@ -224,6 +235,9 @@ const initialData = () => ({
   envelope: { ...DEFAULT_ENVELOPE },
   paperTrades: [] as PaperTrade[],
   paper: { enabled: true, startingUsd: 1000 } as PaperConfig,
+  paperPortfolios: [{ id: 'manuel', name: 'Papier manuel', kind: 'manual', startingUsd: 1000, createdAt: new Date().toISOString(), costs: { preset: 'exchange', feePct: 0.1, spreadPct: 0.05 } }] as PaperPortfolio[],
+  paperOrders: [] as PaperOrder[],
+  paperDays: [] as PaperDayLog[],
   defiBets: [] as DefiBet[],
   cdcSeen: [] as string[],
   deletions: [] as SyncDeletion[],
@@ -396,6 +410,28 @@ export const useStore = create<AppState>()(
       upsertPaperTrade: (t) => set((s) => ({ paperTrades: upsert(s.paperTrades, touch(t)) })),
       removePaperTrade: (id) => set((s) => ({ paperTrades: s.paperTrades.filter((x) => x.id !== id), ...dropped(s, `paperTrades/${id}`) })),
       setPaper: (patch) => set((s) => ({ paper: { ...s.paper, ...patch }, ...bump(s, 'paper') })),
+      upsertPaperPortfolio: (p) => set((s) => ({ paperPortfolios: upsert(s.paperPortfolios, touch(p)) })),
+      removePaperPortfolio: (id) => set((s) => {
+        const orders = s.paperOrders.filter((o) => o.portfolioId === id);
+        const trades = s.paperTrades.filter((t) => t.portfolioId === id);
+        const days = s.paperDays.filter((d) => d.portfolioId === id);
+        let deletions = dropped(s, `paperPortfolios/${id}`).deletions;
+        for (const key of [...orders.map((o) => `paperOrders/${o.id}`), ...trades.map((t) => `paperTrades/${t.id}`), ...days.map((d) => `paperDays/${d.id}`)]) deletions = dropped({ deletions }, key).deletions;
+        return {
+          paperPortfolios: s.paperPortfolios.filter((p) => p.id !== id),
+          paperOrders: s.paperOrders.filter((o) => o.portfolioId !== id),
+          paperTrades: s.paperTrades.filter((t) => t.portfolioId !== id),
+          paperDays: s.paperDays.filter((d) => d.portfolioId !== id),
+          deletions,
+        };
+      }),
+      upsertPaperOrder: (o) => set((s) => ({ paperOrders: upsert(s.paperOrders, touch(o)) })),
+      removePaperOrder: (id) => set((s) => ({ paperOrders: s.paperOrders.filter((x) => x.id !== id), ...dropped(s, `paperOrders/${id}`) })),
+      applyPaperDays: (days) => set((s) => {
+        let list = s.paperDays;
+        for (const d of days) list = upsert(list, touch(d));
+        return { paperDays: list };
+      }),
       upsertDefiBet: (b) => set((s) => ({ defiBets: upsert(s.defiBets, touch(b)) })),
       removeDefiBet: (id) => set((s) => ({ defiBets: s.defiBets.filter((x) => x.id !== id), ...dropped(s, `defiBets/${id}`) })),
       toggleExitDone: (coinId, multiple) => set((s) => {

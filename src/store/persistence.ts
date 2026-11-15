@@ -38,6 +38,24 @@ export function migrateState(persisted: unknown, version: number): unknown {
       if (typeof s.syncStamp !== 'object' || s.syncStamp === null) s.syncStamp = {};
     }
   }
+  if (version < 3 && typeof persisted === 'object' && persisted !== null) {
+    // v2 → v3 (1.28.0) : le papier devient un portefeuille parmi d'autres (« Papier manuel ») ; l'ancien réglage reste lisible.
+    const s = persisted as Record<string, unknown>;
+    if (!Array.isArray(s.paperPortfolios)) {
+      const trades = Array.isArray(s.paperTrades) ? (s.paperTrades as { ghost?: boolean; date?: string; portfolioId?: string }[]) : [];
+      const paper = (s.paper && typeof s.paper === 'object' ? s.paper : {}) as { startingUsd?: number; resetAt?: string };
+      const first = trades.filter((t) => !t.ghost && typeof t.date === 'string').map((t) => t.date as string).sort()[0];
+      s.paperPortfolios = [{
+        id: 'manuel', name: 'Papier manuel', kind: 'manual',
+        startingUsd: typeof paper.startingUsd === 'number' && paper.startingUsd > 0 ? paper.startingUsd : 1000,
+        createdAt: paper.resetAt ?? first ?? new Date().toISOString(),
+        costs: { preset: 'exchange', feePct: 0.1, spreadPct: 0.05 },
+      }];
+      s.paperTrades = trades.map((t) => (t.ghost || t.portfolioId ? t : { ...t, portfolioId: 'manuel' }));
+    }
+    if (!Array.isArray(s.paperOrders)) s.paperOrders = [];
+    if (!Array.isArray(s.paperDays)) s.paperDays = [];
+  }
   return persisted;
 }
 
