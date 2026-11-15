@@ -8,13 +8,14 @@ import { useStore } from '../store/useStore';
 import { useBtcHistory, useMarkets } from '../hooks/useMarket';
 import { btcBenchmark, checkPaperOrder, ghostTheses, paperStatus } from '../lib/paper';
 import type { CoinRef, PaperTrade } from '../types';
-import { Banner, Badge, Button, Card, CoinIcon, Empty, Field, Modal, NumberInput, PageHeader, Stat, Table, Td } from '../components/ui';
+import { Banner, Badge, Button, Card, CoinIcon, Empty, Field, Modal, NumberInput, Stat, Table, Td } from '../components/ui';
 import { CoinPicker } from '../components/CoinPicker';
 import { fmtDate, fmtNum, fmtPrice, uid } from '../lib/format';
 
 const FEE_PCT = 0.1; // frais simulés par défaut : 0,1 %, comme un vrai passage d'ordre
 
-export default function Paper() {
+/** Onglet « Papier » de la page Labo. */
+export function PaperPanel() {
   const paper = useStore((s) => s.paper);
   const trades = useStore((s) => s.paperTrades);
   const upsertPaperTrade = useStore((s) => s.upsertPaperTrade);
@@ -75,11 +76,9 @@ export default function Paper() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader
-        title="Portefeuille papier"
-        subtitle="Tes expérimentations : des ordres fictifs aux prix réels, en USDC — sans risquer un euro"
-        actions={<Button size="sm" variant="ghost" icon={<RefreshCw className="size-3.5" />} onClick={() => { void markets.refetch(); void btc.refetch(); }}>Actualiser les prix</Button>}
-      />
+      <div className="flex justify-end">
+        <Button size="sm" variant="ghost" icon={<RefreshCw className="size-3.5" />} onClick={() => { void markets.refetch(); void btc.refetch(); }}>Actualiser les prix</Button>
+      </div>
 
       <Banner tone="info" title="Argent fictif, marché réel">
         Ce profil est indépendant de ton vrai portefeuille (le journal du Wallet). Les ordres sont valorisés aux prix réels du
@@ -169,7 +168,6 @@ export default function Paper() {
         )}
       </Card>
 
-      <GhostCard prices={prices} />
 
       <Modal
         open={askReset}
@@ -190,7 +188,7 @@ export default function Paper() {
  * Achats fantômes : « j'aurais acheté X ici » — ce que tu n'as PAS fait, chiffré aux prix réels.
  * Aucun cash papier consommé : une envie se note, se valorise, et se confronte au réel quand tu la closes.
  */
-function GhostCard({ prices }: { prices: Map<string, number> }) {
+export function GhostCard({ prices }: { prices: Map<string, number> }) {
   // Le filtre se fait HORS du sélecteur : un sélecteur qui renvoie une nouvelle liste à chaque lecture fait boucler
   // React (erreur #185, « Maximum update depth exceeded ») — c'est ce qui faisait planter la page Papier.
   const allTrades = useStore((s) => s.paperTrades);

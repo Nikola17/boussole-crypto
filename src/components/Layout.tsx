@@ -17,7 +17,7 @@ export const NAV = [
   { to: '/portefeuille', label: 'Wallet', icon: Wallet, mobile: true },
   { to: '/pepites', label: 'Pépites', icon: Gem },
   { to: '/trading', label: 'Trading', icon: CandlestickChart },
-  { to: '/papier', label: 'Papier', icon: FlaskConical },
+  { to: '/labo', label: 'Labo', icon: FlaskConical },
   { to: '/smart', label: 'Smart money', icon: Users },
   { to: '/ia', label: 'Copilote IA', icon: Bot, mobile: true },
   { to: '/airdrops', label: 'Airdrops', icon: Gift },
