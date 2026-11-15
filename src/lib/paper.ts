@@ -97,6 +97,22 @@ export function paperStatus(startingUsd: number, trades: PaperTrade[], prices: R
   };
 }
 
+/**
+ * Correctif de la v1.23.0 : jusqu'ici, un ordre papier payait 10 % de frais au lieu de 0,1 %.
+ * Tout ordre (hors achat fantôme) dont les frais dépassent 5 % du montant est ramené à 0,1 %, une seule fois ;
+ * la nouvelle date de modification propage la correction à l'autre appareil.
+ */
+export function fixPaperFees(trades: PaperTrade[], nowIso: string): { trades: PaperTrade[]; changed: number } {
+  let changed = 0;
+  const out = trades.map((t) => {
+    const amount = t.quantity * t.priceUsd;
+    if (t.ghost || !(amount > 0) || !((t.feeUsd ?? 0) > amount * 0.05)) return t;
+    changed++;
+    return { ...t, feeUsd: Math.round(amount * 0.001 * 100) / 100, updatedAt: nowIso };
+  });
+  return { trades: changed ? out : trades, changed };
+}
+
 export interface PaperCheck { ok: boolean; why?: string }
 
 /** Un ordre d'achat n'achète que du cash disponible ; une vente ne vend que des quantités détenues. */

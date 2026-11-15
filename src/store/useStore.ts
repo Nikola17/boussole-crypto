@@ -14,6 +14,7 @@ import { DEFAULT_MISTRAL_MODEL } from '../ai/mistral';
 import { BACKUP_KEYS, DATA_VERSION } from '../lib/backup';
 import { guardedStorage, migrateState, STORE_KEY, systemStorage, useStorageStatus } from './persistence';
 import { saveSecrets, secretsSealed, stripSecrets } from '../lib/secure';
+import { fixPaperFees } from '../lib/paper';
 
 export interface AppState {
   settings: Settings;
@@ -450,6 +451,8 @@ export const useStore = create<AppState>()(
           settings: { ...current.settings, ...saved },
           // Les règles ajoutées après coup (anti-éparpillement) reçoivent la valeur de ton profil.
           profile: { ...profile, rules: rulesOf(profile) },
+          // Correctif 1.23.0 : les anciens ordres papier payaient 10 % de frais au lieu de 0,1 %.
+          paperTrades: fixPaperFees(p.paperTrades ?? current.paperTrades, nowIso()).trades,
         };
       },
     },

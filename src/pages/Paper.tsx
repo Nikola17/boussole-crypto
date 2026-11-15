@@ -61,7 +61,7 @@ export default function Paper() {
       type: side,
       quantity,
       priceUsd,
-      feeUsd: Math.round(quantity * priceUsd * FEE_PCT * 100) / 100,
+      feeUsd: Math.round(quantity * priceUsd * FEE_PCT) / 100, // FEE_PCT est en % : 0,1 % du montant
     };
     upsertPaperTrade(t);
     setQty('');

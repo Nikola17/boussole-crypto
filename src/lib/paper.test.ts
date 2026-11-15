@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { PaperTrade } from '../types';
-import { btcBenchmark, checkPaperOrder, ghostTheses, paperPositions, paperStatus } from './paper';
+import { btcBenchmark, checkPaperOrder, fixPaperFees, ghostTheses, paperPositions, paperStatus } from './paper';
 
 const trade = (over: Partial<PaperTrade> = {}): PaperTrade => ({
   id: 't1', coinId: 'solana', symbol: 'sol', name: 'Solana', date: '2026-01-10', type: 'buy',
@@ -93,5 +93,21 @@ describe('thèses fantômes — ce que tu n’as pas fait, chiffré', () => {
     expect(t.openValueUsd).toBeNull();
     expect(t.pnlUsd).toBeNull();
     expect(t.pnlPct).toBeNull();
+  });
+});
+
+describe('correction des frais du papier (10 % au lieu de 0,1 %)', () => {
+  const t = (id: string, fee: number, ghost?: true): PaperTrade => ({ id, coinId: 'x', symbol: 'x', name: 'X', date: '2026-11-01', type: 'buy', quantity: 1, priceUsd: 100, feeUsd: fee, ...(ghost ? { ghost } : {}) });
+  it('ramène à 0,1 % les frais d’un ordre à 10 %', () => {
+    const r = fixPaperFees([t('a', 10)], '2026-11-20T00:00:00.000Z');
+    expect(r.trades[0].feeUsd).toBe(0.1);
+    expect(r.trades[0].updatedAt).toBe('2026-11-20T00:00:00.000Z');
+    expect(r.changed).toBe(1);
+  });
+  it('ne touche ni un ordre juste, ni un achat fantôme, et ne corrige qu’une fois', () => {
+    const r = fixPaperFees([t('b', 0.1), t('c', 10, true)], '2026-11-20T00:00:00.000Z');
+    expect(r.changed).toBe(0);
+    expect(r.trades[1].feeUsd).toBe(10);
+    expect(fixPaperFees(fixPaperFees([t('a', 10)], 'x').trades, 'y').changed).toBe(0);
   });
 });
