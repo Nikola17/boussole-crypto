@@ -13,6 +13,7 @@ import { buildPositions } from '../lib/portfolio';
 import { recommendSmartWallets, type Recommendation } from '../lib/smartCatalog';
 import { usePortfolio } from '../hooks/usePortfolio';
 import type { SmartWallet } from '../types';
+import { scoreLine, scoreWallet, type WalletScore } from '../lib/smartScore';
 import { Badge, Banner, Button, Card, Empty, Field, Input, Modal, PageHeader, Segmented, Select, Spinner, Table, Td } from '../components/ui';
 import { fmtDate, uid } from '../lib/format';
 
@@ -38,6 +39,13 @@ export default function Smart() {
   const alerts = useStore((s) => s.alerts);
   const addSmartWallet = useStore((s) => s.addSmartWallet);
   const removeSmartWallet = useStore((s) => s.removeSmartWallet);
+  const moves = useStore((s) => s.smartMoves);
+  // Note de chaque wallet : ses mouvements rejugés à 7 et 30 jours par le serveur veilleur.
+  const scores = useMemo(() => {
+    const m = new Map<string, WalletScore>();
+    for (const w of wallets) m.set(w.id, scoreWallet(moves.filter((x) => x.walletId === w.id), (x, d) => (d === 7 ? x.p7 ?? null : x.p30 ?? null)));
+    return m;
+  }, [wallets, moves]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [label, setLabel] = useState('');
@@ -88,7 +96,9 @@ export default function Smart() {
       <Banner tone="info" title="Des adresses publiques, des mouvements publics">
         Tu suis des adresses de blockchain publiques (fonds, initiés, KOL) — jamais des secrets. Les mouvements sont
         lus sur Solana, Ethereum et Base via des services publics. Un wallet qui vend un token de ta liste déclenche
-        une alerte Telegram (ton serveur veille) : c'est le moment de relire ton plan de sortie, pas de paniquer.
+        une alerte Telegram (ton serveur veille) : c'est le moment de relire ton plan de sortie, pas de paniquer. Chaque mouvement est ensuite rejugé à 7 et
+        30 jours (achat gagnant si le prix a monté, vente gagnante si elle a évité une baisse) : sous 40 % de gagnants
+        sur 10 mouvements ou plus, le wallet est marqué « historique défavorable ».
       </Banner>
 
       <RecommendedCard />
@@ -97,13 +107,14 @@ export default function Smart() {
         {wallets.length === 0 ? (
           <Empty icon={<Users className="size-8" />} title="Aucun wallet suivi">Ajoute l'adresse publique d'un fond reconnu pour ses bons coups, ou d'un initié qui a souvent raison.</Empty>
         ) : (
-          <Table head={['Nom', 'Pourquoi', 'Chaîne', 'Adresse', '']}>
+          <Table head={['Nom', 'Pourquoi', 'Chaîne', 'Adresse', 'Résultats', '']}>
             {wallets.map((w) => (
               <tr key={w.id}>
                 <Td>{w.label}</Td>
                 <Td>{KIND_LABEL[w.kind]}</Td>
                 <Td>{w.chain === 'solana' ? 'Solana' : w.chain === 'base' ? 'Base' : 'Ethereum'}</Td>
                 <Td><a className="text-link underline decoration-dotted underline-offset-2" href={explorerOf(w)} target="_blank" rel="noreferrer">{w.address.slice(0, 8)}…{w.address.slice(-6)}</a></Td>
+                <Td>{(() => { const s = scores.get(w.id); return s && s.followed > 0 ? <span className={s.unfavorable ? 'text-warn' : 'text-ink-2'}>{scoreLine(s)}</span> : <span className="text-muted">pas encore de mouvement noté</span>; })()}</Td>
                 <Td><Button size="sm" variant="ghost" icon={<Trash2 className="size-4" />} aria-label="Ne plus suivre" onClick={() => removeSmartWallet(w.id)} /></Td>
               </tr>
             ))}

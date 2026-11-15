@@ -20,6 +20,8 @@ import { nextMacroEvents } from '../lib/macro';
 import type { SmartWallet } from '../types';
 import type { AutopilotRun } from './autopilot';
 import { advanceSignals, signalMessage } from './signals';
+import { addMoves, judgeMoves, movesDue, movesFromEvents } from '../lib/smartScore';
+import type { SmartMove } from '../types';
 import { reliabilityOf, reliabilityPhrase } from '../lib/lab/reliability';
 
 const DAY_MS = 24 * 3600_000;
@@ -62,6 +64,8 @@ export interface CycleDeps {
   /** Autopilotes et ordres papier (facultatif) : faisceau mis à jour, messages et lignes du brief. */
   autopilot?: (bundle: SyncBundle, nowMs: number) => Promise<AutopilotRun>;
   /** Signaux suivis du jour par crypto (positions et watchlist ; le serveur ajoute les 20 premières). */
+  /** Prix des tokens (DexScreener) par adresse en minuscules : notation des wallets suivis. */
+  tokenPrices?: (chain: string, mints: string[]) => Promise<Map<string, number>>;
   signals?: (coins: { coinId: string; symbol: string }[]) => Promise<Record<string, { symbol: string; keys: string[] }>>;
 }
 
@@ -269,6 +273,37 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
   }
   queue.push(...smartAlerts);
 
+  // 1 sept. Wallets suivis notés : chaque mouvement au prix connu entre dans smartMoves (300 au plus), puis
+  //         reçoit le prix du token 7 et 30 jours après. Écrit dans l'écriture unique du faisceau.
+  let smartMovesChanged = false;
+  if (cfg.smartMoneyEnabled && deps.tokenPrices) {
+    const before = (Array.isArray(working.data.smartMoves) ? working.data.smartMoves : []) as SmartMove[];
+    const due = movesDue(before, nowMs);
+    const wanted = new Map<string, Set<string>>();
+    const want = (chain: string | undefined, mint: string | undefined) => {
+      if (!chain || !mint) return;
+      if (!wanted.has(chain)) wanted.set(chain, new Set());
+      wanted.get(chain)!.add(mint);
+    };
+    for (const e of smartRecent) want(e.chain, e.mint);
+    for (const m of due) want(m.chain, m.mint);
+    if (wanted.size) {
+      const prices = new Map<string, number>();
+      for (const [chain, mints] of wanted) {
+        const got = await deps.tokenPrices(chain, [...mints]).catch(() => new Map<string, number>());
+        for (const [k, v] of got) prices.set(k.toLowerCase(), v);
+      }
+      const stamp = new Date(nowMs).toISOString();
+      const added = addMoves(before, movesFromEvents(smartRecent, prices).map((m) => ({ ...m, updatedAt: stamp })));
+      const judged = judgeMoves(added, nowMs, (m) => (m.mint ? prices.get(m.mint.toLowerCase()) ?? null : null));
+      const next = judged.moves.map((m, i) => (m !== added[i] ? { ...m, updatedAt: stamp } : m));
+      if (next.length !== before.length || next.some((m, i) => m !== before[i])) {
+        working = { ...working, data: { ...working.data, smartMoves: next } };
+        smartMovesChanged = true;
+      }
+    }
+  }
+
   // 1 sext. Alertes de signal : une fois par jour, après la clôture de la bougie journalière (0 h 10 UTC).
   const utcDay = now.toISOString().slice(0, 10);
   if (cfg.signalAlertsEnabled && deps.signals && state.signals?.day !== utcDay && now.getUTCHours() * 60 + now.getUTCMinutes() >= 10) {
@@ -363,7 +398,7 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
 
   // 3. Consommation des alertes de prix dans le faisceau distant : l'application les verra déclenchées à
   //    sa propre synchronisation et ne les re-notifiera pas. Conflit (l'autre appareil vient d'écrire) : on n'insiste pas.
-  if ((consumedIds.length || autopilotChanged) && !opts.dry) {
+  if ((consumedIds.length || autopilotChanged || smartMovesChanged) && !opts.dry) {
     try {
       const next = consumedIds.length ? consumeAlerts(working, consumedIds, now.toISOString()) : working;
       const sealed = await seal({ ...next, device: cfg.device, savedAt: now.toISOString() }, cfg.passphrase);

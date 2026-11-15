@@ -442,7 +442,11 @@ export interface PaperFill {
 export interface PortfolioSnapshot { updatedAt?: UpdatedAt; id: string; day: string; valueUsd: number; byBucket: Record<string, number>; complete: boolean }
 
 /** Mouvement d'un wallet suivi, noté ensuite sur ce que le prix a fait (identifiant = clé du mouvement). */
-export interface SmartMove { updatedAt?: UpdatedAt; id: string; walletId: string; coinId?: string; mint?: string; symbol: string | null; side: 'buy' | 'sell'; priceUsd: number; at: string }
+export interface SmartMove {
+  updatedAt?: UpdatedAt; id: string; walletId: string; chain?: string; coinId?: string; mint?: string; symbol: string | null; side: 'buy' | 'sell'; priceUsd: number; at: string;
+  /** Prix relevés 7 et 30 jours après (0 : introuvable, non jugé). */
+  p7?: number; p30?: number;
+}
 
 /** Relevé hebdomadaire des pépites proposées (identifiant = semaine ISO), suivi en avant à 30 et 90 jours. */
 export interface PickSnapshot { updatedAt?: UpdatedAt; id: string; week: string; picks: { coinId: string; symbol: string; source: 'gems' | 'basket'; score: number | null; priceUsd: number }[] }

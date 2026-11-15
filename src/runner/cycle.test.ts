@@ -408,6 +408,23 @@ describe('cycle du runner — smart money (wallets suivis)', () => {
     expect(state.smCursor['w1']).toBe(at); // lu jusqu'à ce mouvement : pas de relecture au prochain cycle
   });
 
+  it('chaque mouvement au prix connu entre dans smartMoves, puis reçoit son prix à 7 jours', async () => {
+    const out: SmartEvent = { ...sell, mint: 'MintZ', symbol: 'ZZZ', txHash: 'h9' };
+    const { deps, pushes } = makeDeps({ smartWallets: [W], watchedTokens: [watched] }, { smartEvents: [out] });
+    const asked: string[] = [];
+    deps.tokenPrices = async (chain, mints) => { asked.push(`${chain}:${mints.join(',')}`); return new Map([['mintz', 0.25]]); };
+    await runCycle(CFG_SM, emptyState(), dry(), deps, H(6, 30));
+    expect(asked).toEqual(['solana:MintZ']);
+    const remote = (await unseal(pushes[pushes.length - 1].text, PASS)) as { data: { smartMoves: { id: string; priceUsd: number; p7?: number }[] } };
+    expect(remote.data.smartMoves).toEqual([expect.objectContaining({ id: 'sm:w1:h9:MintZ', priceUsd: 0.25, side: 'sell' })]);
+    // Huit jours plus tard : le prix du moment devient le prix à 7 jours
+    const later = makeDeps({ smartWallets: [W], smartMoves: remote.data.smartMoves }, {});
+    later.deps.tokenPrices = async () => new Map([['mintz', 0.2]]);
+    await runCycle(CFG_SM, emptyState(), dry(), later.deps, new Date(at + 8 * 86400_000));
+    const r2 = (await unseal(later.pushes[later.pushes.length - 1].text, PASS)) as { data: { smartMoves: { p7?: number }[] } };
+    expect(r2.data.smartMoves[0].p7).toBe(0.2);
+  });
+
   it("un mouvement hors de la liste n'alerte pas, mais fait avancer le curseur (sans relecture en boucle)", async () => {
     const out: SmartEvent = { ...sell, mint: 'MintZ', symbol: 'ZZZ', txHash: 'h2' };
     const { deps, sent } = makeDeps({ smartWallets: [W], watchedTokens: [watched] }, { smartEvents: [out] });

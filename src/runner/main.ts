@@ -25,7 +25,7 @@ import { fetchBtcDaily, fetchBtcFunding, fetchFearGreed, fetchMvrv, fetchPrices,
 import { recentChats, sendMessage } from './telegram';
 import { fetchCoinNews, type NewsItem, type WatchedCoin } from './news';
 import { fetchAllWalletEvents, walletHoldings } from '../api/smartmoney';
-import { getNewPools, networkByKey, type DexPool } from '../api/dex';
+import { getNewPools, getTokenPairs, networkByKey, type DexPool } from '../api/dex';
 import { scanEvm, scanSolana } from '../api/security';
 import { emergingCandidates, emergingLine } from '../lib/emerging';
 import type { SmartWallet } from '../types';
@@ -196,6 +196,12 @@ const depsOf = (cfg: RunnerConfig): CycleDeps => ({
     const profile = bundle.data.profile as Profile | undefined;
     const rules = rulesOf({ archetype: profile?.archetype ?? 'Ma stratégie', rules: profile?.rules ?? ({} as Profile['rules']) });
     return runAutopilots(bundle, await runnerAutopilotSources(cfg.coingeckoKey, rules), nowMs, cfg.device);
+  },
+  tokenPrices: async (chain, mints) => {
+    const pairs = await getTokenPairs(chain === 'eth' ? 'ethereum' : chain, mints);
+    const out = new Map<string, number>();
+    for (const [addr, p] of pairs) { const px = Number(p.priceUsd); if (px > 0) out.set(addr, px); }
+    return out;
   },
   signals: async (coins) => computeSignals(coins, await runnerAutopilotSources(cfg.coingeckoKey, rulesOf({ archetype: 'Ma stratégie', rules: {} as Profile['rules'] }))),
 });

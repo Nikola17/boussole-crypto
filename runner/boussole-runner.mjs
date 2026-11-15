@@ -3150,6 +3150,50 @@ function signalMessage(e, phrase) {
 Fiabilit\xE9 : ${phrase}`;
 }
 
+// src/lib/smartScore.ts
+var SMART_MOVES_MAX = 300;
+function addMoves(existing, incoming, max = SMART_MOVES_MAX) {
+  const byId = new Map(existing.map((m) => [m.id, m]));
+  for (const m of incoming) if (!byId.has(m.id)) byId.set(m.id, m);
+  return [...byId.values()].sort((a, b) => a.at.localeCompare(b.at)).slice(-max);
+}
+var DAY = 864e5;
+var GIVE_UP_DAYS = 2;
+function movesFromEvents(events, priceByMint) {
+  const out = [];
+  for (const e of events) {
+    const px = priceByMint.get(e.mint.toLowerCase());
+    if (px == null || !(px > 0)) continue;
+    out.push({ id: eventKey(e), walletId: e.walletId, chain: e.chain, mint: e.mint, symbol: e.symbol, side: e.side, priceUsd: px, at: new Date(e.atMs).toISOString() });
+  }
+  return out;
+}
+function judgeMoves(moves, nowMs, priceOf) {
+  let changed = 0;
+  const next = moves.map((m) => {
+    const age = (nowMs - Date.parse(m.at)) / DAY;
+    let out = m;
+    for (const [h, field] of [[7, "p7"], [30, "p30"]]) {
+      if (out[field] != null || age < h) continue;
+      if (age >= h + GIVE_UP_DAYS) {
+        out = { ...out, [field]: 0 };
+        continue;
+      }
+      const px = priceOf(m);
+      if (px != null && px > 0) out = { ...out, [field]: px };
+    }
+    if (out !== m) changed++;
+    return out;
+  });
+  return { moves: next, changed };
+}
+function movesDue(moves, nowMs) {
+  return moves.filter((m) => {
+    const age = (nowMs - Date.parse(m.at)) / DAY;
+    return m.p7 == null && age >= 7 || m.p30 == null && age >= 30;
+  });
+}
+
 // src/runner/cycle.ts
 var DAY_MS2 = 24 * 36e5;
 var ZONE_REPEAT_MS = 7 * DAY_MS2;
@@ -3311,6 +3355,34 @@ ${ev.advice}` });
     }
   }
   queue.push(...smartAlerts);
+  let smartMovesChanged = false;
+  if (cfg.smartMoneyEnabled && deps.tokenPrices) {
+    const before = Array.isArray(working.data.smartMoves) ? working.data.smartMoves : [];
+    const due = movesDue(before, nowMs);
+    const wanted = /* @__PURE__ */ new Map();
+    const want = (chain, mint) => {
+      if (!chain || !mint) return;
+      if (!wanted.has(chain)) wanted.set(chain, /* @__PURE__ */ new Set());
+      wanted.get(chain).add(mint);
+    };
+    for (const e of smartRecent) want(e.chain, e.mint);
+    for (const m of due) want(m.chain, m.mint);
+    if (wanted.size) {
+      const prices = /* @__PURE__ */ new Map();
+      for (const [chain, mints] of wanted) {
+        const got = await deps.tokenPrices(chain, [...mints]).catch(() => /* @__PURE__ */ new Map());
+        for (const [k, v] of got) prices.set(k.toLowerCase(), v);
+      }
+      const stamp = new Date(nowMs).toISOString();
+      const added = addMoves(before, movesFromEvents(smartRecent, prices).map((m) => ({ ...m, updatedAt: stamp })));
+      const judged = judgeMoves(added, nowMs, (m) => m.mint ? prices.get(m.mint.toLowerCase()) ?? null : null);
+      const next = judged.moves.map((m, i) => m !== added[i] ? { ...m, updatedAt: stamp } : m);
+      if (next.length !== before.length || next.some((m, i) => m !== before[i])) {
+        working = { ...working, data: { ...working.data, smartMoves: next } };
+        smartMovesChanged = true;
+      }
+    }
+  }
   const utcDay = now.toISOString().slice(0, 10);
   if (cfg.signalAlertsEnabled && deps.signals && state.signals?.day !== utcDay && now.getUTCHours() * 60 + now.getUTCMinutes() >= 10) {
     const watchIds = Array.isArray(bundle.data.watchlist) ? bundle.data.watchlist : [];
@@ -3393,7 +3465,7 @@ ${ev.advice}` });
     }
     if (moved) state = { ...state, smCursor };
   }
-  if ((consumedIds.length || autopilotChanged) && !opts.dry) {
+  if ((consumedIds.length || autopilotChanged || smartMovesChanged) && !opts.dry) {
     try {
       const next = consumedIds.length ? consumeAlerts(working, consumedIds, now.toISOString()) : working;
       const sealed = await seal({ ...next, device: cfg.device, savedAt: now.toISOString() }, cfg.passphrase);
@@ -3904,6 +3976,19 @@ var GT = "https://api.geckoterminal.com/api/v2";
 async function getNewPools(network, page = 1) {
   const json = await getJson2(`${GT}/networks/${network}/new_pools?include=base_token&page=${page}`);
   return parsePools(json, "new");
+}
+async function getTokenPairs(dexChain, addresses) {
+  const map = /* @__PURE__ */ new Map();
+  for (let i = 0; i < addresses.length; i += 30) {
+    const chunk = addresses.slice(i, i + 30);
+    const pairs = await getJson2(`https://api.dexscreener.com/tokens/v1/${dexChain}/${chunk.join(",")}`);
+    for (const p of pairs) {
+      const key = p.baseToken.address.toLowerCase();
+      const cur = map.get(key);
+      if (!cur || (p.liquidity?.usd ?? 0) > (cur.liquidity?.usd ?? 0)) map.set(key, p);
+    }
+  }
+  return map;
 }
 
 // src/api/security.ts
@@ -6400,6 +6485,15 @@ var depsOf = (cfg) => ({
     const profile = bundle.data.profile;
     const rules = rulesOf({ archetype: profile?.archetype ?? "Ma strat\xE9gie", rules: profile?.rules ?? {} });
     return runAutopilots(bundle, await runnerAutopilotSources(cfg.coingeckoKey, rules), nowMs, cfg.device);
+  },
+  tokenPrices: async (chain, mints) => {
+    const pairs = await getTokenPairs(chain === "eth" ? "ethereum" : chain, mints);
+    const out = /* @__PURE__ */ new Map();
+    for (const [addr, p] of pairs) {
+      const px = Number(p.priceUsd);
+      if (px > 0) out.set(addr, px);
+    }
+    return out;
   },
   signals: async (coins) => computeSignals(coins, await runnerAutopilotSources(cfg.coingeckoKey, rulesOf({ archetype: "Ma strat\xE9gie", rules: {} })))
 });
