@@ -29,7 +29,7 @@
 
 ---
 
-### Tâche 1 : courbe du portefeuille reconstituée d'après le journal
+### Task 1: courbe du portefeuille reconstituée d'après le journal
 
 **Fichiers :** créer `src/lib/history/equity.ts`, `src/lib/history/equity.test.ts`.
 
@@ -41,7 +41,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Suivi : courbe du portefeuille reconstituée d'après le journal`.
 
-### Tâche 2 : relevés quotidiens et données version 4
+### Task 2: relevés quotidiens et données version 4
 
 **Fichiers :** modifier `src/types.ts`, `src/lib/backup.ts`, `src/lib/sync/merge.ts`, `src/store/persistence.ts`, `src/store/useStore.ts` ; créer `src/hooks/useSnapshots.ts` ; tests dans `src/store/persistence.test.ts` et `src/lib/history/snapshots.test.ts`.
 
@@ -56,7 +56,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Suivi : relevés quotidiens du portefeuille (données v4)`.
 
-### Tâche 3 : graphique « Valeur du portefeuille »
+### Task 3: graphique « Valeur du portefeuille »
 
 **Fichiers :** créer `src/components/PortfolioChart.tsx` ; modifier `src/pages/Portfolio.tsx` (en tête de page).
 
@@ -67,7 +67,7 @@
 - [ ] **Étape 2 : essai de fumée** sur `/portefeuille` avec un journal d'essai ; pas d'écran d'erreur ; aucune valeur à 0 € pour une crypto sans prix.
 - [ ] **Étape 3 : commit** — `Wallet : graphique de la valeur du portefeuille`.
 
-### Tâche 4 : alertes de signal
+### Task 4: alertes de signal
 
 **Fichiers :** créer `src/runner/signals.ts` et son test ; modifier `src/runner/cycle.ts`, `src/runner/config.ts` (`signalAlertsEnabled`, vrai par défaut), `src/runner/state.ts` (dernier jour calculé), `src/hooks/useSmartAlerts.ts`.
 
@@ -81,7 +81,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Alertes de signal sur Telegram et dans l'application`.
 
-### Tâche 5 : copie en réel
+### Task 5: copie en réel
 
 **Fichiers :** créer `src/lib/lab/copy.ts` et son test, `src/pages/labo/CopyReport.tsx` ; modifier `src/types.ts` (`copyOf?: { portfolioId: string; day: string; coinId: string }` sur `Transaction` et `TradeEntry`), `src/components/forms.tsx` (préremplissage), `src/pages/labo/PortfolioDetail.tsx`.
 
@@ -95,7 +95,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Copie en réel d'un autopilote, écart mesuré`.
 
-### Tâche 6 : wallets suivis notés
+### Task 6: wallets suivis notés
 
 **Fichiers :** créer `src/lib/smartScore.ts` et son test ; modifier `src/runner/cycle.ts` (inscription dans `smartMoves`, dans l'écriture unique du faisceau), `src/pages/Smart.tsx`.
 
@@ -105,7 +105,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès** ; texte affiché : « 14 mouvements suivis, 9 gagnants à 30 jours ».
 - [ ] **Étape 5 : commit** — `Smart money : chaque wallet noté sur ses mouvements`.
 
-### Tâche 7 : pépites suivies en avant et publication 1.27.0
+### Task 7: pépites suivies en avant et publication 1.27.0
 
 **Fichiers :** créer `src/lib/pickTracking.ts` et son test, `src/hooks/usePickSnapshots.ts` ; modifier `src/pages/Gems.tsx`.
 

@@ -29,7 +29,7 @@
 
 ---
 
-### Tâche 1 : pression acheteuse dans les bougies et extracteurs candidats
+### Task 1: pression acheteuse dans les bougies et extracteurs candidats
 
 **Fichiers :** modifier `src/lib/indicators.ts` (`Candle.takerBuyQuote?: number`), `src/api/binance.ts` (`toCandle` lit le champ 10), `src/runner/market.ts`, `scripts/bench/fetch.ts` ; créer `src/lib/lab/candidates.ts` et son test.
 
@@ -41,7 +41,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès** ; les tests existants des bougies Binance restent verts.
 - [ ] **Étape 5 : commit** — `Banc d'essai : candidats F1 à F14 et pression acheteuse`.
 
-### Tâche 2 : protocole, journal et règle des 60 %
+### Task 2: protocole, journal et règle des 60 %
 
 **Fichiers :** créer `docs/bench/protocole.md` (fiche 10.2, recopiée), `docs/bench/journal.md` (en-tête : date, candidat, paramètres, période regardée, résultat) ; modifier `src/lib/lab/events.ts` et son test, `scripts/bench/main.ts` (commande `candidates [--control]`).
 
@@ -51,7 +51,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Banc d'essai : protocole, journal des essais, cohérence entre actifs`.
 
-### Tâche 3 : mesurer et décider
+### Task 3: mesurer et décider
 
 **Fichiers :** produire `docs/bench/AAAA-MM-JJ-candidats.md` ; compléter `docs/bench/journal.md`.
 
@@ -60,7 +60,7 @@
 - [ ] **Étape 3 :** écrire en tête du rapport la liste de décision : « retenu », « information seulement » (prometteur), « abandonné », avec la raison chiffrée. F5 : abandonné s'il échoue encore. F11 : « non mesurable » si l'historique de financement est inaccessible.
 - [ ] **Étape 4 : commit** — `Banc d'essai : mesure des candidats et décisions`.
 
-### Tâche 4 : signal investisseur en table de décision
+### Task 4: signal investisseur en table de décision
 
 **Fichiers :** modifier `src/lib/signals.ts` (`SIGNALS_VERSION = 2`) et `src/lib/signals.test.ts`.
 
@@ -74,7 +74,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Signal investisseur v2 : table de décision fondée sur les mesures`.
 
-### Tâche 5 : signal trader et plan de trade
+### Task 5: signal trader et plan de trade
 
 **Fichiers :** modifier `src/lib/signals.ts`, `src/lib/signals.test.ts`.
 
@@ -86,7 +86,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès** ; les stratégies du registre (`trader`) passent leurs tests, mis à jour si une clé de setup a disparu.
 - [ ] **Étape 5 : commit** — `Signal trader v2 : les setups validés d'abord`.
 
-### Tâche 6 : textes, IA et écrans
+### Task 6: textes, IA et écrans
 
 **Fichiers :** modifier `src/pages/Market.tsx` (« Comment lire ces signaux »), `src/pages/Guide.tsx`, `src/pages/CoinDetail.tsx`, `src/ai/context.ts`, `src/ai/prompts.ts`.
 
@@ -96,7 +96,7 @@
 - [ ] **Étape 2 : vérifier** `npx vitest run src/ai` et la vue « Voir ce qui part vers l'IA » (Réglages) contient le champ `fiabilite`.
 - [ ] **Étape 3 : commit** — `Signaux v2 : textes, Guide et contexte de l'IA`.
 
-### Tâche 7 : conditions de sortie, régénération et publication 1.26.0
+### Task 7: conditions de sortie, régénération et publication 1.26.0
 
 - [ ] **Étape 1 :** `npm run bench -- signals` et `npm run bench -- strategies` ; `src/data/reliability.json` porte `rulesVersion: 2`.
 - [ ] **Étape 2 :** `npm run bench -- compare trader@1 trader@2` et idem pour `dca-boussole` (base seule) ; rapport `docs/bench/AAAA-MM-JJ-signaux-v1-v2.md` reprenant les cinq conditions de la fiche 10.5 une par une, atteintes ou non. Toute condition non atteinte → retour à la tâche 4 ou 5 pour retirer le libellé concerné.

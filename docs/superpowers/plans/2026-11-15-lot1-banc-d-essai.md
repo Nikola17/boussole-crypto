@@ -53,7 +53,7 @@
 
 ---
 
-### Tâche 1 : statistiques de base
+### Task 1: statistiques de base
 
 **Fichiers :** créer `src/lib/lab/stats.ts`, `src/lib/lab/stats.test.ts`.
 
@@ -99,7 +99,7 @@ it('XIRR : 100 investis, 110 un an après = 10 %', () => {
 - [ ] **Étape 4 : vérifier le succès** — même commande → tout passe.
 - [ ] **Étape 5 : commit** — `Labo : statistiques de base (Wilson, bootstrap, XIRR)`.
 
-### Tâche 2 : signaux sur bougies closes et numéros de version
+### Task 2: signaux sur bougies closes et numéros de version
 
 **Fichiers :** modifier `src/lib/indicators.ts`, `src/lib/signals.ts`, `src/lib/cycle.ts`, `src/lib/autoBasket.ts`, `src/hooks/useMarket.ts`, `src/pages/CoinDetail.tsx`, `src/pages/Trading.tsx` ; tests dans `src/lib/indicators.test.ts` (créer s'il n'existe pas) et `src/lib/signals.test.ts`.
 
@@ -141,7 +141,7 @@ it('analyze en mode clos donne le même résultat quelle que soit l’heure de l
 - [ ] **Étape 5 : vérifier** — `npx vitest run src/lib` puis `npm run typecheck` → vert.
 - [ ] **Étape 6 : commit** — `Signaux calculés sur bougies closes, numéros de version des règles`.
 
-### Tâche 3 : correctif des frais du papier
+### Task 3: correctif des frais du papier
 
 **Fichiers :** modifier `src/pages/Paper.tsx:64`, `src/lib/paper.ts`, `src/store/useStore.ts` (fonction `merge` du `persist`) ; test dans `src/lib/paper.test.ts` (créer s'il n'existe pas).
 
@@ -169,7 +169,7 @@ it('ne touche ni un ordre juste, ni un achat fantôme, et ne corrige qu’une fo
 - [ ] **Étape 4 : vérifier le succès.**
 - [ ] **Étape 5 : commit** — `Papier : frais à 0,1 % (et non 10 %), anciens ordres corrigés`.
 
-### Tâche 4 : types du Labo et règles d'exécution
+### Task 4: types du Labo et règles d'exécution
 
 **Fichiers :** créer `src/lib/lab/types.ts`, `src/lib/lab/fills.ts`, `src/lib/lab/fills.test.ts`.
 
@@ -216,7 +216,7 @@ it('stop et objectif dans la même bougie : le stop gagne', () => { /* settleBar
 - [ ] **Étape 4 : vérifier le succès.**
 - [ ] **Étape 5 : commit** — `Labo : types et règles d'exécution communes`.
 
-### Tâche 5 : univers de mesure
+### Task 5: univers de mesure
 
 **Fichiers :** créer `src/lib/lab/universe.ts`, `src/lib/lab/universe.test.ts`.
 
@@ -236,7 +236,7 @@ it('stop et objectif dans la même bougie : le stop gagne', () => { /* settleBar
 - [ ] **Étape 4 : vérifier le succès.**
 - [ ] **Étape 5 : commit** — `Labo : univers de mesure (coupures, chaînages, classement par volume)`.
 
-### Tâche 6 : température rejouable
+### Task 6: température rejouable
 
 **Fichiers :** créer `src/lib/lab/replayTemp.ts`, `src/lib/lab/replayTemp.test.ts`.
 
@@ -246,7 +246,7 @@ it('stop et objectif dans la même bougie : le stop gagne', () => { /* settleBar
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Labo : température du marché rejouable`.
 
-### Tâche 7 : étude de signal
+### Task 7: étude de signal
 
 **Fichiers :** créer `src/lib/lab/events.ts`, `src/lib/lab/events.test.ts`.
 
@@ -280,7 +280,7 @@ Conventions (fiche 8.5) : entrée à `ouverture[t+1]`, `ret = clôture[t+H] ÷ o
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Labo : étude de signal (épisodes, horizons, verdicts)`.
 
-### Tâche 8 : mesures et simulateur
+### Task 8: mesures et simulateur
 
 **Fichiers :** créer `src/lib/lab/metrics.ts`, `src/lib/lab/sim.ts` et leurs tests.
 
@@ -313,7 +313,7 @@ Ordre des opérations : tableau de la fiche 8.6 (deux modes). `ctx.universe = un
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Labo : simulateur de portefeuille et mesures de performance`.
 
-### Tâche 9 : registre et premières stratégies
+### Task 9: registre et premières stratégies
 
 **Fichiers :** créer `src/lib/lab/strategies/{index,dcaBtc,investisseur}.ts` et `src/lib/lab/strategies/strategies.test.ts`.
 
@@ -325,7 +325,7 @@ Ordre des opérations : tableau de la fiche 8.6 (deux modes). `ctx.universe = un
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Labo : registre des stratégies, DCA Bitcoin et Investisseur`.
 
-### Tâche 10 : table de fiabilité
+### Task 10: table de fiabilité
 
 **Fichiers :** créer `src/lib/lab/reliability.ts`, `src/lib/lab/reliability.test.ts`, `src/data/reliability.json` (contenu provisoire : `{ "generatedAt": "", "dataThrough": "", "rulesVersion": 1, "universe": { "assets": 0, "from": "2019-01-01", "top": 50 }, "entries": {} }`, remplacé en tâche 12).
 
@@ -343,7 +343,7 @@ Ordre des opérations : tableau de la fiche 8.6 (deux modes). `ctx.universe = un
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Labo : lecture de la table de fiabilité et phrases d'affichage`.
 
-### Tâche 11 : historique en cache dans l'application
+### Task 11: historique en cache dans l'application
 
 **Fichiers :** créer `src/lib/idb.ts`, `src/api/history.ts`, `src/api/history.test.ts` ; modifier `src/lib/queryCache.ts` pour utiliser `idb.ts`.
 
@@ -357,7 +357,7 @@ Ordre des opérations : tableau de la fiche 8.6 (deux modes). `ctx.universe = un
 - [ ] **Étape 2 à 4 : échec, implémentation, succès** ; vérifier que `npx vitest run src/lib/queryCache.test.ts` reste vert s'il existe.
 - [ ] **Étape 5 : commit** — `Historique journalier complet en cache (IndexedDB)`.
 
-### Tâche 12 : outil en ligne de commande et premiers rapports
+### Task 12: outil en ligne de commande et premiers rapports
 
 **Fichiers :** créer `scripts/bench/main.ts`, `scripts/bench/fetch.ts`, `scripts/bench/report.ts` ; modifier `package.json`, `tsconfig.json` (`"include": ["src", "scripts/bench"]`), `.gitignore` (`.cache/`) ; produire `docs/bench/AAAA-MM-JJ-signaux-v1.md`, `docs/bench/AAAA-MM-JJ-strategies.md`, `src/data/reliability.json`, `src/data/strategies-bench.json`.
 
@@ -374,7 +374,7 @@ Ordre des opérations : tableau de la fiche 8.6 (deux modes). `ctx.universe = un
 - [ ] **Étape 5 : vérifier** `npx vitest run src/lib/lab/reliability.test.ts` et `npm run typecheck`.
 - [ ] **Étape 6 : commit** — `Banc d'essai : outil en ligne de commande, premiers rapports et table de fiabilité`.
 
-### Tâche 13 : fiabilité affichée à côté des signaux
+### Task 13: fiabilité affichée à côté des signaux
 
 **Fichiers :** modifier `src/components/uikit/badges.tsx` (`SignalBadge`), `src/pages/CoinDetail.tsx`, `src/pages/Market.tsx`.
 
@@ -386,7 +386,7 @@ Ordre des opérations : tableau de la fiche 8.6 (deux modes). `ctx.universe = un
 - [ ] **Étape 2 : vérifier** `npm run typecheck`, puis à l'œil dans `npm run dev` : phrase visible sous un libellé, info-bulle dans la liste, groupe replié présent.
 - [ ] **Étape 3 : commit** — `Fiabilité mesurée affichée à côté de chaque signal`.
 
-### Tâche 14 : page Labo
+### Task 14: page Labo
 
 **Fichiers :** créer `src/pages/Labo.tsx` ; déplacer le contenu de `src/pages/Paper.tsx` dans des composants appelés par Labo (onglets « Papier » et « Achats fantômes ») ; modifier `src/App.tsx` (route `/labo` ; `/papier` rend Labo sur l'onglet Papier), `src/components/Layout.tsx` (entrée « Labo », icône `FlaskConical`, à la place de « Papier »).
 
@@ -403,7 +403,7 @@ Ordre des opérations : tableau de la fiche 8.6 (deux modes). `ctx.universe = un
 - [ ] **Étape 3 : écrire et lancer** l'essai de fumée Electron (`smoke/labo.cjs` dans le dossier temporaire de la session, sur le modèle de `smoke/main.cjs`) : `/labo`, `/labo?tab=banc`, `/papier`, `/coin/bitcoin`, `/marche` s'affichent sans « Cet écran a rencontré un problème » ; le tableau du banc d'essai contient « Verdict ». Commande : `env -u ELECTRON_RUN_AS_NODE npx electron <script> "$(pwd)/dist"` après `npx vite build`.
 - [ ] **Étape 4 : commit** — `Page Labo : papier, achats fantômes et banc d'essai`.
 
-### Tâche 15 : documentation et publication 1.23.0
+### Task 15: documentation et publication 1.23.0
 
 **Fichiers :** `docs/FONCTIONNALITES.md`, `README.md`, `package.json` (version).
 

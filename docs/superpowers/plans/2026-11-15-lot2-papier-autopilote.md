@@ -53,7 +53,7 @@
 
 ## Demi-lot 2A — Papier complet (1.24.0)
 
-### Tâche 1 : modèle de données version 3
+### Task 1: modèle de données version 3
 
 **Fichiers :** modifier `src/types.ts`, `src/lib/backup.ts` (`DATA_VERSION = 3`, listes), `src/lib/sync/merge.ts` (`ITEM_KEYS` : `paperPortfolios`, `paperOrders`, `paperDays`), `src/store/persistence.ts` (bloc `if (version < 3)`), `src/store/useStore.ts`, `src/runner/evaluate.ts` (`watchOf` lit les trois collections) ; tests dans `src/store/persistence.test.ts` et `src/store/paper.test.ts`.
 
@@ -67,7 +67,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès** ; `npx vitest run src/store src/lib/sync src/lib/backup` reste vert.
 - [ ] **Étape 5 : commit** — `Papier : plusieurs portefeuilles, ordres et journaux (données v3)`.
 
-### Tâche 2 : ticket d'ordre et état d'un portefeuille manuel
+### Task 2: ticket d'ordre et état d'un portefeuille manuel
 
 **Fichiers :** créer `src/lib/lab/paperBook.ts` et son test ; modifier `src/lib/paper.ts` (`paperStatus` reçoit les ordres d'un seul portefeuille, `liveTrades` filtre aussi par `portfolioId`).
 
@@ -84,7 +84,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Papier : ticket d'ordre, frais réalistes et état par portefeuille`.
 
-### Tâche 3 : règlement des ordres en attente
+### Task 3: règlement des ordres en attente
 
 **Fichiers :** créer `src/lib/lab/settle.ts`, `src/lib/lab/settle.test.ts`, `src/hooks/usePaperSettle.ts` ; monter le crochet dans `AppEffects` (`src/App.tsx`).
 
@@ -99,7 +99,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Papier : ordres limites, stops et objectifs exécutés sur bougies horaires`.
 
-### Tâche 4 : courbe et statistiques d'un portefeuille
+### Task 4: courbe et statistiques d'un portefeuille
 
 **Fichiers :** créer `src/lib/lab/equity.ts` et son test.
 
@@ -111,7 +111,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Papier : courbe de valeur et statistiques`.
 
-### Tâche 5 : interface des portefeuilles papier et publication 1.24.0
+### Task 5: interface des portefeuilles papier et publication 1.24.0
 
 **Fichiers :** créer `src/pages/labo/{PortfolioList,PortfolioDetail,OrderTicket,EquityChart}.tsx` ; modifier `src/pages/Labo.tsx` (onglet « Portefeuilles papier » remplace « Papier »), `docs/FONCTIONNALITES.md`, `README.md`.
 
@@ -126,7 +126,7 @@
 
 ## Demi-lot 2B — Autopilote (1.25.0)
 
-### Tâche 6 : `buildAutoBasketPlan` extrait de `useBasket`
+### Task 6: `buildAutoBasketPlan` extrait de `useBasket`
 
 **Fichiers :** modifier `src/lib/autoBasket.ts`, `src/hooks/useBasket.ts` ; test dans `src/lib/autoBasket.test.ts`.
 
@@ -148,7 +148,7 @@ export function buildAutoBasketPlan(i: AutoBasketInputs): BasketPlanResult;
 - [ ] **Étape 2 à 4 : échec, implémentation, succès** ; `npx vitest run src/lib/autoBasket.test.ts` et l'essai de fumée DCA existant (`smoke/dca.cjs`) restent verts.
 - [ ] **Étape 5 : commit** — `Panier automatique : calcul extrait en fonction pure`.
 
-### Tâche 7 : stratégies « DCA Boussole » et « Trader »
+### Task 7: stratégies « DCA Boussole » et « Trader »
 
 **Fichiers :** créer `src/lib/lab/strategies/{dcaBoussole,trader}.ts` ; modifier `strategies/index.ts` ; tests dans `strategies.test.ts`.
 
@@ -161,7 +161,7 @@ export function buildAutoBasketPlan(i: AutoBasketInputs): BasketPlanResult;
 - [ ] **Étape 3 à 5 : échec, implémentation, succès.**
 - [ ] **Étape 6 : commit** — `Labo : stratégies DCA Boussole et Trader`.
 
-### Tâche 8 : horloge d'exécution
+### Task 8: horloge d'exécution
 
 **Fichiers :** créer `src/lib/lab/clock.ts` et son test.
 
@@ -182,7 +182,7 @@ expect(isoWeek('2026-11-16')).toBe('2026-W47');
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Labo : horloge d'exécution indépendante du fuseau de la machine`.
 
-### Tâche 9 : état rejoué et écriture idempotente
+### Task 9: état rejoué et écriture idempotente
 
 **Fichiers :** créer `src/lib/lab/autoState.ts` et son test ; brancher `applyPaperDays` du magasin dessus.
 
@@ -197,7 +197,7 @@ expect(isoWeek('2026-11-16')).toBe('2026-W47');
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Labo : état d'un autopilote rejoué depuis ses journaux`.
 
-### Tâche 10 : verdict de confiance
+### Task 10: verdict de confiance
 
 **Fichiers :** créer `src/lib/lab/trust.ts` et son test ; ajouter `trustRules?: Partial<TrustRules>` à `Profile` (`src/types.ts`).
 
@@ -218,7 +218,7 @@ Critères et textes : fiche 9.7, à l'identique. `kind: 'deposits'` compare à l
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Labo : verdict de confiance d'un autopilote`.
 
-### Tâche 11 : le tick
+### Task 11: le tick
 
 **Fichiers :** créer `src/lib/lab/autopilot.ts`, `src/lib/lab/autopilot.test.ts`.
 
@@ -251,7 +251,7 @@ Algorithme et règles : fiche 9.5 (pseudo-code, points 1 à 5, non rejouable et 
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Labo : tick de l'autopilote (rattrapage, déterminisme)`.
 
-### Tâche 12 : autopilote dans l'application
+### Task 12: autopilote dans l'application
 
 **Fichiers :** créer `src/hooks/useAutopilot.ts`, `src/pages/labo/{AutopilotWizard,TrustPanel,Leaderboard}.tsx`, `src/components/AutopilotCard.tsx` ; modifier `src/pages/Labo.tsx` (onglet « Classement »), `src/pages/Dashboard.tsx` (carte), `src/App.tsx`.
 
@@ -265,7 +265,7 @@ Algorithme et règles : fiche 9.5 (pseudo-code, points 1 à 5, non rejouable et 
 - [ ] **Étape 2 : essai de fumée Electron** : créer un autopilote `dca-btc` et un `trader`, ouvrir le classement et le Cockpit ; aucun écran d'erreur ; le panneau affiche « En observation ».
 - [ ] **Étape 3 : commit** — `Labo : autopilotes dans l'application (création, confiance, classement)`.
 
-### Tâche 13 : autopilote sur le serveur
+### Task 13: autopilote sur le serveur
 
 **Fichiers :** créer `src/runner/autopilot.ts` et son test ; modifier `src/runner/cycle.ts`, `src/runner/main.ts`, `src/runner/market.ts`, `src/runner/config.ts`, `src/runner/brief.ts`, `runner/README.md`, `runner/runner.json.example`.
 
@@ -282,7 +282,7 @@ Algorithme et règles : fiche 9.5 (pseudo-code, points 1 à 5, non rejouable et 
 - [ ] **Étape 2 à 4 : échec, implémentation, succès** ; `npm run build:runner` aboutit.
 - [ ] **Étape 5 : commit** — `Runner : autopilotes, ordres papier et messages Telegram`.
 
-### Tâche 14 : non-régression et publication 1.25.0
+### Task 14: non-régression et publication 1.25.0
 
 - [ ] **Étape 1 : test de non-régression** (`src/lib/paper.isolation.test.ts`) — un état avec des portefeuilles papier et des journaux donne exactement les mêmes `computeHoldings`, `useGuidance` (fonction pure sous-jacente) et calculs de `tax.ts` qu'un état sans papier.
 - [ ] **Étape 2 :** `npm run bench -- strategies` (ajoute `dca-boussole` en base seule et `trader` à `strategies-bench.json`) ; commit du rapport.

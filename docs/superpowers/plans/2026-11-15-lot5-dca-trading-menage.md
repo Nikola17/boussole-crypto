@@ -29,7 +29,7 @@
 
 ---
 
-### Tâche 1 : variantes du DCA mesurées
+### Task 1: variantes du DCA mesurées
 
 **Fichiers :** modifier `src/lib/lab/strategies/dcaBoussole.ts` (paramètre `baseMode: 'top3' | 'cap' | 'anchor' | 'equal' | 'btc'` et `anchorPct`, défaut `'top3'` et 70) et son test ; `scripts/bench/main.ts` (commande `dca-variants`) ; produire `docs/bench/AAAA-MM-JJ-dca-variantes.md`.
 
@@ -40,7 +40,7 @@
 - [ ] **Étape 5 :** `npm run bench -- dca-variants` ; écrire la conclusion en tête du rapport.
 - [ ] **Étape 6 : commit** — `DCA : variantes de la base et des multiplicateurs mesurées`.
 
-### Tâche 2 : panier recalé sur la mesure
+### Task 2: panier recalé sur la mesure
 
 **Fichiers :** modifier `src/types.ts` (`BasketPlan.baseMode?`, `anchorPct?`), `src/lib/autoBasket.ts` (`buildAutoBasketPlan` applique `baseMode`), `src/lib/dca.ts` (table retenue, seulement si le rapport la change), `src/components/Basket.tsx`, `src/pages/Dca.tsx` ; tests dans `src/lib/autoBasket.test.ts`.
 
@@ -52,7 +52,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Panier DCA : règle de base fondée sur la mesure, paniers existants intacts`.
 
-### Tâche 3 : plans DCA « avancés »
+### Task 3: plans DCA « avancés »
 
 **Fichiers :** modifier `src/pages/Dca.tsx`.
 
@@ -61,7 +61,7 @@
 - [ ] **Étape 2 : essai de fumée** avec et sans plan (`/dca`).
 - [ ] **Étape 3 : commit** — `DCA : plans avancés masqués quand ils ne servent pas`.
 
-### Tâche 4 : trading aligné sur les preuves
+### Task 4: trading aligné sur les preuves
 
 **Fichiers :** modifier `src/pages/Market.tsx` (vue « Setups détectés »), `src/pages/Trading.tsx`, `src/pages/CoinDetail.tsx`, `src/runner/cycle.ts` ; créer `src/lib/lab/tradeCheck.ts` et son test.
 
@@ -75,7 +75,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès.**
 - [ ] **Étape 5 : commit** — `Trading : setups triés par fiabilité, test sur papier en un clic`.
 
-### Tâche 5 : menu regroupé
+### Task 5: menu regroupé
 
 **Fichiers :** modifier `src/components/Layout.tsx` (`NAV`), `src/App.tsx`, `src/pages/Gems.tsx` (onglets Smart money et Airdrops, et Narratives repris du Cockpit), `src/pages/Dashboard.tsx` (retrait de « Narratives du jour » et « Les plus recherchées ») ; créer `src/pages/More.tsx` (route `/plus`).
 
@@ -86,7 +86,7 @@
 - [ ] **Étape 5 : essai de fumée** de toutes les routes, anciennes comprises, sur ordinateur et à la largeur d'un téléphone.
 - [ ] **Étape 6 : commit** — `Menu regroupé en 9 entrées, anciennes adresses conservées`.
 
-### Tâche 6 : données mortes (migration 4 → 5)
+### Task 6: données mortes (migration 4 → 5)
 
 **Fichiers :** modifier `src/lib/backup.ts` (`DATA_VERSION = 5`, listes), `src/lib/sync/merge.ts` (retrait de `theses`, `checklist`, `paper`), `src/store/persistence.ts`, `src/store/useStore.ts`, `src/types.ts`, `src/hooks/useExitPlan.ts`, `src/components/ConsolidateCard.tsx`, `src/ai/context.ts`, `src/runner/evaluate.ts`, `src/pages/Guide.tsx`.
 
@@ -95,7 +95,7 @@
 - [ ] **Étape 2 à 4 : échec, implémentation, succès** ; `grep -rn "theses\|checklist" src` ne renvoie plus que la migration et ses tests.
 - [ ] **Étape 5 : commit** — `Ménage : thèses, checklist et ancien réglage du papier supprimés (données v5)`.
 
-### Tâche 7 : documents et publication 1.28.0
+### Task 7: documents et publication 1.28.0
 
 - [ ] **Étape 1 :** mettre à jour `README.md`, `docs/FONCTIONNALITES.md` (entrée « v1.28.0 — DCA et trading sur preuves, menu simplifié »), `docs/STRATEGIE.md` (retirer « thèse cassée = sortie » ; règles du DCA et de la température selon le rapport), `runner/README.md`.
 - [ ] **Étape 2 :** `npm run typecheck && npm test && npx vite build && npm run build:runner`.
