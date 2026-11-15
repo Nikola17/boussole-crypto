@@ -166,7 +166,7 @@ function traderV2(v1: SignalResult, breakoutVolume: number | null): SignalResult
   if (breakoutVolume == null) return { ...v1, label: 'Neutre', tone: 'neutral', strength: 0, score: 0, why: 'Pas de cassure validée : aucun signal trader fiable.' };
   const strong = breakoutVolume >= 2;
   const score = Math.round(Math.min(100, 40 + (breakoutVolume - 1.5) * 40));
-  return { ...v1, label: strong ? 'Achat fort' : 'Achat', tone: 'up', strength: strong ? 2 : 1, score, why: `Cassure des plus hauts 20 jours avec un volume ×${breakoutVolume.toFixed(1).replace('.', ',')}${strong ? ' (×2 ou plus)' : ''} : validée sur la période de contrôle. Aucun plan de trade n’a d’espérance positive mesurée après frais.` };
+  return { ...v1, label: strong ? 'Achat fort' : 'Achat', tone: 'up', strength: strong ? 2 : 1, score, why: `Cassure des plus hauts 20 jours avec un volume ×${breakoutVolume.toFixed(1).replace('.', ',')}${strong ? ' (×2 ou plus)' : ''} : validée sur la période de contrôle. Plan mesuré : stop jugé à la clôture, objectif 3 R (espérance positive avec les frais d’une plateforme, nulle sur 2025-2026).` };
 }
 
 export function analyze(candles: Candle[], ctx: AnalysisContext = {}, opts: AnalyzeOptions = {}): Analysis | null {

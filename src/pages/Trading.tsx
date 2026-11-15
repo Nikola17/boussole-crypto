@@ -18,6 +18,9 @@ import { AiProgress, NeedKey, ReportView, useAiConfig, useAiRunner } from '../co
 import { useAiContext } from '../ai/context';
 import { runJournalReview } from '../ai/tasks';
 import type { CoinRef, TradeEntry } from '../types';
+import { journalVsBench, setupExpectancy } from '../lib/lab/tradeCheck';
+import { COSTS } from '../lib/lab/types';
+import { PaperTestButton } from './labo/PaperTestButton';
 
 type Tab = 'calc' | 'journal' | 'alertes';
 
@@ -39,6 +42,25 @@ export default function Trading() {
       {tab === 'calc' && <SizeCalculator />}
       {tab === 'journal' && <Journal />}
       {tab === 'alertes' && <Alerts />}
+    </div>
+  );
+}
+
+/** Chances et espérance mesurées du setup « cassure avec volume », frais du préréglage choisi compris. */
+function ExpectancyBox({ stopDistancePct, breakout }: { stopDistancePct: number; breakout: boolean }) {
+  const [costs, setCosts] = useState<'exchange' | 'app'>('exchange');
+  const e = setupExpectancy('setup:breakout', COSTS[costs], stopDistancePct);
+  if (e.expectancyR == null) return null;
+  const r2 = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(2).replace('.', ',')} R`;
+  return (
+    <div className="space-y-2 rounded-lg border border-line p-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-medium text-ink">{breakout ? 'Setup détecté : cassure avec volume (validé)' : 'Référence : cassure avec volume (le seul setup validé)'}</span>
+        <Segmented value={costs} onChange={setCosts} options={[{ value: 'exchange', label: 'Plateforme (0,15 %)' }, { value: 'app', label: 'Application (1,5 %)' }]} />
+      </div>
+      <p className="text-ink-2">Sur l’historique, ce plan a touché son objectif {fmtNum(e.winPct ?? 0, 0)} % du temps ; espérance {r2(e.expectancyR)} par trade avec ces frais et ce stop ({fmtNum(stopDistancePct, 1)} %).</p>
+      {!breakout && <p className="text-xs text-warn">Aucun setup validé sur cette crypto aujourd’hui : ces chiffres ne s’appliquent pas à ce trade.</p>}
+      {e.warning && <Banner tone="warn">{e.warning}</Banner>}
     </div>
   );
 }
@@ -72,7 +94,7 @@ function SizeCalculator() {
     setEntry(round(livePrice));
     if (side === 'long') {
       const st = analysis?.plan?.stop ?? (atr ? livePrice - 2 * atr : null);
-      if (st != null) { setStop(round(st)); setTp(round(livePrice + 2 * (livePrice - st))); }
+      if (st != null) { setStop(round(st)); setTp(round(analysis?.plan?.tp2 ?? livePrice + 3 * (livePrice - st))); }
     } else if (atr) {
       const st = livePrice + 2 * atr;
       setStop(round(st));
@@ -98,7 +120,7 @@ function SizeCalculator() {
             </div>
           )}
           {coin && analysis && side === 'long' && analysis.trader.tone !== 'up' && <p className="text-xs text-warn">Le signal trader n’est pas haussier : le stop proposé vient de la volatilité, pas d’un setup. Attends peut-être un meilleur moment.</p>}
-          {coin && <p className="text-xs text-muted">Stop sous le dernier support (ou à 2 × la volatilité moyenne), objectif à 2 R. Ajuste-les à ta lecture du graphique.</p>}
+          {coin && <p className="text-xs text-muted">Plan mesuré par le banc d’essai : stop sous le dernier support (ou à 2 × la volatilité moyenne), jugé à la clôture du jour, objectif à 3 R.</p>}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={`Capital (${currency === 'EUR' ? '€' : '$'})`}><NumberInput value={capital} onChange={setCapital} /></Field>
@@ -119,6 +141,8 @@ function SizeCalculator() {
               <Stat label="Perte si stop touché" value={<span className="text-down">{fmtMoney(r.riskAmount, currency, 0)}</span>} hint={`distance ${fmtNum(r.stopDistancePct, 2)} %`} />
               <Stat label="Ratio gain / risque" value={r.rr != null ? `${fmtNum(r.rr, 2)} R` : '—'} hint={r.potentialGain != null ? `gain ${fmtMoney(r.potentialGain, currency, 0)}` : undefined} />
             </div>
+            {side === 'long' && <ExpectancyBox stopDistancePct={r.stopDistancePct} breakout={!!analysis?.setups.some((s) => s.key === 'breakout')} />}
+            {coin && side === 'long' && livePrice && qty ? <PaperTestButton coin={coin} plan={{ entry: Number(entry), stop: Number(stop), tp2: tp === '' ? Number(entry) + 3 * (Number(entry) - Number(stop)) : Number(tp) }} usd={qty * livePrice} marketUsd={livePrice} /> : null}
             {r.liquidationPrice != null && <p className="text-sm text-ink-2">Prix de liquidation estimé : <span className="tnum font-medium text-ink">{fmtNum(r.liquidationPrice, 6)}</span></p>}
             <p className="text-xs text-muted">Frais estimés (0,1 % par côté) : {fmtMoney(r.fees, currency, 2)}</p>
             {r.rr != null && r.rr < 1.5 && <Banner tone="warn">Moins de 1,5 R de gain potentiel pour 1 R de risque : avec un taux de réussite ordinaire, ce trade ne paie pas sur la durée.</Banner>}
@@ -226,6 +250,7 @@ function Journal() {
       )}
       {stats.bySetup.length > 0 && (
         <Card title="Performance par setup">
+          {(() => { const v = journalVsBench(trades, 'setup:breakout'); return v.mine.n > 0 ? <p className="mb-2 text-sm text-ink-2">Cassure avec volume — {v.text}.</p> : null; })()}
           <ul className="divide-y divide-line text-sm">
             {stats.bySetup.map((s) => <li key={s.setup} className="flex justify-between py-2"><span className="text-ink">{s.setup} <span className="text-xs text-muted">({s.count})</span></span><span className="tnum"><span className={s.pnl >= 0 ? 'text-up' : 'text-down'}>{fmtMoney(s.pnl, 'USD', 0)}</span> <span className="text-xs text-muted">· {fmtNum(s.winRate, 0)} %</span></span></li>)}
           </ul>

@@ -11,7 +11,7 @@ import { computeCycle } from '../lib/cycle';
 import type { Candle } from '../lib/indicators';
 import type { RunnerConfig } from './config';
 import { type RunnerState, dropQuiet, holdQuiet, inQuietWindow, markSent, pruneSent, quietMessage, recordStatus, shouldSend } from './state';
-import { alertKey, alertMessage, consumeAlerts, hitAlerts, hitRungs, rungKey, rungMessage, watchOf, zoneMessage, type MessageCurrency } from './evaluate';
+import { alertKey, alertMessage, consumeAlerts, hitAlerts, hitRungs, priceLabel, rungKey, rungMessage, watchOf, zoneMessage, type MessageCurrency } from './evaluate';
 import { buildBrief, slotsOfDay } from './brief';
 import type { CoinPrice } from './market';
 import { isHotNews, newsKey, type NewsItem, type RatedNews, type WatchedCoin } from './news';
@@ -21,6 +21,8 @@ import type { SmartWallet } from '../types';
 import type { AutopilotRun } from './autopilot';
 import { advanceSignals, signalMessage } from './signals';
 import { addMoves, judgeMoves, movesDue, movesFromEvents } from '../lib/smartScore';
+import { tradeHits } from '../lib/lab/tradeCheck';
+import type { TradeEntry } from '../types';
 import type { SmartMove } from '../types';
 import { reliabilityOf, reliabilityPhrase } from '../lib/lab/reliability';
 
@@ -64,6 +66,8 @@ export interface CycleDeps {
   /** Autopilotes et ordres papier (facultatif) : faisceau mis à jour, messages et lignes du brief. */
   autopilot?: (bundle: SyncBundle, nowMs: number) => Promise<AutopilotRun>;
   /** Signaux suivis du jour par crypto (positions et watchlist ; le serveur ajoute les 20 premières). */
+  /** Bougies 1 heure récentes d'un trade ouvert du journal (stop et objectif surveillés). */
+  tradeBars?: (coinId: string, symbol: string, fromMs: number, toMs: number) => Promise<Candle[]>;
   /** Prix des tokens (DexScreener) par adresse en minuscules : notation des wallets suivis. */
   tokenPrices?: (chain: string, mints: string[]) => Promise<Map<string, number>>;
   signals?: (coins: { coinId: string; symbol: string }[]) => Promise<Record<string, { symbol: string; keys: string[] }>>;
@@ -272,6 +276,23 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
     }
   }
   queue.push(...smartAlerts);
+
+  // 1 huit. Trades ouverts du journal : stop ou objectif touché sur les 3 dernières bougies 1 heure → un message, une fois.
+  if (deps.tradeBars) {
+    const open = (Array.isArray(bundle.data.trades) ? bundle.data.trades as TradeEntry[] : []).filter((t) => t.status === 'open' && (t.stopLoss != null || t.takeProfit != null));
+    if (open.length) {
+      const bars = new Map<string, Candle[]>();
+      for (const t of open.slice(0, 20)) {
+        const b = await deps.tradeBars(t.coinId, t.symbol, nowMs - 3 * 3600_000, nowMs).catch(() => [] as Candle[]);
+        bars.set(t.id, b);
+      }
+      for (const h of tradeHits(open, (t) => bars.get(t.id) ?? [])) {
+        if (!shouldSend(state, h.key)) continue;
+        const what = h.kind === 'stop' ? 'stop touché' : 'objectif atteint';
+        queue.push({ key: h.key, text: `Trade ${h.trade.symbol.toUpperCase()} : ${what} (${priceLabel(h.level, cur)}).\nOuvre Boussole pour clôturer le trade dans ton journal.` });
+      }
+    }
+  }
 
   // 1 sept. Wallets suivis notés : chaque mouvement au prix connu entre dans smartMoves (300 au plus), puis
   //         reçoit le prix du token 7 et 30 jours après. Écrit dans l'écriture unique du faisceau.

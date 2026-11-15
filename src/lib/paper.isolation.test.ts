@@ -7,7 +7,7 @@ import { join, relative, sep } from 'node:path';
 const ROOT = join(__dirname, '..');
 const ALLOWED = new Set([
   'hooks/useAutopilot.ts', 'hooks/usePaperSettle.ts', 'lib/backup.ts', 'lib/sync/merge.ts', 'pages/Paper.tsx',
-  'pages/labo/Autopilots.tsx', 'pages/labo/OrderTicket.tsx', 'pages/labo/Portfolios.tsx',
+  'pages/labo/Autopilots.tsx', 'pages/labo/OrderTicket.tsx', 'pages/labo/Portfolios.tsx', 'pages/labo/PaperTestButton.tsx',
   'runner/autopilot.ts', 'runner/brief.ts', 'runner/cycle.ts', 'runner/evaluate.ts', 'store/persistence.ts', 'store/useStore.ts',
 ]);
 function files(dir: string): string[] {

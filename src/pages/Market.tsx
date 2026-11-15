@@ -7,12 +7,22 @@ import { isStable, isWrappedOrStaked } from '../lib/portfolio';
 import { fmtCompact, fmtPrice } from '../lib/format';
 import { Link, setQuery, useHashPath } from '../router';
 import {
-  Badge, Card, CoinIcon, Delta, ErrorNote, Input, PageHeader, Segmented, SignalBadge, Sparkline, Spinner, Table, Td, Toggle,
+  Badge, Banner, Card, CoinIcon, Delta, ErrorNote, Input, PageHeader, Segmented, SignalBadge, Sparkline, Spinner, Table, Td, Toggle,
 } from '../components/ui';
 import { CdcBadge } from '../components/CdcBadge';
 import { useCryptoCom } from '../hooks/useCryptoCom';
 import type { Analysis, Setup } from '../lib/signals';
-import { isUnreliable } from '../lib/lab/reliability';
+import { isUnreliable, reliabilityOf } from '../lib/lab/reliability';
+import { setupExpectancy } from '../lib/lab/tradeCheck';
+import { COSTS } from '../lib/lab/types';
+
+const breakoutR = setupExpectancy('setup:breakout', COSTS.exchange).expectancyR;
+
+const VERDICT_RANK: Record<string, number> = { 'validé': 3, prometteur: 2 };
+/** Fiabilité du meilleur setup détecté : verdict d'abord, puis taux de réussite mesuré. */
+function setupScore(setups: Setup[]): number {
+  return Math.max(-1, ...setups.map((s) => { const r = reliabilityOf(`setup:${s.key}`); return r ? (VERDICT_RANK[r.verdict] ?? 0) * 1000 + r.hitPct : 0; }));
+}
 
 type Universe = 'top' | 'watch' | 'mine' | 'setups';
 type Horizon = 'investor' | 'trader';
@@ -23,6 +33,7 @@ export default function Market() {
   const horizon = (query.get('h') as Horizon) || 'investor';
   const [q, setQ] = useState('');
   const [onlyCdc, setOnlyCdc] = useState(false);
+  const [showWeak, setShowWeak] = useState(false);
   const cdc = useCryptoCom();
   const watchlist = useStore((s) => s.watchlist);
   const toggleWatch = useStore((s) => s.toggleWatch);
@@ -42,6 +53,12 @@ export default function Market() {
     return base.filter((m) => ids.has(m.id));
   }, [base, scanSize, watchlist, mine]);
   const scan = useScan(scanList, cycle.data?.temperature);
+  const regime = useMemo(() => {
+    const b = scan.data?.get('bitcoin');
+    const trend = b ? (b.price >= b.sma200 ? 'Bitcoin au-dessus de sa moyenne 200 jours' : 'Bitcoin sous sa moyenne 200 jours') : 'tendance de Bitcoin inconnue';
+    const z = cycle.data?.zone;
+    return `${trend}${cycle.data?.temperature != null ? ` · température ${Math.round(cycle.data.temperature)}/100${z ? ` (${z.label})` : ''}` : ''}`;
+  }, [scan.data, cycle.data]);
 
   const rows = useMemo(() => {
     let list = scanList;
@@ -52,13 +69,19 @@ export default function Market() {
     if (s) list = list.filter((m) => m.name.toLowerCase().includes(s) || m.symbol.toLowerCase().includes(s));
     if (onlyCdc && cdc.ready) list = list.filter((m) => cdc.status(m.id) !== 'unknown');
     const withA = list.map((m) => ({ m, a: scan.data?.get(m.id) ?? null }));
-    const filtered = universe === 'setups' ? withA.filter((r) => r.a && r.a.setups.length > 0) : withA;
-    return filtered.sort((x, y) => {
+    if (universe === 'setups') {
+      // Setups triés par fiabilité mesurée ; ceux que l'historique ne valide pas sont masqués par défaut.
+      const keep = (s: Setup) => showWeak || reliabilityOf(`setup:${s.key}`)?.verdict === 'validé';
+      return withA
+        .filter((r) => r.a && r.a.setups.some(keep))
+        .sort((x, y) => setupScore(y.a!.setups.filter(keep)) - setupScore(x.a!.setups.filter(keep)) || (y.a!.trader.score - x.a!.trader.score));
+    }
+    return withA.sort((x, y) => {
       const sx = x.a ? (horizon === 'investor' ? x.a.investor.score : x.a.trader.score) : -999;
       const sy = y.a ? (horizon === 'investor' ? y.a.investor.score : y.a.trader.score) : -999;
       return sy - sx;
     });
-  }, [scanList, base, universe, watchlist, mine, q, scan.data, horizon, scanSize, onlyCdc, cdc]);
+  }, [scanList, base, universe, watchlist, mine, q, scan.data, horizon, scanSize, onlyCdc, cdc, showWeak]);
 
   const sig = (a: Analysis | null, h: Horizon) => {
     if (!a) return <span className="text-xs text-muted">—</span>;
@@ -103,6 +126,12 @@ export default function Market() {
         </div>
       </div>
 
+      {universe === 'setups' && (
+        <Banner tone="info" title={`Régime du moment : ${regime}`}>
+          Setups triés par fiabilité mesurée (validés d’abord, puis par taux de réussite sur l’historique). La cassure avec volume est le seul setup validé : son plan (stop à la clôture, objectif 3 R) a fait {breakoutR != null ? `${breakoutR >= 0 ? '+' : '−'}${Math.abs(breakoutR).toFixed(2).replace('.', ',')} R` : '—'} par trade sur l’historique, frais d’une plateforme d’échange compris.
+          <span className="mt-2 block"><Toggle checked={showWeak} onChange={setShowWeak} label="Montrer aussi les setups non validés" /></span>
+        </Banner>
+      )}
       {markets.error && <ErrorNote error={markets.error} onRetry={() => markets.refetch()} />}
       {(markets.isLoading || scan.isLoading) && <Spinner label="Récupération des bougies et calcul des indicateurs…" />}
 

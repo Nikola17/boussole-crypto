@@ -408,6 +408,17 @@ describe('cycle du runner — smart money (wallets suivis)', () => {
     expect(state.smCursor['w1']).toBe(at); // lu jusqu'à ce mouvement : pas de relecture au prochain cycle
   });
 
+  it('stop d’un trade ouvert du journal touché : un message, une seule fois', async () => {
+    const trade = { id: 't1', coinId: 'solana', symbol: 'sol', side: 'long', status: 'open', entryDate: '2026-11-10', entryPrice: 100, quantity: 2, stopLoss: 90, takeProfit: 130, leverage: 1, fees: 0 };
+    const { deps, sent } = makeDeps({ trades: [trade] }, { prices: FLAT });
+    deps.tradeBars = async () => [{ time: 1, open: 95, high: 96, low: 89, close: 91, volume: 1 }];
+    const r1 = await runCycle(CFG, emptyState(), dry(), deps, H(6, 30));
+    expect(sent.filter((t) => t.startsWith('Trade SOL'))).toHaveLength(1);
+    expect(sent.find((t) => t.startsWith('Trade SOL'))).toContain('stop');
+    await runCycle(CFG, r1.state, dry(), deps, H(6, 35));
+    expect(sent.filter((t) => t.startsWith('Trade SOL'))).toHaveLength(1);
+  });
+
   it('chaque mouvement au prix connu entre dans smartMoves, puis reçoit son prix à 7 jours', async () => {
     const out: SmartEvent = { ...sell, mint: 'MintZ', symbol: 'ZZZ', txHash: 'h9' };
     const { deps, pushes } = makeDeps({ smartWallets: [W], watchedTokens: [watched] }, { smartEvents: [out] });

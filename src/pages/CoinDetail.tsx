@@ -19,6 +19,7 @@ import {
 } from '../components/ui';
 import { PriceChart, type ChartLevel } from '../components/PriceChart';
 import { AlertModal, DcaPlanModal, TradeModal, TransactionModal } from '../components/forms';
+import { PaperTestButton } from './labo/PaperTestButton';
 import { CdcBadge } from '../components/CdcBadge';
 import { CriteriaCard } from '../components/CriteriaCard';
 import { useCryptoCom } from '../hooks/useCryptoCom';
@@ -236,6 +237,7 @@ export default function CoinDetail({ id }: { id: string }) {
                   <div><div className="text-xs text-muted">Stop suggéré</div><div className="tnum font-medium text-down">{fmtPrice(analysis.plan.stop * rate, currency)} <span className="text-xs text-muted">(−{fmtNum(analysis.plan.riskPct, 1)} %)</span></div></div>
                   <div><div className="text-xs text-muted">Objectif 1 (1,5 R)</div><div className="tnum font-medium text-up">{fmtPrice(analysis.plan.tp1 * rate, currency)}</div></div>
                   <div><div className="text-xs text-muted">Objectif 2 (3 R)</div><div className="tnum font-medium text-up">{fmtPrice(analysis.plan.tp2 * rate, currency)}</div></div>
+                  <div className="col-span-2"><PaperTestButton coin={coinRef} plan={analysis.plan} usd={Math.min(riskSized != null && Number.isFinite(riskSized) ? riskSized / (rate || 1) : 100, 1000)} marketUsd={priceUsd} /></div>
                 </>
               )}
               {analysis.plan && analysis.trader.tone !== 'up' && <div className="col-span-2 rounded-lg bg-surface-2 p-3 text-xs text-ink-2">Pas de plan d’entrée : le signal trader n’est pas haussier ({analysis.trader.label.toLowerCase()}). Un stop et des objectifs affichés maintenant se liraient comme « achète ».</div>}

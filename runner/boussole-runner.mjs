@@ -1485,13 +1485,18 @@ function consumeAlerts(bundle, alertIds, nowIso) {
 }
 
 // src/lib/dca.ts
-function temperatureMultiplier(t) {
+var TEMP_TABLES = {
+  actuelle: [2, 1.5, 1, 0.5, 0.25],
+  plate: [1.5, 1.25, 1, 0.75, 0.5],
+  pentue: [3, 2, 1, 0.33, 0]
+};
+function temperatureMultiplier(t, table = TEMP_TABLES.actuelle) {
   if (!Number.isFinite(t)) return 1;
-  if (t < 20) return 2;
-  if (t < 40) return 1.5;
-  if (t < 60) return 1;
-  if (t < 80) return 0.5;
-  return 0.25;
+  if (t < 20) return table[0];
+  if (t < 40) return table[1];
+  if (t < 60) return table[2];
+  if (t < 80) return table[3];
+  return table[4];
 }
 function parseDay(s) {
   const [y, m, d] = s.split("-").map(Number);
@@ -2771,7 +2776,7 @@ function traderV2(v1, breakoutVolume) {
   if (breakoutVolume == null) return { ...v1, label: "Neutre", tone: "neutral", strength: 0, score: 0, why: "Pas de cassure valid\xE9e : aucun signal trader fiable." };
   const strong = breakoutVolume >= 2;
   const score = Math.round(Math.min(100, 40 + (breakoutVolume - 1.5) * 40));
-  return { ...v1, label: strong ? "Achat fort" : "Achat", tone: "up", strength: strong ? 2 : 1, score, why: `Cassure des plus hauts 20 jours avec un volume \xD7${breakoutVolume.toFixed(1).replace(".", ",")}${strong ? " (\xD72 ou plus)" : ""} : valid\xE9e sur la p\xE9riode de contr\xF4le. Aucun plan de trade n\u2019a d\u2019esp\xE9rance positive mesur\xE9e apr\xE8s frais.` };
+  return { ...v1, label: strong ? "Achat fort" : "Achat", tone: "up", strength: strong ? 2 : 1, score, why: `Cassure des plus hauts 20 jours avec un volume \xD7${breakoutVolume.toFixed(1).replace(".", ",")}${strong ? " (\xD72 ou plus)" : ""} : valid\xE9e sur la p\xE9riode de contr\xF4le. Plan mesur\xE9 : stop jug\xE9 \xE0 la cl\xF4ture, objectif 3 R (esp\xE9rance positive avec les frais d\u2019une plateforme, nulle sur 2025-2026).` };
 }
 function analyze(candles, ctx = {}, opts = {}) {
   if (candles.length < 30) return null;
@@ -3194,6 +3199,145 @@ function movesDue(moves, nowMs) {
   });
 }
 
+// src/lib/lab/fills.ts
+var q8 = (x) => Math.round(x * 1e8) / 1e8;
+function applyIntent(book, intent, marketUsd, costs, opts) {
+  const none = (skip) => ({ book, fill: null, skip });
+  if (!(marketUsd > 0) || !Number.isFinite(marketUsd)) return none("prix inconnu");
+  if (intent.skipAbove != null && marketUsd > intent.skipAbove) return none("le prix a trop boug\xE9 depuis la cl\xF4ture");
+  if (intent.skipBelow != null && marketUsd < intent.skipBelow) return none("le prix a trop boug\xE9 depuis la cl\xF4ture");
+  const s = costs.spreadPct / 100;
+  const f = costs.feePct / 100;
+  const base = { coinId: intent.coinId, symbol: intent.symbol, name: intent.name, marketUsd, at: opts.at, reason: intent.reason, ...intent.tag ? { tag: intent.tag } : {} };
+  if (intent.side === "buy") {
+    const price = marketUsd * (1 + s);
+    let amount;
+    const sz = intent.sizing ?? { usd: 0 };
+    if ("usd" in sz) amount = sz.usd;
+    else {
+      if (intent.stop == null || price <= intent.stop) return none("stop au-dessus du prix d\u2019achat");
+      amount = Math.min(sz.riskUsd / (price - intent.stop) * price / (1 - f), sz.maxUsd);
+    }
+    amount = Math.min(amount, book.cashUsd);
+    if (!(amount >= opts.minOrderUsd)) return none("montant trop petit");
+    const fee = amount * f;
+    const quantity = q8((amount - fee) / price);
+    if (!(quantity > 0)) return none("montant trop petit");
+    const prev = book.positions[intent.coinId];
+    const target = intent.stop != null && intent.targetR != null ? price + intent.targetR * (price - intent.stop) : void 0;
+    const pos2 = {
+      coinId: intent.coinId,
+      symbol: intent.symbol,
+      name: intent.name,
+      quantity: q8((prev?.quantity ?? 0) + quantity),
+      costUsd: (prev?.costUsd ?? 0) + amount,
+      openedOn: prev?.openedOn ?? opts.day,
+      ...intent.stop != null ? { stop: intent.stop } : prev?.stop != null ? { stop: prev.stop } : {},
+      ...target != null ? { target } : prev?.target != null ? { target: prev.target } : {},
+      ...intent.stopOnClose ? { stopOnClose: true } : prev?.stopOnClose ? { stopOnClose: true } : {}
+    };
+    const fill = { ...base, side: "buy", kind: "market", quantity, priceUsd: price, feeUsd: fee, ...intent.stop != null ? { stop: intent.stop } : {}, ...target != null ? { target } : {}, ...intent.stopOnClose ? { stopOnClose: true } : {} };
+    return { book: { cashUsd: book.cashUsd - amount, positions: { ...book.positions, [intent.coinId]: pos2 } }, fill, skip: null };
+  }
+  const pos = book.positions[intent.coinId];
+  if (!pos || !(pos.quantity > 0)) return none("aucune position \xE0 vendre");
+  const fraction = Math.min(1, Math.max(0, intent.fraction ?? 1));
+  if (!(fraction > 0)) return none("aucune quantit\xE9 \xE0 vendre");
+  return sellOut(book, pos, fraction, marketUsd, costs, { ...base, kind: "market" });
+}
+function sellOut(book, pos, fraction, marketUsd, costs, base) {
+  const quantity = fraction >= 1 ? pos.quantity : q8(pos.quantity * fraction);
+  const price = marketUsd * (1 - costs.spreadPct / 100);
+  const proceeds = quantity * price;
+  const fee = proceeds * (costs.feePct / 100);
+  const positions = { ...book.positions };
+  const left = q8(pos.quantity - quantity);
+  if (left > 0) positions[pos.coinId] = { ...pos, quantity: left, costUsd: pos.costUsd * (left / pos.quantity) };
+  else delete positions[pos.coinId];
+  const fill = { ...base, side: "sell", quantity, priceUsd: price, feeUsd: fee };
+  return { book: { cashUsd: book.cashUsd + proceeds - fee, positions }, fill, skip: null };
+}
+function pendingHit(kind, level, bar, opts = {}) {
+  const gap = opts.gapRule !== false;
+  if (kind === "stop") return gap && bar.open <= level ? bar.open : bar.low <= level ? level : null;
+  if (kind === "target") return gap && bar.open >= level ? bar.open : bar.high >= level ? level : null;
+  return gap && bar.open <= level ? bar.open : bar.low <= level ? level : null;
+}
+function settleBar(book, coinId, bar, costs, at, opts = {}) {
+  const pos = book.positions[coinId];
+  if (!pos) return { book, fill: null };
+  const base = { coinId, symbol: pos.symbol, name: pos.name, at };
+  const stopAt = pos.stop != null && !pos.stopOnClose ? pendingHit("stop", pos.stop, bar, opts) : null;
+  if (stopAt != null) {
+    const r = sellOut(book, pos, 1, stopAt, costs, { ...base, marketUsd: stopAt, kind: "stop", reason: "stop touch\xE9", tag: "stop" });
+    return { book: r.book, fill: r.fill };
+  }
+  const targetAt = pos.target != null ? pendingHit("target", pos.target, bar, opts) : null;
+  if (targetAt != null) {
+    const r = sellOut(book, pos, 1, targetAt, costs, { ...base, marketUsd: targetAt, kind: "target", reason: "objectif atteint", tag: "target" });
+    return { book: r.book, fill: r.fill };
+  }
+  return { book, fill: null };
+}
+function delist(book, coinId, lastClose, costs, at) {
+  const pos = book.positions[coinId];
+  if (!pos) return { book, fill: null };
+  const r = sellOut(book, pos, 1, lastClose, costs, { coinId, symbol: pos.symbol, name: pos.name, at, marketUsd: lastClose, kind: "delist", reason: "paire retir\xE9e de la cotation : sold\xE9e \xE0 la derni\xE8re cl\xF4ture", tag: "delist" });
+  return { book: r.book, fill: r.fill };
+}
+
+// src/lib/lab/types.ts
+var COSTS = {
+  exchange: { feePct: 0.1, spreadPct: 0.05 },
+  app: { feePct: 0, spreadPct: 1.5 }
+};
+
+// src/lib/lab/paperBook.ts
+var COST_PRESETS = { exchange: { ...COSTS.exchange }, app: { ...COSTS.app } };
+var ORDER_LIFETIME_DAYS = 90;
+var timeOf = (t) => t.time ?? t.date;
+function bookOf(portfolio, trades) {
+  let cash = portfolio.startingUsd;
+  const positions = {};
+  for (const t of [...trades].sort((a, b) => timeOf(a).localeCompare(timeOf(b)))) {
+    const fee = t.feeUsd ?? 0;
+    const p = positions[t.coinId];
+    if (t.type === "buy") {
+      cash -= t.quantity * t.priceUsd + fee;
+      positions[t.coinId] = { coinId: t.coinId, symbol: t.symbol, name: t.name, quantity: (p?.quantity ?? 0) + t.quantity, costUsd: (p?.costUsd ?? 0) + t.quantity * t.priceUsd + fee, openedOn: p?.openedOn ?? t.date };
+    } else {
+      cash += t.quantity * t.priceUsd - fee;
+      if (!p) continue;
+      const left = Math.round((p.quantity - t.quantity) * 1e8) / 1e8;
+      if (left > 0) positions[t.coinId] = { ...p, quantity: left, costUsd: p.costUsd * (left / p.quantity) };
+      else delete positions[t.coinId];
+    }
+  }
+  return { cashUsd: cash, positions };
+}
+
+// src/lib/lab/tradeCheck.ts
+function tradeHits(trades, barsOf) {
+  const out = [];
+  for (const t of trades) {
+    if (t.status !== "open" || t.stopLoss == null && t.takeProfit == null) continue;
+    const long = t.side === "long";
+    for (const b of barsOf(t)) {
+      const stop = t.stopLoss != null && (long ? b.low <= t.stopLoss : b.high >= t.stopLoss);
+      const target = t.takeProfit != null && (long ? b.high >= t.takeProfit : b.low <= t.takeProfit);
+      if (stop) {
+        out.push({ trade: t, kind: "stop", level: t.stopLoss, key: `trade:${t.id}:stop` });
+        break;
+      }
+      if (target) {
+        out.push({ trade: t, kind: "target", level: t.takeProfit, key: `trade:${t.id}:target` });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 // src/runner/cycle.ts
 var DAY_MS2 = 24 * 36e5;
 var ZONE_REPEAT_MS = 7 * DAY_MS2;
@@ -3355,6 +3499,22 @@ ${ev.advice}` });
     }
   }
   queue.push(...smartAlerts);
+  if (deps.tradeBars) {
+    const open = (Array.isArray(bundle.data.trades) ? bundle.data.trades : []).filter((t) => t.status === "open" && (t.stopLoss != null || t.takeProfit != null));
+    if (open.length) {
+      const bars = /* @__PURE__ */ new Map();
+      for (const t of open.slice(0, 20)) {
+        const b = await deps.tradeBars(t.coinId, t.symbol, nowMs - 3 * 36e5, nowMs).catch(() => []);
+        bars.set(t.id, b);
+      }
+      for (const h of tradeHits(open, (t) => bars.get(t.id) ?? [])) {
+        if (!shouldSend(state, h.key)) continue;
+        const what = h.kind === "stop" ? "stop touch\xE9" : "objectif atteint";
+        queue.push({ key: h.key, text: `Trade ${h.trade.symbol.toUpperCase()} : ${what} (${priceLabel(h.level, cur)}).
+Ouvre Boussole pour cl\xF4turer le trade dans ton journal.` });
+      }
+    }
+  }
   let smartMovesChanged = false;
   if (cfg.smartMoneyEnabled && deps.tokenPrices) {
     const before = Array.isArray(working.data.smartMoves) ? working.data.smartMoves : [];
@@ -4253,93 +4413,6 @@ function isoWeek(day) {
   return `${year}-W${String(week).padStart(2, "0")}`;
 }
 
-// src/lib/lab/fills.ts
-var q8 = (x) => Math.round(x * 1e8) / 1e8;
-function applyIntent(book, intent, marketUsd, costs, opts) {
-  const none = (skip) => ({ book, fill: null, skip });
-  if (!(marketUsd > 0) || !Number.isFinite(marketUsd)) return none("prix inconnu");
-  if (intent.skipAbove != null && marketUsd > intent.skipAbove) return none("le prix a trop boug\xE9 depuis la cl\xF4ture");
-  if (intent.skipBelow != null && marketUsd < intent.skipBelow) return none("le prix a trop boug\xE9 depuis la cl\xF4ture");
-  const s = costs.spreadPct / 100;
-  const f = costs.feePct / 100;
-  const base = { coinId: intent.coinId, symbol: intent.symbol, name: intent.name, marketUsd, at: opts.at, reason: intent.reason, ...intent.tag ? { tag: intent.tag } : {} };
-  if (intent.side === "buy") {
-    const price = marketUsd * (1 + s);
-    let amount;
-    const sz = intent.sizing ?? { usd: 0 };
-    if ("usd" in sz) amount = sz.usd;
-    else {
-      if (intent.stop == null || price <= intent.stop) return none("stop au-dessus du prix d\u2019achat");
-      amount = Math.min(sz.riskUsd / (price - intent.stop) * price / (1 - f), sz.maxUsd);
-    }
-    amount = Math.min(amount, book.cashUsd);
-    if (!(amount >= opts.minOrderUsd)) return none("montant trop petit");
-    const fee = amount * f;
-    const quantity = q8((amount - fee) / price);
-    if (!(quantity > 0)) return none("montant trop petit");
-    const prev = book.positions[intent.coinId];
-    const target = intent.stop != null && intent.targetR != null ? price + intent.targetR * (price - intent.stop) : void 0;
-    const pos2 = {
-      coinId: intent.coinId,
-      symbol: intent.symbol,
-      name: intent.name,
-      quantity: q8((prev?.quantity ?? 0) + quantity),
-      costUsd: (prev?.costUsd ?? 0) + amount,
-      openedOn: prev?.openedOn ?? opts.day,
-      ...intent.stop != null ? { stop: intent.stop } : prev?.stop != null ? { stop: prev.stop } : {},
-      ...target != null ? { target } : prev?.target != null ? { target: prev.target } : {},
-      ...intent.stopOnClose ? { stopOnClose: true } : prev?.stopOnClose ? { stopOnClose: true } : {}
-    };
-    const fill = { ...base, side: "buy", kind: "market", quantity, priceUsd: price, feeUsd: fee, ...intent.stop != null ? { stop: intent.stop } : {}, ...target != null ? { target } : {}, ...intent.stopOnClose ? { stopOnClose: true } : {} };
-    return { book: { cashUsd: book.cashUsd - amount, positions: { ...book.positions, [intent.coinId]: pos2 } }, fill, skip: null };
-  }
-  const pos = book.positions[intent.coinId];
-  if (!pos || !(pos.quantity > 0)) return none("aucune position \xE0 vendre");
-  const fraction = Math.min(1, Math.max(0, intent.fraction ?? 1));
-  if (!(fraction > 0)) return none("aucune quantit\xE9 \xE0 vendre");
-  return sellOut(book, pos, fraction, marketUsd, costs, { ...base, kind: "market" });
-}
-function sellOut(book, pos, fraction, marketUsd, costs, base) {
-  const quantity = fraction >= 1 ? pos.quantity : q8(pos.quantity * fraction);
-  const price = marketUsd * (1 - costs.spreadPct / 100);
-  const proceeds = quantity * price;
-  const fee = proceeds * (costs.feePct / 100);
-  const positions = { ...book.positions };
-  const left = q8(pos.quantity - quantity);
-  if (left > 0) positions[pos.coinId] = { ...pos, quantity: left, costUsd: pos.costUsd * (left / pos.quantity) };
-  else delete positions[pos.coinId];
-  const fill = { ...base, side: "sell", quantity, priceUsd: price, feeUsd: fee };
-  return { book: { cashUsd: book.cashUsd + proceeds - fee, positions }, fill, skip: null };
-}
-function pendingHit(kind, level, bar, opts = {}) {
-  const gap = opts.gapRule !== false;
-  if (kind === "stop") return gap && bar.open <= level ? bar.open : bar.low <= level ? level : null;
-  if (kind === "target") return gap && bar.open >= level ? bar.open : bar.high >= level ? level : null;
-  return gap && bar.open <= level ? bar.open : bar.low <= level ? level : null;
-}
-function settleBar(book, coinId, bar, costs, at, opts = {}) {
-  const pos = book.positions[coinId];
-  if (!pos) return { book, fill: null };
-  const base = { coinId, symbol: pos.symbol, name: pos.name, at };
-  const stopAt = pos.stop != null && !pos.stopOnClose ? pendingHit("stop", pos.stop, bar, opts) : null;
-  if (stopAt != null) {
-    const r = sellOut(book, pos, 1, stopAt, costs, { ...base, marketUsd: stopAt, kind: "stop", reason: "stop touch\xE9", tag: "stop" });
-    return { book: r.book, fill: r.fill };
-  }
-  const targetAt = pos.target != null ? pendingHit("target", pos.target, bar, opts) : null;
-  if (targetAt != null) {
-    const r = sellOut(book, pos, 1, targetAt, costs, { ...base, marketUsd: targetAt, kind: "target", reason: "objectif atteint", tag: "target" });
-    return { book: r.book, fill: r.fill };
-  }
-  return { book, fill: null };
-}
-function delist(book, coinId, lastClose, costs, at) {
-  const pos = book.positions[coinId];
-  if (!pos) return { book, fill: null };
-  const r = sellOut(book, pos, 1, lastClose, costs, { coinId, symbol: pos.symbol, name: pos.name, at, marketUsd: lastClose, kind: "delist", reason: "paire retir\xE9e de la cotation : sold\xE9e \xE0 la derni\xE8re cl\xF4ture", tag: "delist" });
-  return { book: r.book, fill: r.fill };
-}
-
 // src/lib/lab/autoState.ts
 function autoState(portfolio, logs, closeOf) {
   let cash = portfolio.startingUsd;
@@ -4487,6 +4560,14 @@ var pct2 = (x) => `${String(Math.round(x * 10) / 10).replace(".", ",")} %`;
 function topBaseUniverse(rows, top = AUTO_BASE_TOP) {
   return rows.filter((r) => !isStable(r.symbol, r.id) && !isWrappedOrStaked(r.symbol, r.name, r.id) && !isGold(r.symbol)).filter((r, i, all) => all.findIndex((x) => x.id === r.id) === i).sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity)).slice(0, top);
 }
+var DEFAULT_ANCHOR_PCT = 70;
+var BASE_MODE_LABEL = {
+  top3: "Trois meilleurs scores",
+  cap: "Pond\xE9r\xE9e par la capitalisation",
+  anchor: "Ancre Bitcoin et Ethereum",
+  equal: "Parts \xE9gales sur le top 20",
+  btc: "Bitcoin seul"
+};
 function split(picks, maxLines, amount, minOrder, kind, reasonOf) {
   const min = Math.max(minOrder, 0.01);
   const n2 = Math.min(Math.max(0, Math.floor(maxLines)), Math.floor((amount + 1e-9) / min), picks.length);
@@ -4501,6 +4582,17 @@ function split(picks, maxLines, amount, minOrder, kind, reasonOf) {
     kind,
     reason: reasonOf(c)
   }));
+}
+function splitWeighted(picks, maxLines, amount, minOrder, kind, reasonOf) {
+  const min = Math.max(minOrder, 0.01);
+  let list3 = picks.filter((c) => (c.weight ?? 0) > 0).sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)).slice(0, Math.max(0, Math.floor(maxLines)));
+  const total = () => list3.reduce((s, c) => s + (c.weight ?? 0), 0);
+  while (list3.length && amount * (list3[list3.length - 1].weight ?? 0) / total() < min - 1e-9) list3 = list3.slice(0, -1);
+  if (!list3.length) return [];
+  const W = total();
+  const shares = list3.map((c) => Math.floor(amount * (c.weight ?? 0) / W * 100) / 100);
+  shares[0] = round2(amount - shares.slice(1).reduce((s, x) => s + x, 0));
+  return list3.map((c, i) => ({ coinId: c.coin.coinId, symbol: c.coin.symbol, name: c.coin.name, image: c.coin.image, usd: shares[i], kind, reason: reasonOf(c) }));
 }
 var signed = (s) => `${s > 0 ? "+" : s < 0 ? "\u2212" : ""}${Math.abs(s)}`;
 function planAutoBasket(s, ctx) {
@@ -4559,17 +4651,41 @@ function planAutoBasket(s, ctx) {
     } else notes.push(`March\xE9 qui a peur : ${usdc(extra)} puis\xE9s dans ta r\xE9serve.`);
   }
   let baseOrders = [];
+  const mode = s.baseMode ?? "top3";
   if (base > 5e-3) {
-    const basePool = keepOpen(screen(ctx.base, "base"), ctx.canOpenBase, "Base");
-    remember(basePool, "core");
-    baseOrders = split(basePool, Math.min(AUTO_MAX_LINES, s.maxBaseLines), base, s.minOrderUsd, "core", (c) => {
+    const reasonOf = (c) => {
       const sig = c.score != null ? ` \xB7 score investisseur ${signed(c.score)}` : " \xB7 score indisponible";
       return `${c.rank != null ? `Rang ${c.rank} (20 premi\xE8res hors stablecoins)` : "20 premi\xE8res hors stablecoins"}${sig}${c.heldUsd > 0 ? " \xB7 tu en d\xE9tiens d\xE9j\xE0" : ""}`;
-    });
+    };
+    const pick = (id) => ctx.base.find((c) => c.coin.coinId === id && c.cdc !== "unknown");
+    const one = (c, usd, reason) => ({ coinId: c.coin.coinId, symbol: c.coin.symbol, name: c.coin.name, image: c.coin.image, usd: round2(usd), kind: "core", reason });
+    const basePool = keepOpen(screen(ctx.base, "base"), ctx.canOpenBase, "Base");
+    remember(basePool, "core");
+    if (mode === "btc") {
+      const btc = pick("bitcoin");
+      if (btc && base >= Math.max(s.minOrderUsd, 0.01)) baseOrders = [one(btc, base, "Bitcoin seul (r\xE8gle de la base)")];
+    } else if (mode === "anchor") {
+      const share = Math.max(0, Math.min(100, s.anchorPct ?? DEFAULT_ANCHOR_PCT)) / 100;
+      const btc = pick("bitcoin");
+      const eth = pick("ethereum");
+      let anchored = base * share;
+      const rest = split(basePool.filter((c) => c.coin.coinId !== "bitcoin" && c.coin.coinId !== "ethereum"), Math.min(AUTO_MAX_LINES, s.maxBaseLines), round2(base - anchored), s.minOrderUsd, "core", reasonOf);
+      if (!rest.length) anchored = base;
+      const why = `Ancre Bitcoin et Ethereum (${Math.round(share * 100)} % de la base)`;
+      const btcUsd = eth ? round2(anchored * 0.75) : round2(anchored);
+      const anchor = [btc && btcUsd >= s.minOrderUsd ? one(btc, btcUsd, why) : null, eth && anchored - btcUsd >= s.minOrderUsd ? one(eth, anchored - btcUsd, why) : null].filter((x) => !!x);
+      baseOrders = [...anchor, ...rest];
+    } else if (mode === "cap") {
+      baseOrders = splitWeighted(basePool, AUTO_BASE_TOP, base, s.minOrderUsd, "core", reasonOf);
+    } else if (mode === "equal") {
+      baseOrders = split(basePool, AUTO_BASE_TOP, base, s.minOrderUsd, "core", reasonOf);
+    } else {
+      baseOrders = split(basePool, Math.min(AUTO_MAX_LINES, s.maxBaseLines), base, s.minOrderUsd, "core", reasonOf);
+    }
     if (!baseOrders.length) notes.push(base < Math.max(s.minOrderUsd, 0.01) ? `Part base (${usdc(base)}) sous le minimum de ${usdc(s.minOrderUsd)} : mise en r\xE9serve.` : "Aucune crypto du top 20 ne passe les r\xE8gles aujourd\u2019hui : le montant part en r\xE9serve.");
   }
   const orders = [...baseOrders, ...discOrders];
-  if (orders.length > 1) notes.push("Le montant de chaque c\xF4t\xE9 est partag\xE9 \xE0 parts \xE9gales entre les cryptos retenues.");
+  if (orders.length > 1) notes.push(mode === "top3" || mode === "equal" ? "Le montant de chaque c\xF4t\xE9 est partag\xE9 \xE0 parts \xE9gales entre les cryptos retenues." : `Base : r\xE8gle \xAB ${BASE_MODE_LABEL[mode]} \xBB.`);
   const invest = round2(orders.reduce((sum, o) => sum + o.usd, 0));
   return { baseUsd: amount, investUsd: invest, reserveDeltaUsd: round2(amount - invest), multiplier: mult, discoveryShare: 1 - basePart, orders, notes, warnings, excluded, pool };
 }
@@ -4609,12 +4725,12 @@ function buildAutoBasketPlan(i) {
   });
   const b = i.basket;
   return planAutoBasket(
-    { amountUsd: b.amountUsd, basePct: b.basePct ?? 70, maxBaseLines: b.maxBaseLines ?? 3, maxDiscoveryLines: b.maxDiscoveryLines ?? 3, minOrderUsd: b.minOrderUsd, reserveUsd: b.reserveUsd },
+    { amountUsd: b.amountUsd, basePct: b.basePct ?? 70, maxBaseLines: b.maxBaseLines ?? 3, maxDiscoveryLines: b.maxDiscoveryLines ?? 3, minOrderUsd: b.minOrderUsd, reserveUsd: b.reserveUsd, baseMode: b.baseMode, anchorPct: b.anchorPct },
     {
       temperature: i.temperature,
       totalValueUsd: i.totalValueUsd,
       maxPerGemPct: i.rules.maxPerGemPct,
-      base: base.map((c) => cand({ coinId: c.id, symbol: c.symbol, name: c.name, image: c.image }, c.rank, i.scores[c.id] ?? null)),
+      base: base.map((c) => ({ ...cand({ coinId: c.id, symbol: c.symbol, name: c.name, image: c.image }, c.rank, i.scores[c.id] ?? null), weight: i.weights?.[c.id] ?? i.markets.find((m) => m.id === c.id)?.market_cap ?? 0 })),
       discovery: picks.map((p) => cand({ ...p.coin, image: imageOf(p.coin.coinId) }, null, p.score)),
       canOpenBase: i.linesOpen < i.rules.maxLines,
       canOpenDiscovery: i.discoveryLinesOpen < i.rules.maxDiscoveryLines
@@ -4644,7 +4760,7 @@ var investisseur = {
   version: 1,
   label: "Investisseur (temp\xE9rature)",
   describe: "Bitcoin et Ethereum, \xE9ch\xE9ance modul\xE9e par la temp\xE9rature du march\xE9 ; une tranche all\xE9g\xE9e en euphorie.",
-  defaults: { amountUsd: 25, daysOfWeek: [2, 5], btcPct: 75, trimPct: 7.5, trimMinDays: 30 },
+  defaults: { amountUsd: 25, daysOfWeek: [2, 5], btcPct: 75, trimPct: 7.5, trimMinDays: 30, multTable: "actuelle" },
   uses: ["cycle"],
   replayable: true,
   kind: "deposits",
@@ -4661,7 +4777,7 @@ var investisseur = {
       }
     }
     if (!ctx.scheduled(p.daysOfWeek)) return out;
-    const mult = t == null ? 1 : temperatureMultiplier(t);
+    const mult = t == null ? 1 : temperatureMultiplier(t, TEMP_TABLES[p.multTable] ?? TEMP_TABLES.actuelle);
     const budget = Math.min(p.amountUsd * mult, ctx.portfolio.cashUsd);
     const reason = t == null ? "Temp\xE9rature indisponible : \xE9ch\xE9ance \xD71" : `Temp\xE9rature ${Math.round(t)}/100 : \xE9ch\xE9ance \xD7${fr(mult)}`;
     const btc = Math.round(budget * p.btcPct) / 100;
@@ -4670,6 +4786,48 @@ var investisseur = {
     return out;
   }
 };
+
+// src/lib/lab/stats.ts
+function median(xs) {
+  return quantile(xs, 0.5);
+}
+function quantile(xs, q) {
+  if (!xs.length) return NaN;
+  const s = [...xs].sort((a, b) => a - b);
+  const pos = Math.min(1, Math.max(0, q)) * (s.length - 1);
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  return s[lo] + (s[hi] - s[lo]) * (pos - lo);
+}
+function hashSeed(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = a + 1831565813 >>> 0;
+    let t = a;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function bootstrapMeans(xs, draws, seed) {
+  if (!xs.length) return [];
+  const rnd = mulberry32(seed);
+  const out = [];
+  for (let d = 0; d < draws; d++) {
+    let sum = 0;
+    for (let i = 0; i < xs.length; i++) sum += xs[Math.floor(rnd() * xs.length)];
+    out.push(sum / xs.length);
+  }
+  return out.sort((a, b) => a - b);
+}
 
 // src/lib/profile.ts
 var ARCHETYPES = {
@@ -4731,7 +4889,7 @@ var dcaBoussole = {
   version: 1,
   label: "DCA Boussole",
   describe: "Le panier automatique de Boussole : jusqu\u2019\xE0 3 cryptos du top 20 et 3 d\xE9couvertes \xE0 chaque \xE9ch\xE9ance, montant modul\xE9 par la temp\xE9rature, r\xE9serve et r\xE8gles du panier.",
-  defaults: { amountUsd: 25, daysOfWeek: [2, 5], basePct: 70, maxBaseLines: 3, maxDiscoveryLines: 3, discoverySource: "both", minOrderUsd: 5 },
+  defaults: { amountUsd: 25, daysOfWeek: [2, 5], basePct: 70, maxBaseLines: 3, maxDiscoveryLines: 3, discoverySource: "both", minOrderUsd: 5, baseMode: "top3", anchorPct: 70 },
   uses: ["signals", "cycle", "autoBasket"],
   replayable: false,
   kind: "deposits",
@@ -4742,9 +4900,11 @@ var dcaBoussole = {
     const markets2 = live?.markets ?? ctx.universe.map(pseudoRow);
     const scores = {};
     const change7d = {};
+    const weights = {};
     for (const u of ctx.universe) {
       const cs = ctx.candles(u.coinId);
       if (!cs.length) continue;
+      if (!live) weights[u.coinId] = median(cs.slice(-30).map((c) => c.volume));
       change7d[u.coinId] = cs.length > 7 ? (cs[cs.length - 1].close / cs[cs.length - 8].close - 1) * 100 : null;
       const a = cs.length >= 30 ? analyze(cs, { temperature: ctx.temperature ?? void 0, isBitcoin: u.coinId === "bitcoin" }, { closedOnly: true }) : null;
       if (a) scores[u.coinId] = a.investor.score;
@@ -4764,8 +4924,11 @@ var dcaBoussole = {
         maxDiscoveryLines: p.maxDiscoveryLines,
         minOrderUsd: p.minOrderUsd,
         reserveUsd: Math.max(0, ctx.portfolio.cashUsd - p.amountUsd),
-        discoverySource: p.discoverySource
+        discoverySource: p.discoverySource,
+        baseMode: p.baseMode,
+        anchorPct: p.anchorPct
       },
+      weights: live ? void 0 : weights,
       markets: markets2,
       smallCaps: live?.smallCaps ?? null,
       scores,
@@ -4780,51 +4943,6 @@ var dcaBoussole = {
     });
     return plan.orders.map((o) => ({ coinId: o.coinId, symbol: o.symbol, name: o.name, side: "buy", sizing: { usd: o.usd }, reason: o.reason, tag: "dca" }));
   }
-};
-
-// src/lib/lab/stats.ts
-function quantile(xs, q) {
-  if (!xs.length) return NaN;
-  const s = [...xs].sort((a, b) => a - b);
-  const pos = Math.min(1, Math.max(0, q)) * (s.length - 1);
-  const lo = Math.floor(pos);
-  const hi = Math.ceil(pos);
-  return s[lo] + (s[hi] - s[lo]) * (pos - lo);
-}
-function hashSeed(s) {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = a + 1831565813 >>> 0;
-    let t = a;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-function bootstrapMeans(xs, draws, seed) {
-  if (!xs.length) return [];
-  const rnd = mulberry32(seed);
-  const out = [];
-  for (let d = 0; d < draws; d++) {
-    let sum = 0;
-    for (let i = 0; i < xs.length; i++) sum += xs[Math.floor(rnd() * xs.length)];
-    out.push(sum / xs.length);
-  }
-  return out.sort((a, b) => a - b);
-}
-
-// src/lib/lab/types.ts
-var COSTS = {
-  exchange: { feePct: 0.1, spreadPct: 0.05 },
-  app: { feePct: 0, spreadPct: 1.5 }
 };
 
 // src/lib/lab/universe.ts
@@ -5118,30 +5236,6 @@ async function tickAutopilot(p, logs, nowMs, src, device, strategies = STRATEGIE
   portfolio = { ...portfolio, settledTo: new Date(settledFrom).toISOString() };
   const changed = [...changedDays].sort().map((d) => byDay.get(d));
   return { portfolio, changed, events };
-}
-
-// src/lib/lab/paperBook.ts
-var COST_PRESETS = { exchange: { ...COSTS.exchange }, app: { ...COSTS.app } };
-var ORDER_LIFETIME_DAYS = 90;
-var timeOf = (t) => t.time ?? t.date;
-function bookOf(portfolio, trades) {
-  let cash = portfolio.startingUsd;
-  const positions = {};
-  for (const t of [...trades].sort((a, b) => timeOf(a).localeCompare(timeOf(b)))) {
-    const fee = t.feeUsd ?? 0;
-    const p = positions[t.coinId];
-    if (t.type === "buy") {
-      cash -= t.quantity * t.priceUsd + fee;
-      positions[t.coinId] = { coinId: t.coinId, symbol: t.symbol, name: t.name, quantity: (p?.quantity ?? 0) + t.quantity, costUsd: (p?.costUsd ?? 0) + t.quantity * t.priceUsd + fee, openedOn: p?.openedOn ?? t.date };
-    } else {
-      cash += t.quantity * t.priceUsd - fee;
-      if (!p) continue;
-      const left = Math.round((p.quantity - t.quantity) * 1e8) / 1e8;
-      if (left > 0) positions[t.coinId] = { ...p, quantity: left, costUsd: p.costUsd * (left / p.quantity) };
-      else delete positions[t.coinId];
-    }
-  }
-  return { cashUsd: cash, positions };
 }
 
 // src/lib/lab/settle.ts
@@ -6486,6 +6580,7 @@ var depsOf = (cfg) => ({
     const rules = rulesOf({ archetype: profile?.archetype ?? "Ma strat\xE9gie", rules: profile?.rules ?? {} });
     return runAutopilots(bundle, await runnerAutopilotSources(cfg.coingeckoKey, rules), nowMs, cfg.device);
   },
+  tradeBars: async (coinId, _symbol, fromMs, toMs) => (await runnerAutopilotSources(cfg.coingeckoKey, rulesOf({ archetype: "Ma strat\xE9gie", rules: {} }))).hourly(coinId, fromMs, toMs),
   tokenPrices: async (chain, mints) => {
     const pairs = await getTokenPairs(chain === "eth" ? "ethereum" : chain, mints);
     const out = /* @__PURE__ */ new Map();

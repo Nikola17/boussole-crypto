@@ -197,6 +197,7 @@ const depsOf = (cfg: RunnerConfig): CycleDeps => ({
     const rules = rulesOf({ archetype: profile?.archetype ?? 'Ma stratégie', rules: profile?.rules ?? ({} as Profile['rules']) });
     return runAutopilots(bundle, await runnerAutopilotSources(cfg.coingeckoKey, rules), nowMs, cfg.device);
   },
+  tradeBars: async (coinId, _symbol, fromMs, toMs) => (await runnerAutopilotSources(cfg.coingeckoKey, rulesOf({ archetype: 'Ma stratégie', rules: {} as Profile['rules'] }))).hourly(coinId, fromMs, toMs),
   tokenPrices: async (chain, mints) => {
     const pairs = await getTokenPairs(chain === 'eth' ? 'ethereum' : chain, mints);
     const out = new Map<string, number>();
