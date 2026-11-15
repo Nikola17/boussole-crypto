@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { analyze, MIN_BARS_FOR_BUY } from './signals';
-import { volumeRatio, type Candle } from './indicators';
+import { analyze, MIN_BARS_FOR_BUY, SIGNALS_VERSION } from './signals';
+import { closedCandles, volumeRatio, type Candle } from './indicators';
 
 /** Série synthétique : tendance linéaire + légère oscillation, volume constant. */
 function series(n: number, from: number, to: number, volume = 1000): Candle[] {
@@ -62,5 +62,32 @@ describe('compression de volatilité : un mouvement se prépare, son sens est in
     const calm = series(60, 120, 120.5).map((c) => ({ ...c, high: c.close * 1.001, low: c.close * 0.999, open: c.close }));
     const a = analyze([...wild, ...calm], {});
     for (const s of a?.setups ?? []) if (s.key === 'squeeze') expect(s.bias).toBe('neutral');
+  });
+});
+
+describe('signaux sur bougies closes (banc d’essai)', () => {
+  it('closedCandles retire la bougie du jour encore ouverte', () => {
+    const day = 86400;
+    const cs = [0, 1, 2].map((i) => ({ time: i * day, open: 1, high: 1, low: 1, close: 1, volume: 1 }));
+    expect(closedCandles(cs, (2 * day + 3600) * 1000)).toHaveLength(2);
+    expect(closedCandles(cs, 3 * day * 1000)).toHaveLength(3);
+  });
+  it('volumeRatio en mode clos compare la dernière bougie aux 20 précédentes', () => {
+    const cs = Array.from({ length: 22 }, (_, i) => ({ time: i, open: 1, high: 1, low: 1, close: 1, volume: i === 21 ? 300 : 100 }));
+    expect(volumeRatio(cs, 20, { closedOnly: true })).toBeCloseTo(3, 9);
+  });
+  it('analyze en mode clos donne le même résultat quelle que soit l’heure de la journée', () => {
+    const closed = series(260, 100, 180);
+    const day0 = closed[closed.length - 1].time + 86400;
+    const open = (close: number) => ({ time: day0, open: close, high: close * 1.2, low: close * 0.8, close, volume: 99_999 });
+    const at10h = analyze(closedCandles([...closed, open(150)], (day0 + 10 * 3600) * 1000), {}, { closedOnly: true });
+    const at22h = analyze(closedCandles([...closed, open(230)], (day0 + 22 * 3600) * 1000), {}, { closedOnly: true });
+    expect(at10h?.investor.label).toBe(at22h?.investor.label);
+    expect(at10h?.trader.label).toBe(at22h?.trader.label);
+    expect(at10h?.setups).toEqual(at22h?.setups);
+    expect(at10h?.price).toBe(closed[closed.length - 1].close);
+  });
+  it('numéros de version des règles', () => {
+    expect(SIGNALS_VERSION).toBe(1);
   });
 });

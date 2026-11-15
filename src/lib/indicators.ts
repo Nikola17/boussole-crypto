@@ -216,13 +216,23 @@ export function supportResistance(candles: Candle[], w = 5, tolerancePct = 2.5, 
  * La bougie du jour est encore incomplète : la comparer à des journées entières donnerait presque toujours un ratio faible,
  * et « cassure avec volume » ne se déclencherait qu'en fin de journée.
  */
-export function volumeRatio(candles: Candle[], period = 20): number {
-  const closed = candles.slice(0, -1);
+export function volumeRatio(candles: Candle[], period = 20, opts: { closedOnly?: boolean } = {}): number {
+  // En mode « clos », toutes les bougies reçues sont terminées : la dernière est la plus récente à comparer.
+  const closed = opts.closedOnly ? candles : candles.slice(0, -1);
   if (closed.length < period + 1) return NaN;
   const vols = closed.map((c) => c.volume);
   const avg = sma(vols.slice(0, -1), period);
   const a = avg[avg.length - 1];
   return a > 0 ? vols[vols.length - 1] / a : NaN;
+}
+
+/**
+ * Bougies journalières closes seulement : retire la dernière si sa journée (UTC) n'est pas finie à `nowMs`.
+ * Les signaux calculés dessus ne changent qu'une fois par jour, et ce qui est affiché est ce qui est mesurable.
+ */
+export function closedCandles(candles: Candle[], nowMs: number): Candle[] {
+  const last = candles[candles.length - 1];
+  return last && last.time + 86400 > nowMs / 1000 ? candles.slice(0, -1) : candles;
 }
 
 /** Agrège des bougies journalières en bougies hebdomadaires (semaine ISO, lundi). */

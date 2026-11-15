@@ -11,7 +11,7 @@ import { getNewPools, getTrendingPools, type DexPool } from '../api/dex';
 import { poolStrict } from '../api/http';
 import { altSeasonIndex, computeCycle } from '../lib/cycle';
 import { analyze, type Analysis } from '../lib/signals';
-import type { Candle } from '../lib/indicators';
+import { closedCandles, type Candle } from '../lib/indicators';
 import { isStable, isWrappedOrStaked } from '../lib/portfolio';
 import { FALLBACK_EUR_PER_USD, sanitizeFx } from '../lib/fx';
 
@@ -202,7 +202,8 @@ export function useScan(coins: cg.CgMarket[], temperature: number | undefined, e
         const sym = binanceSymbolFor({ id: c.id, symbol: c.symbol, priceUsd: c.current_price }, prices);
         if (!sym) return { id: c.id, analysis: null } as ScanRow;
         const candles = await getKlines(sym, '1d', 400);
-        return { id: c.id, analysis: analyze(candles, { temperature, athChangePct: c.ath_change_percentage }) } as ScanRow;
+        // Bougies closes seulement : le signal change une fois par jour, comme ce que mesure le banc d'essai.
+        return { id: c.id, analysis: analyze(closedCandles(candles, Date.now()), { temperature, athChangePct: c.ath_change_percentage }, { closedOnly: true }) } as ScanRow;
       });
       // Tout a échoué (réseau coupé, Binance injoignable) : c'est une erreur à montrer, pas « aucune crypto à analyser ».
       if (failed > 0 && failed === coins.length) throw firstError instanceof Error ? firstError : new Error('Analyse technique indisponible pour le moment.');

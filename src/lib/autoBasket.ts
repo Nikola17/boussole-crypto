@@ -12,6 +12,9 @@ import { temperatureMultiplier } from './dca';
 import { FOMO_7D_PCT } from './thresholds';
 import { isGold, isStable, isWrappedOrStaked } from './portfolio';
 
+/** Version des règles du panier automatique (entre dans l'empreinte des stratégies du Labo). */
+export const AUTO_BASKET_VERSION = 1;
+
 /** Taille de l'univers « base » : les N premières capitalisations, stablecoins et jetons « wrapped » exclus. */
 export const AUTO_BASE_TOP = 20;
 /** Nombre maximal de cryptos par côté (base, découverte) et par échéance. */

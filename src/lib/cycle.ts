@@ -4,6 +4,9 @@
 import { rsi, sma, toWeekly, type Candle } from './indicators';
 import { TEMPERATURE } from './thresholds';
 
+/** Version des règles de la température du marché (entre dans l'empreinte des stratégies du Labo). */
+export const CYCLE_VERSION = 1;
+
 export interface CycleComponent {
   key: string;
   label: string;

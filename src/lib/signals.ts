@@ -11,6 +11,12 @@ import { TEMPERATURE } from './thresholds';
 
 export type Tone = 'up' | 'neutral' | 'down';
 
+/** Version des règles des signaux : toute modification qui change un libellé l'augmente (table de fiabilité et autopilotes suivent). */
+export const SIGNALS_VERSION = 1;
+
+/** Options de calcul : `closedOnly` = toutes les bougies reçues sont closes (banc d'essai, scan, fiches). */
+export interface AnalyzeOptions { closedOnly?: boolean }
+
 /** Historique minimal (jours) pour qu'un signal d'achat soit émis : il faut au moins la moyenne mobile 200 jours. */
 export const MIN_BARS_FOR_BUY = 200;
 
@@ -109,7 +115,7 @@ function combine(factors: Factor[], horizon: 'investor' | 'trader', bars: number
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1).replace('.', ',')} %`;
 const num = (v: number, d = 2) => v.toFixed(d).replace('.', ',');
 
-export function analyze(candles: Candle[], ctx: AnalysisContext = {}): Analysis | null {
+export function analyze(candles: Candle[], ctx: AnalysisContext = {}, opts: AnalyzeOptions = {}): Analysis | null {
   if (candles.length < 30) return null;
   const closes = candles.map((c) => c.close);
   const price = closes[closes.length - 1];
@@ -261,7 +267,7 @@ export function analyze(candles: Candle[], ctx: AnalysisContext = {}): Analysis 
     const lows = candles.map((c) => c.low);
     const prevHigh = highest(highs, 20, candles.length - 2);
     const prevLow = lowest(lows, 20, candles.length - 2);
-    const vr = volumeRatio(candles, 20);
+    const vr = volumeRatio(candles, 20, opts);
     let vote = 0;
     let detail = 'Pas de cassure significative des plus hauts/bas 20 jours.';
     if (price > prevHigh && vr > 1.5) { vote = 2; detail = `Cassure des plus hauts 20 j avec un volume ×${num(vr, 1)} : signal de force.`; }
@@ -308,7 +314,7 @@ export function analyze(candles: Candle[], ctx: AnalysisContext = {}): Analysis 
     change7d: changePct(closes, 7),
     change30d: changePct(closes, 30),
     investor, trader, plan, accumulation, profitZone,
-    setups: detectSetups(candles, { s20, s50, s200, r, m, bbWidth: bb.width }),
+    setups: detectSetups(candles, { s20, s50, s200, r, m, bbWidth: bb.width }, opts),
     bars: candles.length,
   };
 }
@@ -322,7 +328,7 @@ interface SetupSeries {
   bbWidth: number[];
 }
 
-export function detectSetups(candles: Candle[], s: SetupSeries): Setup[] {
+export function detectSetups(candles: Candle[], s: SetupSeries, opts: AnalyzeOptions = {}): Setup[] {
   const out: Setup[] = [];
   const n = candles.length;
   if (n < 30) return out;
@@ -334,7 +340,7 @@ export function detectSetups(candles: Candle[], s: SetupSeries): Setup[] {
   const rsi14 = s.r[n - 1];
   const highs = candles.map((k) => k.high);
   const lows = candles.map((k) => k.low);
-  const vr = volumeRatio(candles, 20);
+  const vr = volumeRatio(candles, 20, opts);
 
   if (Number.isFinite(sma200) && Number.isFinite(sma50) && price > sma200 && sma50 > sma200 && rsi14 < 42) {
     out.push({ key: 'pullback', label: 'Repli en tendance haussière', bias: 'bull', detail: `Tendance de fond haussière et RSI à ${Math.round(rsi14)} : zone d’achat sur repli. Attends un signe de reprise (bougie verte, RSI qui repasse 40) avant d’entrer.` });

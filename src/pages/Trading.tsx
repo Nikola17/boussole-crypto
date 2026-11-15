@@ -5,6 +5,7 @@ import { useCoinCandles, useCycle, useFx, useMarkets, usePrices } from '../hooks
 import { usePortfolio } from '../hooks/usePortfolio';
 import { openTradeStatus, positionSize, tradePnl, tradeR, tradeStats } from '../lib/risk';
 import { analyze } from '../lib/signals';
+import { closedCandles } from '../lib/indicators';
 import { CoinPicker } from '../components/CoinPicker';
 import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, isoDay, uid } from '../lib/format';
 import { navigate, setQuery, useHashPath } from '../router';
@@ -62,7 +63,7 @@ function SizeCalculator() {
   const extra = usePrices(coin && !(markets.data ?? []).some((m) => m.id === coin.coinId) ? [coin.coinId] : []);
   const livePrice = coin ? (markets.data ?? []).find((m) => m.id === coin.coinId)?.current_price ?? extra.data?.[coin.coinId]?.usd ?? null : null;
   const candles = useCoinCandles(coin && livePrice ? { id: coin.coinId, symbol: coin.symbol.toLowerCase(), priceUsd: livePrice } : null, '1d');
-  const analysis = useMemo(() => (candles.data?.candles.length ? analyze(candles.data.candles, { temperature: cycle.data?.temperature }) : null), [candles.data, cycle.data]);
+  const analysis = useMemo(() => (candles.data?.candles.length ? analyze(closedCandles(candles.data.candles, Date.now()), { temperature: cycle.data?.temperature }, { closedOnly: true }) : null), [candles.data, cycle.data]);
   const round = (x: number) => Math.round(x * 1e6) / 1e6;
 
   function fillFromPlan() {

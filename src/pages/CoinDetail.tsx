@@ -8,6 +8,7 @@ import { useStore } from '../store/useStore';
 import { useCoin, useCoinCandles, useCycle, useFx, useMarkets } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { analyze, type Factor, type SignalResult } from '../lib/signals';
+import { closedCandles } from '../lib/indicators';
 import { bucketOf } from '../lib/portfolio';
 import { fmtCompact, fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtQty } from '../lib/format';
 import { openExternal } from '../lib/platform';
@@ -85,7 +86,7 @@ export default function CoinDetail({ id }: { id: string }) {
 
   const candlesQ = useCoinCandles(priceUsd ? { id, symbol: symbol.toLowerCase(), priceUsd } : null, tf);
   const dailyQ = useCoinCandles(priceUsd ? { id, symbol: symbol.toLowerCase(), priceUsd } : null, '1d');
-  const analysis = useMemo(() => (dailyQ.data?.candles.length ? analyze(dailyQ.data.candles, { temperature: cycle.data?.temperature, athChangePct: athChange }) : null), [dailyQ.data, cycle.data, athChange]);
+  const analysis = useMemo(() => (dailyQ.data?.candles.length ? analyze(closedCandles(dailyQ.data.candles, Date.now()), { temperature: cycle.data?.temperature, athChangePct: athChange }, { closedOnly: true }) : null), [dailyQ.data, cycle.data, athChange]);
 
   const levels: ChartLevel[] = useMemo(() => {
     if (!analysis?.plan) return [];
