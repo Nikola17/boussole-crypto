@@ -26,6 +26,7 @@
   "_autopilot": "autopilotes du Labo : calculés aussi sur le serveur, ordres et stops envoyés sur Telegram",
   "autopilotEnabled": true,
   "autopilotTelegram": true,
+  "signalAlertsEnabled": true,
   "timeZone": "Europe/Paris",
   "stateDir": "",
   "device": "hermes-vps"

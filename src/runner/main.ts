@@ -33,6 +33,7 @@ import { rateNews } from './ai';
 import type { Candle } from '../lib/indicators';
 import { runAutopilots } from './autopilot';
 import { runnerAutopilotSources } from './autopilotSources';
+import { computeSignals } from './signals';
 import { rulesOf } from '../lib/profile';
 import type { Profile } from '../types';
 
@@ -196,6 +197,7 @@ const depsOf = (cfg: RunnerConfig): CycleDeps => ({
     const rules = rulesOf({ archetype: profile?.archetype ?? 'Ma stratégie', rules: profile?.rules ?? ({} as Profile['rules']) });
     return runAutopilots(bundle, await runnerAutopilotSources(cfg.coingeckoKey, rules), nowMs, cfg.device);
   },
+  signals: async (coins) => computeSignals(coins, await runnerAutopilotSources(cfg.coingeckoKey, rulesOf({ archetype: 'Ma stratégie', rules: {} as Profile['rules'] }))),
 });
 
 // ---------------------------------------------------------------- modes
@@ -235,7 +237,7 @@ async function modeMain(cfg: RunnerConfig, mode: 'loop' | 'once' | 'brief' | 'di
     await run();
     return;
   }
-  log(`Surveillance démarrée : contrôle toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : 'matin désactivé'}${cfg.briefUsOpen ? ', ouverture US (9 h 30 New York)' : ''}${cfg.briefUsClose ? ', clôture US (16 h New York)' : ''}.${cfg.quietStart !== cfg.quietEnd ? ` Silence nocturne : les alertes arrivent regroupées après ${cfg.quietEnd} h (fenêtre ${cfg.quietStart} h → ${cfg.quietEnd} h).` : ''} Veille presse : ${cfg.newsEnabled ? `activée${cfg.mistralApiKey ? ' (résumés IA)' : ' (heuristique, sans clé IA)'}` : 'désactivée'}. Smart money : ${cfg.smartMoneyEnabled ? 'activé' : 'désactivé'}. Autopilotes : ${cfg.autopilotEnabled ? `activés${cfg.autopilotTelegram ? ' (ordres sur Telegram)' : ''}` : 'désactivés'}${cfg.emergingEnabled ? ', digest émergentes dans le brief du matin' : ''}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffré de bout en bout).`);
+  log(`Surveillance démarrée : contrôle toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : 'matin désactivé'}${cfg.briefUsOpen ? ', ouverture US (9 h 30 New York)' : ''}${cfg.briefUsClose ? ', clôture US (16 h New York)' : ''}.${cfg.quietStart !== cfg.quietEnd ? ` Silence nocturne : les alertes arrivent regroupées après ${cfg.quietEnd} h (fenêtre ${cfg.quietStart} h → ${cfg.quietEnd} h).` : ''} Veille presse : ${cfg.newsEnabled ? `activée${cfg.mistralApiKey ? ' (résumés IA)' : ' (heuristique, sans clé IA)'}` : 'désactivée'}. Smart money : ${cfg.smartMoneyEnabled ? 'activé' : 'désactivé'}. Autopilotes : ${cfg.autopilotEnabled ? `activés${cfg.autopilotTelegram ? ' (ordres sur Telegram)' : ''}` : 'désactivés'}${cfg.emergingEnabled ? ', digest émergentes dans le brief du matin' : ''} Alertes de signal : ${cfg.signalAlertsEnabled ? 'activées (une fois par jour)' : 'désactivées'}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffré de bout en bout).`);
   for (;;) {
     try {
       await run();

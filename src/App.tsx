@@ -16,6 +16,7 @@ import { alertCoinsToFetch, checkPriceAlerts } from './lib/alerts';
 import { useBriefing } from './hooks/useBriefing';
 import { cancelDcaReminders, ensureNotificationPermission, installUpdate, isNative, lockAvailable, notify, openExternal, scheduleDcaReminders, syncDesktop, unlockApp } from './lib/platform';
 import { useSmartAlerts } from './hooks/useSmartAlerts';
+import { useSignalAlerts } from './hooks/useSignalAlerts';
 import { useExitPlan } from './hooks/useExitPlan';
 import { EMPTY_WATCH, syncRunner, watchAlerts } from './lib/runnerSync';
 import { fmtPrice, isoDay } from './lib/format';
@@ -86,6 +87,7 @@ function AppEffects() {
   const closeToTray = useStore((s) => s.settings.closeToTray);
   const autoStart = useStore((s) => s.settings.autoStart);
   useSmartAlerts();
+  useSignalAlerts();
   usePaperSettle();
   useAutopilot();
   useSnapshots();

@@ -37,6 +37,8 @@ export interface RunnerConfig {
   autopilotEnabled: boolean;
   /** Ordres des autopilotes et exécutions d'ordres papier envoyés sur Telegram. */
   autopilotTelegram: boolean;
+  /** Alertes de signal : état de risque ou setup validé sur une crypto suivie, une fois par jour. */
+  signalAlertsEnabled: boolean;
   /** Clé API Mistral (facultative) : résume les actus importantes en 3 lignes et filtre le bruit. */
   mistralApiKey: string | null;
   /** Modèle Mistral pour la veille presse. */
@@ -100,7 +102,7 @@ export function validateConfig(raw: unknown, opts: { allowMissingChatId?: boolea
 
   if (typeof r.briefEnabled !== 'undefined' && typeof r.briefEnabled !== 'boolean') problems.push('briefEnabled doit être true ou false.');
   const bool = (v: unknown): boolean => typeof v === 'boolean'; // absents → true par défaut
-  for (const k of ['briefUsOpen', 'briefUsClose', 'newsEnabled', 'smartMoneyEnabled', 'emergingEnabled', 'autopilotEnabled', 'autopilotTelegram'] as const) {
+  for (const k of ['briefUsOpen', 'briefUsClose', 'newsEnabled', 'smartMoneyEnabled', 'emergingEnabled', 'autopilotEnabled', 'autopilotTelegram', 'signalAlertsEnabled'] as const) {
     if (typeof r[k] !== 'undefined' && typeof r[k] !== 'boolean') problems.push(`${k} doit être true ou false.`);
   }
 
@@ -136,6 +138,7 @@ export function validateConfig(raw: unknown, opts: { allowMissingChatId?: boolea
       emergingEnabled: r.emergingEnabled === undefined ? true : bool(r.emergingEnabled),
       autopilotEnabled: r.autopilotEnabled === undefined ? true : bool(r.autopilotEnabled),
       autopilotTelegram: r.autopilotTelegram === undefined ? true : bool(r.autopilotTelegram),
+      signalAlertsEnabled: r.signalAlertsEnabled === undefined ? true : bool(r.signalAlertsEnabled),
       mistralApiKey: str(r.mistralApiKey) || null,
       mistralModel: str(r.mistralModel) || 'mistral-small-latest',
       timeZone,

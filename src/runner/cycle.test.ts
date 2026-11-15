@@ -18,7 +18,7 @@ const PASS = 'phrase de passe du runner';
 const CFG: RunnerConfig = {
   syncRepo: 'Nikola17/boussole-sync', syncPath: 'boussole-sync.enc', syncToken: 'tok', passphrase: PASS,
   telegramToken: 'tg', telegramChatId: '42', coingeckoKey: null, currency: 'EUR',
-  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, smartMoneyEnabled: false, emergingEnabled: false, autopilotEnabled: false, autopilotTelegram: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', quietStart: 0, quietEnd: 0, stateDir: '', device: 'vps-test',
+  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, smartMoneyEnabled: false, emergingEnabled: false, autopilotEnabled: false, autopilotTelegram: false, signalAlertsEnabled: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', quietStart: 0, quietEnd: 0, stateDir: '', device: 'vps-test',
 };
 
 const txSol: Transaction = { id: 't1', coinId: 'solana', symbol: 'sol', name: 'Solana', date: '2026-01-10', type: 'buy', quantity: 100, price: 2, currency: 'USD', fee: 0, fxEurPerUsd: 0.87, updatedAt: '2026-01-10T00:00:00Z' };
@@ -575,5 +575,30 @@ describe('autopilotes dans le cycle du serveur', () => {
     expect(dry.some((t) => t.includes('Test : 100 USDC'))).toBe(true);
     await runCycle({ ...CFG_AP, autopilotEnabled: false }, emptyState(), { dry: false, forceBrief: false }, deps, H(10));
     expect(calls.n).toBe(1);
+  });
+});
+
+describe('alertes de signal dans le cycle', () => {
+  const CFG_SIG = { ...CFG, signalAlertsEnabled: true };
+  it('premier calcul mémorisé sans prévenir, puis une alerte par nouvel épisode, une fois par jour, rien en vacances', async () => {
+    const day = (d: number, h: number) => new Date(Date.UTC(2026, 10, d, h, 30));
+    let keys: string[] = [];
+    const { deps, sent } = makeDeps({ transactions: [txSol] }, { prices: FLAT });
+    deps.signals = async () => ({ solana: { symbol: 'sol', keys } });
+    const r1 = await runCycle(CFG_SIG, emptyState(), { dry: false, forceBrief: false }, deps, day(20, 9));
+    expect(sent.filter((t) => t.startsWith('Signal'))).toHaveLength(0);
+    keys = ['inv:Alléger'];
+    const r2 = await runCycle(CFG_SIG, r1.state, { dry: false, forceBrief: false }, deps, day(21, 9));
+    expect(sent.filter((t) => t.startsWith('Signal SOL'))).toHaveLength(1);
+    expect(sent.find((t) => t.startsWith('Signal SOL'))).toContain('Fiabilité :');
+    await runCycle(CFG_SIG, r2.state, { dry: false, forceBrief: false }, deps, day(21, 15));
+    expect(sent.filter((t) => t.startsWith('Signal SOL'))).toHaveLength(1);
+    const vac = makeDeps({ transactions: [txSol], profile: { vacationUntil: '2026-12-31' } }, { prices: FLAT });
+    vac.deps.signals = deps.signals;
+    keys = [];
+    const v1 = await runCycle(CFG_SIG, emptyState(), { dry: false, forceBrief: false }, vac.deps, day(20, 9));
+    keys = ['inv:Alléger'];
+    await runCycle(CFG_SIG, v1.state, { dry: false, forceBrief: false }, vac.deps, day(21, 9));
+    expect(vac.sent.filter((t) => t.startsWith('Signal'))).toHaveLength(0);
   });
 });

@@ -13,6 +13,8 @@ export interface RunnerState {
   quietQueue: Record<string, { text: string; at: number; alertId?: string }>;
   /** Smart money — jusqu'où chaque wallet suivi a été lu (ms) : au-delà, tout est déjà traité. */
   smCursor: Record<string, number>;
+  /** Alertes de signal : dernier jour calculé (UTC), signaux actifs par crypto, début de chaque épisode. */
+  signals?: { day: string; active: Record<string, string[]>; starts: Record<string, string> };
   /** Dernier contrôle réussi (ms) ; null si aucun. */
   okAt: number | null;
   /** Dernière tentative, réussie ou non (ms). */
@@ -51,6 +53,8 @@ export function parseState(json: string | null | undefined): RunnerState {
         }
       }
     }
+    const sig = r.signals as { day?: unknown; active?: unknown; starts?: unknown } | undefined;
+    if (sig && typeof sig.day === 'string' && sig.active && typeof sig.active === 'object' && sig.starts && typeof sig.starts === 'object') out.signals = { day: sig.day, active: sig.active as Record<string, string[]>, starts: sig.starts as Record<string, string> };
     const cursorRaw = r.smCursor;
     if (cursorRaw && typeof cursorRaw === 'object' && !Array.isArray(cursorRaw)) {
       for (const [k, v] of Object.entries(cursorRaw)) if (typeof v === 'number' && Number.isFinite(v)) out.smCursor[k] = v;

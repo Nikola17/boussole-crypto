@@ -653,7 +653,7 @@ function validateConfig(raw, opts = {}) {
   }
   if (typeof r.briefEnabled !== "undefined" && typeof r.briefEnabled !== "boolean") problems.push("briefEnabled doit \xEAtre true ou false.");
   const bool = (v) => typeof v === "boolean";
-  for (const k of ["briefUsOpen", "briefUsClose", "newsEnabled", "smartMoneyEnabled", "emergingEnabled", "autopilotEnabled", "autopilotTelegram"]) {
+  for (const k of ["briefUsOpen", "briefUsClose", "newsEnabled", "smartMoneyEnabled", "emergingEnabled", "autopilotEnabled", "autopilotTelegram", "signalAlertsEnabled"]) {
     if (typeof r[k] !== "undefined" && typeof r[k] !== "boolean") problems.push(`${k} doit \xEAtre true ou false.`);
   }
   const syncToken = str(r.syncToken);
@@ -685,6 +685,7 @@ function validateConfig(raw, opts = {}) {
       emergingEnabled: r.emergingEnabled === void 0 ? true : bool(r.emergingEnabled),
       autopilotEnabled: r.autopilotEnabled === void 0 ? true : bool(r.autopilotEnabled),
       autopilotTelegram: r.autopilotTelegram === void 0 ? true : bool(r.autopilotTelegram),
+      signalAlertsEnabled: r.signalAlertsEnabled === void 0 ? true : bool(r.signalAlertsEnabled),
       mistralApiKey: str(r.mistralApiKey) || null,
       mistralModel: str(r.mistralModel) || "mistral-small-latest",
       timeZone,
@@ -737,6 +738,8 @@ function parseState(json) {
         }
       }
     }
+    const sig = r.signals;
+    if (sig && typeof sig.day === "string" && sig.active && typeof sig.active === "object" && sig.starts && typeof sig.starts === "object") out.signals = { day: sig.day, active: sig.active, starts: sig.starts };
     const cursorRaw = r.smCursor;
     if (cursorRaw && typeof cursorRaw === "object" && !Array.isArray(cursorRaw)) {
       for (const [k, v] of Object.entries(cursorRaw)) if (typeof v === "number" && Number.isFinite(v)) out.smCursor[k] = v;
@@ -2102,6 +2105,1051 @@ function smartBriefLines(events, nowMs = Date.now(), max = 4) {
   return lines;
 }
 
+// src/data/reliability.json
+var reliability_default = {
+  generatedAt: "2026-11-15",
+  dataThrough: "2026-11-14",
+  rulesVersion: 2,
+  universe: {
+    assets: 101,
+    from: "2019-01-01",
+    top: 50
+  },
+  entries: {
+    "inv:Accumuler": {
+      label: "Investisseur \xAB Accumuler \xBB",
+      bias: "bull",
+      horizon: 90,
+      days: 52402,
+      episodes: 2596,
+      frequencyPct: 41.8942,
+      hitPct: 48.4905,
+      hitLow: 46.8865,
+      hitHigh: 50.112,
+      medianPct: -1.3998,
+      excessMedianPct: 25e-4,
+      worstMedianPct: -25.2705,
+      baselineHitPct: 44.086,
+      baselineMedianPct: -6.7213,
+      control: {
+        episodes: 1214,
+        hitPct: 48.9737,
+        medianPct: -0.8721,
+        baselineHitPct: 41.1726
+      },
+      verdict: "valid\xE9"
+    },
+    "inv:All\xE9ger": {
+      label: "Investisseur \xAB All\xE9ger \xBB",
+      bias: "bear",
+      horizon: 90,
+      days: 24374,
+      episodes: 2155,
+      frequencyPct: 19.1691,
+      hitPct: 29.5561,
+      hitLow: 27.9686,
+      hitHigh: 31.201,
+      medianPct: -26.6746,
+      excessMedianPct: -0.1362,
+      worstMedianPct: -44.9939,
+      baselineHitPct: 44.086,
+      baselineMedianPct: -6.7213,
+      control: {
+        episodes: 1112,
+        hitPct: 21.2589,
+        medianPct: -30.567,
+        baselineHitPct: 41.1726
+      },
+      verdict: "valid\xE9"
+    },
+    "inv:Conserver": {
+      label: "Investisseur \xAB Conserver \xBB",
+      bias: "neutral",
+      horizon: 90,
+      days: 42037,
+      episodes: 4033,
+      frequencyPct: 35.3166,
+      hitPct: 44.4418,
+      hitLow: 43.1505,
+      hitHigh: 45.7238,
+      medianPct: -5.4512,
+      excessMedianPct: 0.0298,
+      worstMedianPct: -29.9815,
+      baselineHitPct: 44.086,
+      baselineMedianPct: -6.7213,
+      control: {
+        episodes: 2228,
+        hitPct: 43.9987,
+        medianPct: -5.4138,
+        baselineHitPct: 41.1726
+      },
+      verdict: "sans effet"
+    },
+    "inv:Prendre des profits": {
+      label: "Investisseur \xAB Prendre des profits \xBB",
+      bias: "bear",
+      horizon: 90,
+      days: 4632,
+      episodes: 397,
+      frequencyPct: 3.6201,
+      hitPct: 67.487,
+      hitLow: 63.5324,
+      hitHigh: 71.2432,
+      medianPct: 74.0817,
+      excessMedianPct: 0,
+      worstMedianPct: -25.8879,
+      baselineHitPct: 44.086,
+      baselineMedianPct: -6.7213,
+      control: {
+        episodes: 0,
+        hitPct: null,
+        medianPct: null,
+        baselineHitPct: 41.1726
+      },
+      verdict: "trop peu de cas"
+    },
+    "plan:Achat fort@1.5": {
+      label: "Plan de trade, signal \xAB Achat fort \xBB, objectif 1,5 R",
+      bias: "bull",
+      horizon: 30,
+      days: 3607,
+      episodes: 2750,
+      frequencyPct: 2.819,
+      hitPct: 45.1636,
+      hitLow: 43.6081,
+      hitHigh: 46.7287,
+      medianPct: -1.0145,
+      excessMedianPct: 1e-4,
+      worstMedianPct: null,
+      baselineHitPct: 40.2604,
+      baselineMedianPct: -1.0146,
+      control: {
+        episodes: 1425,
+        hitPct: 44.8421,
+        medianPct: -1.0185,
+        baselineHitPct: 37.8261
+      },
+      verdict: "sans effet",
+      expectancyR: 0.0901
+    },
+    "plan:Achat fort@2": {
+      label: "Plan de trade, signal \xAB Achat fort \xBB, objectif 2 R",
+      bias: "bull",
+      horizon: 30,
+      days: 3607,
+      episodes: 2750,
+      frequencyPct: 2.819,
+      hitPct: 39.3455,
+      hitLow: 37.8242,
+      hitHigh: 40.8876,
+      medianPct: -1.0203,
+      excessMedianPct: -3e-3,
+      worstMedianPct: null,
+      baselineHitPct: 35.734,
+      baselineMedianPct: -1.0173,
+      control: {
+        episodes: 1425,
+        hitPct: 39.0175,
+        medianPct: -1.0239,
+        baselineHitPct: 32.9752
+      },
+      verdict: "sans effet",
+      expectancyR: 0.1255
+    },
+    "plan:Achat fort@3": {
+      label: "Plan de trade, signal \xAB Achat fort \xBB, objectif 3 R",
+      bias: "bull",
+      horizon: 30,
+      days: 3607,
+      episodes: 2750,
+      frequencyPct: 2.819,
+      hitPct: 33.9636,
+      hitLow: 32.4945,
+      hitHigh: 35.4643,
+      medianPct: -1.0236,
+      excessMedianPct: -43e-4,
+      worstMedianPct: null,
+      baselineHitPct: 31.5509,
+      baselineMedianPct: -1.0192,
+      control: {
+        episodes: 1425,
+        hitPct: 34.2456,
+        medianPct: -1.0263,
+        baselineHitPct: 28.5688
+      },
+      verdict: "valid\xE9",
+      expectancyR: 0.2338
+    },
+    "plan:Achat@1.5": {
+      label: "Plan de trade, signal \xAB Achat \xBB, objectif 1,5 R",
+      bias: "bull",
+      horizon: 30,
+      days: 1287,
+      episodes: 1180,
+      frequencyPct: 1.0059,
+      hitPct: 43.0508,
+      hitLow: 40.6983,
+      hitHigh: 45.4352,
+      medianPct: -1.0179,
+      excessMedianPct: -33e-4,
+      worstMedianPct: null,
+      baselineHitPct: 40.2604,
+      baselineMedianPct: -1.0146,
+      control: {
+        episodes: 638,
+        hitPct: 41.6928,
+        medianPct: -1.0226,
+        baselineHitPct: 37.8261
+      },
+      verdict: "sans effet",
+      expectancyR: 0.0395
+    },
+    "plan:Achat@2": {
+      label: "Plan de trade, signal \xAB Achat \xBB, objectif 2 R",
+      bias: "bull",
+      horizon: 30,
+      days: 1287,
+      episodes: 1180,
+      frequencyPct: 1.0059,
+      hitPct: 38.2203,
+      hitLow: 35.9228,
+      hitHigh: 40.5718,
+      medianPct: -1.0225,
+      excessMedianPct: -52e-4,
+      worstMedianPct: null,
+      baselineHitPct: 35.734,
+      baselineMedianPct: -1.0173,
+      control: {
+        episodes: 638,
+        hitPct: 36.2069,
+        medianPct: -1.0251,
+        baselineHitPct: 32.9752
+      },
+      verdict: "sans effet",
+      expectancyR: 0.0942
+    },
+    "plan:Achat@3": {
+      label: "Plan de trade, signal \xAB Achat \xBB, objectif 3 R",
+      bias: "bull",
+      horizon: 30,
+      days: 1287,
+      episodes: 1180,
+      frequencyPct: 1.0059,
+      hitPct: 32.1186,
+      hitLow: 29.9257,
+      hitHigh: 34.3934,
+      medianPct: -1.0253,
+      excessMedianPct: -61e-4,
+      worstMedianPct: null,
+      baselineHitPct: 31.5509,
+      baselineMedianPct: -1.0192,
+      control: {
+        episodes: 638,
+        hitPct: 28.9969,
+        medianPct: -1.0283,
+        baselineHitPct: 28.5688
+      },
+      verdict: "sans effet",
+      expectancyR: 0.1682
+    },
+    "plan:Neutre@1.5": {
+      label: "Plan de trade, signal \xAB Neutre \xBB, objectif 1,5 R",
+      bias: "bull",
+      horizon: 30,
+      days: 123057,
+      episodes: 4252,
+      frequencyPct: 96.1751,
+      hitPct: 43.2839,
+      hitLow: 42.0285,
+      hitHigh: 44.5275,
+      medianPct: -1.0137,
+      excessMedianPct: 9e-4,
+      worstMedianPct: null,
+      baselineHitPct: 40.2604,
+      baselineMedianPct: -1.0146,
+      control: {
+        episodes: 2289,
+        hitPct: 39.3357,
+        medianPct: -1.0199,
+        baselineHitPct: 37.8261
+      },
+      verdict: "sans effet",
+      expectancyR: 0.0502
+    },
+    "plan:Neutre@2": {
+      label: "Plan de trade, signal \xAB Neutre \xBB, objectif 2 R",
+      bias: "bull",
+      horizon: 30,
+      days: 123057,
+      episodes: 4252,
+      frequencyPct: 96.1751,
+      hitPct: 38.2733,
+      hitLow: 37.0461,
+      hitHigh: 39.4976,
+      medianPct: -1.0178,
+      excessMedianPct: -5e-4,
+      worstMedianPct: null,
+      baselineHitPct: 35.734,
+      baselineMedianPct: -1.0173,
+      control: {
+        episodes: 2289,
+        hitPct: 33.8724,
+        medianPct: -1.0236,
+        baselineHitPct: 32.9752
+      },
+      verdict: "sans effet",
+      expectancyR: 0.0913
+    },
+    "plan:Neutre@3": {
+      label: "Plan de trade, signal \xAB Neutre \xBB, objectif 3 R",
+      bias: "bull",
+      horizon: 30,
+      days: 123057,
+      episodes: 4252,
+      frequencyPct: 96.1751,
+      hitPct: 33.545,
+      hitLow: 32.3569,
+      hitHigh: 34.7383,
+      medianPct: -1.0208,
+      excessMedianPct: -15e-4,
+      worstMedianPct: null,
+      baselineHitPct: 31.5509,
+      baselineMedianPct: -1.0192,
+      control: {
+        episodes: 2289,
+        hitPct: 29.2395,
+        medianPct: -1.0256,
+        baselineHitPct: 28.5688
+      },
+      verdict: "sans effet",
+      expectancyR: 0.1898
+    },
+    "setup:breakout": {
+      label: "Cassure avec volume",
+      bias: "bull",
+      horizon: 30,
+      days: 4891,
+      episodes: 3580,
+      frequencyPct: 3.8249,
+      hitPct: 52.2593,
+      hitLow: 50.8881,
+      hitHigh: 53.6336,
+      medianPct: 2.2388,
+      excessMedianPct: -0.0217,
+      worstMedianPct: -17.2086,
+      baselineHitPct: 45.5186,
+      baselineMedianPct: -2.6854,
+      control: {
+        episodes: 1851,
+        hitPct: 51.0655,
+        medianPct: 0.8329,
+        baselineHitPct: 43.1175
+      },
+      verdict: "valid\xE9"
+    },
+    "setup:macd": {
+      label: "Relance MACD",
+      bias: "bull",
+      horizon: 30,
+      days: 5664,
+      episodes: 2317,
+      frequencyPct: 4.4431,
+      hitPct: 49.2055,
+      hitLow: 47.495,
+      hitHigh: 50.91,
+      medianPct: -0.6946,
+      excessMedianPct: 0.3811,
+      worstMedianPct: -16.4064,
+      baselineHitPct: 45.5186,
+      baselineMedianPct: -2.6854,
+      control: {
+        episodes: 1286,
+        hitPct: 45.7835,
+        medianPct: -2.5809,
+        baselineHitPct: 43.1175
+      },
+      verdict: "prometteur"
+    },
+    "setup:oversold": {
+      label: "Survente + rebond",
+      bias: "bull",
+      horizon: 30,
+      days: 1061,
+      episodes: 844,
+      frequencyPct: 0.8331,
+      hitPct: 48.4449,
+      hitLow: 45.6393,
+      hitHigh: 51.2899,
+      medianPct: -1.0744,
+      excessMedianPct: 0.881,
+      worstMedianPct: -15.2655,
+      baselineHitPct: 45.5186,
+      baselineMedianPct: -2.6854,
+      control: {
+        episodes: 486,
+        hitPct: 44.7712,
+        medianPct: -2.3908,
+        baselineHitPct: 43.1175
+      },
+      verdict: "sans effet"
+    },
+    "temp:accumulation": {
+      label: "Temp\xE9rature : Accumulation (Bitcoin)",
+      bias: "bull",
+      horizon: 365,
+      days: 597,
+      episodes: 64,
+      frequencyPct: 27.5826,
+      hitPct: 67.3367,
+      hitLow: 57.0077,
+      hitHigh: 75.9728,
+      medianPct: 95.5513,
+      excessMedianPct: 47.3919,
+      worstMedianPct: -27.3742,
+      baselineHitPct: 64.1833,
+      baselineMedianPct: 43.8944,
+      control: {
+        episodes: 21,
+        hitPct: 87.1429,
+        medianPct: 114.1492,
+        baselineHitPct: 65.7769
+      },
+      verdict: "valid\xE9"
+    },
+    "temp:capitulation": {
+      label: "Temp\xE9rature : Peur extr\xEAme (Bitcoin)",
+      bias: "bull",
+      horizon: 365,
+      days: 319,
+      episodes: 13,
+      frequencyPct: 14.6435,
+      hitPct: 89.0282,
+      hitLow: 71.7719,
+      hitHigh: 98.265,
+      medianPct: 58.6422,
+      excessMedianPct: 75.6636,
+      worstMedianPct: -19.6594,
+      baselineHitPct: 64.1833,
+      baselineMedianPct: 43.8944,
+      control: {
+        episodes: 0,
+        hitPct: 100,
+        medianPct: 162.145,
+        baselineHitPct: 65.7769
+      },
+      verdict: "trop peu de cas"
+    },
+    "temp:chaleur": {
+      label: "Temp\xE9rature : March\xE9 chaud (Bitcoin)",
+      bias: "bear",
+      horizon: 365,
+      days: 510,
+      episodes: 46,
+      frequencyPct: 17.7391,
+      hitPct: 53.9216,
+      hitLow: 42.363,
+      hitHigh: 65.8495,
+      medianPct: 7.4446,
+      excessMedianPct: 34.0392,
+      worstMedianPct: -28.2102,
+      baselineHitPct: 64.1833,
+      baselineMedianPct: 43.8944,
+      control: {
+        episodes: 21,
+        hitPct: 56.2016,
+        medianPct: 16.0337,
+        baselineHitPct: 65.7769
+      },
+      verdict: "prometteur"
+    },
+    "temp:euphorie": {
+      label: "Temp\xE9rature : Euphorie (Bitcoin)",
+      bias: "bear",
+      horizon: 365,
+      days: 106,
+      episodes: 10,
+      frequencyPct: 3.687,
+      hitPct: 42.4528,
+      hitLow: 19.4214,
+      hitHigh: 64.838,
+      medianPct: -10.7813,
+      excessMedianPct: -11.8383,
+      worstMedianPct: -39.9143,
+      baselineHitPct: 64.1833,
+      baselineMedianPct: 43.8944,
+      control: {
+        episodes: 0,
+        hitPct: null,
+        medianPct: null,
+        baselineHitPct: 65.7769
+      },
+      verdict: "trop peu de cas"
+    },
+    "temp:neutre": {
+      label: "Temp\xE9rature : Neutre (Bitcoin)",
+      bias: "neutral",
+      horizon: 365,
+      days: 978,
+      episodes: 87,
+      frequencyPct: 36.3478,
+      hitPct: 61.8609,
+      hitLow: 53.2697,
+      hitHigh: 70.1401,
+      medianPct: 59.2219,
+      excessMedianPct: 37.0194,
+      worstMedianPct: -27.798,
+      baselineHitPct: 64.1833,
+      baselineMedianPct: 43.8944,
+      control: {
+        episodes: 41,
+        hitPct: 61.5114,
+        medianPct: 75.9449,
+        baselineHitPct: 65.7769
+      },
+      verdict: "sans effet"
+    },
+    "tr:Achat": {
+      label: "Trader \xAB Achat \xBB",
+      bias: "bull",
+      horizon: 14,
+      days: 1287,
+      episodes: 1180,
+      frequencyPct: 1.0059,
+      hitPct: 51.826,
+      hitLow: 49.4702,
+      hitHigh: 54.2501,
+      medianPct: 1.1197,
+      excessMedianPct: 0.0315,
+      worstMedianPct: -11.4301,
+      baselineHitPct: 46.5857,
+      baselineMedianPct: -1.27,
+      control: {
+        episodes: 638,
+        hitPct: 48.5714,
+        medianPct: -0.3729,
+        baselineHitPct: 44.5362
+      },
+      verdict: "prometteur"
+    },
+    "tr:Achat fort": {
+      label: "Trader \xAB Achat fort \xBB",
+      bias: "bull",
+      horizon: 14,
+      days: 3607,
+      episodes: 2750,
+      frequencyPct: 2.819,
+      hitPct: 51.1228,
+      hitLow: 49.5589,
+      hitHigh: 52.6934,
+      medianPct: 0.7177,
+      excessMedianPct: -0.2868,
+      worstMedianPct: -13.3958,
+      baselineHitPct: 46.5857,
+      baselineMedianPct: -1.27,
+      control: {
+        episodes: 1425,
+        hitPct: 52.0701,
+        medianPct: 1.4354,
+        baselineHitPct: 44.5362
+      },
+      verdict: "valid\xE9"
+    },
+    "tr:Neutre": {
+      label: "Trader \xAB Neutre \xBB",
+      bias: "neutral",
+      horizon: 14,
+      days: 122351,
+      episodes: 4236,
+      frequencyPct: 96.1751,
+      hitPct: 46.3968,
+      hitLow: 45.1304,
+      hitHigh: 47.6504,
+      medianPct: -1.3316,
+      excessMedianPct: 0,
+      worstMedianPct: -11.4232,
+      baselineHitPct: 46.5857,
+      baselineMedianPct: -1.27,
+      control: {
+        episodes: 2273,
+        hitPct: 44.2837,
+        medianPct: -1.8605,
+        baselineHitPct: 44.5362
+      },
+      verdict: "sans effet"
+    }
+  }
+};
+
+// src/lib/lab/reliability.ts
+var VERDICTS = /* @__PURE__ */ new Set(["valid\xE9", "prometteur", "sans effet", "invers\xE9", "trop peu de cas"]);
+var NUM = ["horizon", "days", "episodes", "frequencyPct", "hitPct", "hitLow", "hitHigh", "medianPct", "excessMedianPct", "baselineHitPct", "baselineMedianPct"];
+var isObj = (x) => !!x && typeof x === "object" && !Array.isArray(x);
+var isNum = (x) => typeof x === "number" || x === null;
+function validateReliability(x) {
+  if (!isObj(x) || typeof x.rulesVersion !== "number" || typeof x.generatedAt !== "string" || !isObj(x.universe) || !isObj(x.entries)) return null;
+  for (const e of Object.values(x.entries)) {
+    if (!isObj(e) || typeof e.label !== "string" || !VERDICTS.has(e.verdict) || !isObj(e.control)) return null;
+    if (NUM.some((k) => !isNum(e[k]))) return null;
+  }
+  return x;
+}
+var EMPTY = { generatedAt: "", dataThrough: "", rulesVersion: -1, universe: { assets: 0, from: "2019-01-01", top: 50 }, entries: {} };
+var RELIABILITY = validateReliability(reliability_default) ?? EMPTY;
+function reliabilityOf(key) {
+  return RELIABILITY.entries[key] ?? null;
+}
+var reliabilityFromYear = () => Number(RELIABILITY.universe.from.slice(0, 4)) || 2019;
+var fr0 = (x) => String(Math.round(x));
+var frR = (x) => `${x >= 0 ? "+" : ""}${(Math.round(x * 100) / 100).toFixed(2).replace(".", ",")}`;
+function reliabilityPhrase(e, fromYear = reliabilityFromYear()) {
+  if (!e) return "Fiabilit\xE9 non mesur\xE9e.";
+  if (e.verdict === "trop peu de cas") return `Pas assez de cas pour juger (${e.episodes} fois depuis ${fromYear}).`;
+  if (e.expectancyR != null) return `Depuis ${fromYear} : vu ${e.episodes} fois. Esp\xE9rance ${frR(e.expectancyR)} R par trade, frais compris. Verdict : ${e.verdict}.`;
+  return `Depuis ${fromYear} : vu ${e.episodes} fois. En hausse ${e.horizon} jours apr\xE8s dans ${fr0(e.hitPct)} % des cas (un jour quelconque : ${fr0(e.baselineHitPct)} %). Verdict : ${e.verdict}.`;
+}
+
+// src/lib/signals.ts
+var SIGNALS_VERSION = 2;
+var MIN_BARS_FOR_BUY = 200;
+function labelFor(score, horizon) {
+  const labels = horizon === "investor" ? ["Prendre des profits", "All\xE9ger", "Conserver", "Accumuler", "Accumuler fort"] : ["Vente forte", "Vente", "Neutre", "Achat", "Achat fort"];
+  if (score >= 45) return { label: labels[4], tone: "up", strength: 2 };
+  if (score >= 15) return { label: labels[3], tone: "up", strength: 1 };
+  if (score > -15) return { label: labels[2], tone: "neutral", strength: 0 };
+  if (score > -45) return { label: labels[1], tone: "down", strength: 1 };
+  return { label: labels[0], tone: "down", strength: 2 };
+}
+function combine(factors, horizon, bars) {
+  const usable = factors.filter((f) => Number.isFinite(f.vote));
+  const wsum = usable.reduce((s, f) => s + f.weight, 0);
+  const raw = usable.reduce((s, f) => s + f.vote * f.weight, 0);
+  const score = wsum > 0 ? Math.round(raw / (2 * wsum) * 100) : 0;
+  let l = labelFor(score, horizon);
+  const confidence = bars >= 200 && usable.length >= 4 ? "haute" : bars >= 100 ? "moyenne" : "faible";
+  let limitedBy;
+  if (bars < MIN_BARS_FOR_BUY && l.tone === "up") {
+    l = { label: horizon === "investor" ? "Conserver" : "Neutre", tone: "neutral", strength: 0 };
+    limitedBy = `Seulement ${bars} jours d\u2019historique : moins de 200, donc pas de signal d\u2019achat (le score ${score > 0 ? "+" : ""}${score} est indicatif).`;
+  }
+  return { score, ...l, factors: usable, confidence, limitedBy };
+}
+var pct = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
+var num = (v, d = 2) => v.toFixed(d).replace(".", ",");
+var isHot = (t) => t != null && t >= TEMPERATURE.warm && t < TEMPERATURE.euphoria;
+var INVESTOR_TABLE = [
+  {
+    label: "Prendre des profits",
+    tone: "down",
+    strength: 2,
+    when: (f) => f.temperature != null && f.temperature >= TEMPERATURE.euphoria,
+    why: (f) => `Euphorie (temp\xE9rature ${Math.round(f.temperature ?? 0)}/100) : \xE9tat de risque, une tranche peut \xEAtre all\xE9g\xE9e. Trop peu de cas historiques pour mesurer sa fiabilit\xE9.`
+  },
+  {
+    label: "All\xE9ger",
+    tone: "down",
+    strength: 1,
+    when: (f) => f.excess || !f.isBitcoin && isHot(f.temperature),
+    why: (f) => f.excess ? "Exc\xE8s (RSI hebdomadaire au-dessus de 80 ou prix \xE0 plus de 2 fois sa moyenne 200 jours) : dans l\u2019historique, la baisse qui a suivi a \xE9t\xE9 nettement plus profonde qu\u2019un jour quelconque." : `March\xE9 chaud (temp\xE9rature ${Math.round(f.temperature ?? 0)}/100) : pour une altcoin, la suite a \xE9t\xE9 nettement moins bonne qu\u2019un jour quelconque dans l\u2019historique, avec une baisse plus profonde.`
+  },
+  // « Accumuler fort » a manqué sa condition de sortie (+7,4 points au lieu de +8) : sa condition rejoint « Accumuler ».
+  {
+    label: "Accumuler",
+    tone: "up",
+    strength: 1,
+    when: (f) => f.enoughHistory && (f.strongScore || f.temperature != null && f.temperature < TEMPERATURE.fear),
+    why: (f) => f.temperature != null && f.temperature < TEMPERATURE.fear ? `Temp\xE9rature du march\xE9 sous 40 (${Math.round(f.temperature)}/100) : zone d\u2019accumulation ou de peur, valid\xE9e sur la p\xE9riode de contr\xF4le.` : "Score composite fort (\u2265 45) : tendance, valorisation et cycle align\xE9s, valid\xE9 sur la p\xE9riode de contr\xF4le."
+  },
+  { label: "Conserver", tone: "neutral", strength: 0, when: () => true, why: () => "Aucune condition mesur\xE9e comme fiable n\u2019est r\xE9unie : rien \xE0 faire." }
+];
+function investorV2(v1, temperature, bars, excess, isBitcoin) {
+  const f = { strongScore: v1.score >= 45, temperature, enoughHistory: bars >= MIN_BARS_FOR_BUY, excess, isBitcoin };
+  const line = INVESTOR_TABLE.find((l) => l.when(f));
+  const blocked = !f.enoughHistory && line.tone === "neutral" && (v1.score >= 45 || temperature != null && temperature < TEMPERATURE.fear);
+  return { ...v1, label: line.label, tone: line.tone, strength: line.strength, why: line.why(f), limitedBy: blocked ? v1.limitedBy ?? `Seulement ${bars} jours d\u2019historique : moins de 200, donc pas de signal d\u2019achat.` : void 0 };
+}
+function traderV2(v1, breakoutVolume) {
+  if (breakoutVolume == null) return { ...v1, label: "Neutre", tone: "neutral", strength: 0, score: 0, why: "Pas de cassure valid\xE9e : aucun signal trader fiable." };
+  const strong = breakoutVolume >= 2;
+  const score = Math.round(Math.min(100, 40 + (breakoutVolume - 1.5) * 40));
+  return { ...v1, label: strong ? "Achat fort" : "Achat", tone: "up", strength: strong ? 2 : 1, score, why: `Cassure des plus hauts 20 jours avec un volume \xD7${breakoutVolume.toFixed(1).replace(".", ",")}${strong ? " (\xD72 ou plus)" : ""} : valid\xE9e sur la p\xE9riode de contr\xF4le. Aucun plan de trade n\u2019a d\u2019esp\xE9rance positive mesur\xE9e apr\xE8s frais.` };
+}
+function analyze(candles, ctx = {}, opts = {}) {
+  if (candles.length < 30) return null;
+  const closes = candles.map((c) => c.close);
+  const price = closes[closes.length - 1];
+  const s20 = sma(closes, 20);
+  const s50 = sma(closes, 50);
+  const s200 = sma(closes, 200);
+  const r = rsi(closes, 14);
+  const m = macd(closes);
+  const bb = bollinger(closes, 20, 2);
+  const a = atr(candles, 14);
+  const weekly = toWeekly(candles);
+  const rw = rsi(weekly.map((w) => w.close), 14);
+  const sma20 = last(s20) ?? NaN;
+  const sma50 = last(s50) ?? NaN;
+  const sma200 = last(s200) ?? NaN;
+  const rsi14 = last(r) ?? NaN;
+  const rsiWeekly = last(rw) ?? NaN;
+  const mayer = Number.isFinite(sma200) && sma200 > 0 ? price / sma200 : NaN;
+  const atr14 = last(a) ?? NaN;
+  const atrPct = Number.isFinite(atr14) ? atr14 / price * 100 : NaN;
+  const inv = [];
+  if (Number.isFinite(sma200)) {
+    const slope = slopePct(s200, 20);
+    const above = price > sma200;
+    let vote;
+    let detail;
+    if (above && slope > 0) {
+      vote = 2;
+      detail = `Prix au-dessus d'une moyenne 200 jours qui monte (${pct(slope)} sur 20 j) : tendance de fond haussi\xE8re.`;
+    } else if (above) {
+      vote = 1;
+      detail = "Prix au-dessus de la moyenne 200 jours, mais celle-ci plafonne : tendance \xE0 confirmer.";
+    } else if (slope > 0) {
+      vote = 0;
+      detail = "Repli sous une moyenne 200 jours encore haussi\xE8re : zone de test, surveille la r\xE9action.";
+    } else {
+      vote = -2;
+      detail = `Prix sous une moyenne 200 jours qui baisse (${pct(slope)} sur 20 j) : tendance de fond baissi\xE8re, la patience paie.`;
+    }
+    inv.push({ key: "trend200", label: "Tendance de fond (MM200)", detail, vote, weight: 3 });
+    let mv;
+    let md;
+    if (mayer < 0.8) {
+      mv = 2;
+      md = `Prix \xE0 ${num(mayer)}\xD7 sa moyenne 200 j : historiquement une zone \xAB sold\xE9e \xBB d'accumulation.`;
+    } else if (mayer < 1) {
+      mv = 1;
+      md = `Prix l\xE9g\xE8rement sous sa moyenne 200 j (${num(mayer)}\xD7) : valorisation attractive.`;
+    } else if (mayer < 1.5) {
+      mv = 0;
+      md = `Multiple de Mayer ${num(mayer)} : valorisation normale.`;
+    } else if (mayer < 2) {
+      mv = -1;
+      md = `Multiple de Mayer ${num(mayer)} : le prix s'\xE9tire au-dessus de sa moyenne, marge de s\xE9curit\xE9 r\xE9duite.`;
+    } else {
+      mv = -2;
+      md = `Multiple de Mayer ${num(mayer)} : surchauffe, historiquement zone de prises de profits.`;
+    }
+    inv.push({ key: "mayer", label: "Valorisation (multiple de Mayer)", detail: md, vote: mv, weight: 3 });
+  }
+  if (Number.isFinite(sma50) && Number.isFinite(sma200)) {
+    const cross = lastCross(s50, s200, 20);
+    let vote;
+    let detail;
+    if (cross?.dir === 1) {
+      vote = 2;
+      detail = `Croisement dor\xE9 il y a ${cross.barsAgo} j (MM50 passe au-dessus de la MM200).`;
+    } else if (cross?.dir === -1) {
+      vote = -2;
+      detail = `Croisement de la mort il y a ${cross.barsAgo} j (MM50 passe sous la MM200).`;
+    } else if (sma50 > sma200) {
+      vote = 1;
+      detail = "MM50 au-dessus de la MM200 : structure haussi\xE8re.";
+    } else {
+      vote = -1;
+      detail = "MM50 sous la MM200 : structure baissi\xE8re.";
+    }
+    inv.push({ key: "cross", label: "Structure (MM50 / MM200)", detail, vote, weight: 2 });
+  }
+  if (Number.isFinite(rsiWeekly)) {
+    let vote = 0;
+    let detail = `RSI hebdo ${Math.round(rsiWeekly)} : zone neutre.`;
+    if (rsiWeekly < 30) {
+      vote = 2;
+      detail = `RSI hebdo ${Math.round(rsiWeekly)} : survente rare sur ce temps long, opportunit\xE9 historique.`;
+    } else if (rsiWeekly < 45) {
+      vote = 1;
+      detail = `RSI hebdo ${Math.round(rsiWeekly)} : momentum faible, prix plut\xF4t bas.`;
+    } else if (rsiWeekly > 80) {
+      vote = -2;
+      detail = `RSI hebdo ${Math.round(rsiWeekly)} : euphorie, risque de correction violente.`;
+    } else if (rsiWeekly > 65) {
+      vote = -1;
+      detail = `RSI hebdo ${Math.round(rsiWeekly)} : march\xE9 chaud.`;
+    }
+    inv.push({ key: "rsiw", label: "Momentum long (RSI hebdo)", detail, vote, weight: 2 });
+  }
+  if (ctx.athChangePct != null && Number.isFinite(ctx.athChangePct)) {
+    const d = ctx.athChangePct;
+    let vote = 0;
+    let detail = `\xC0 ${pct(d)} de son plus haut historique.`;
+    if (d <= -85) {
+      vote = 0;
+      detail = `\xC0 ${pct(d)} de son ATH : soit une opportunit\xE9, soit un projet en d\xE9clin. V\xE9rifie les fondamentaux avant tout.`;
+    } else if (d <= -50) {
+      vote = 1;
+      detail = `\xC0 ${pct(d)} de son ATH : forte d\xE9cote si le projet est toujours solide.`;
+    } else if (d > -15) {
+      vote = -1;
+      detail = `\xC0 ${pct(d)} de son ATH : peu de marge de s\xE9curit\xE9.`;
+    }
+    inv.push({ key: "ath", label: "Distance au plus haut (ATH)", detail, vote, weight: 1 });
+  }
+  if (ctx.temperature != null && Number.isFinite(ctx.temperature)) {
+    const t = ctx.temperature;
+    let vote = 0;
+    let detail = `Temp\xE9rature du march\xE9 ${Math.round(t)}/100 : neutre.`;
+    if (t < TEMPERATURE.extremeFear) {
+      vote = 2;
+      detail = `Temp\xE9rature ${Math.round(t)}/100 : peur extr\xEAme, les meilleures opportunit\xE9s naissent ici.`;
+    } else if (t < TEMPERATURE.fear) {
+      vote = 1;
+      detail = `Temp\xE9rature ${Math.round(t)}/100 : climat d'accumulation.`;
+    } else if (t >= TEMPERATURE.euphoria) {
+      vote = -2;
+      detail = `Temp\xE9rature ${Math.round(t)}/100 : euphorie g\xE9n\xE9rale, s\xE9curise des gains.`;
+    } else if (t >= TEMPERATURE.warm) {
+      vote = -1;
+      detail = `Temp\xE9rature ${Math.round(t)}/100 : march\xE9 chaud, sois s\xE9lectif.`;
+    }
+    inv.push({ key: "cycle", label: "Contexte de march\xE9 (cycle)", detail, vote, weight: 2 });
+  }
+  const tr = [];
+  if (Number.isFinite(sma20) && Number.isFinite(sma50)) {
+    let vote;
+    let detail;
+    if (price > sma20 && sma20 > sma50) {
+      vote = 2;
+      detail = "Prix > MM20 > MM50 : tendance court terme haussi\xE8re bien align\xE9e.";
+    } else if (price > sma20) {
+      vote = 1;
+      detail = "Prix repasse au-dessus de la MM20 : tentative de rebond.";
+    } else if (sma20 > sma50) {
+      vote = -1;
+      detail = "Prix sous la MM20 dans une tendance encore haussi\xE8re : repli en cours.";
+    } else {
+      vote = -2;
+      detail = "Prix < MM20 < MM50 : tendance court terme baissi\xE8re.";
+    }
+    tr.push({ key: "trend", label: "Tendance court terme", detail, vote, weight: 3 });
+  }
+  {
+    const h0 = last(m.hist) ?? NaN;
+    const h1 = last(m.hist, 1) ?? NaN;
+    const line = last(m.macd) ?? NaN;
+    if (Number.isFinite(h0) && Number.isFinite(h1) && Number.isFinite(line)) {
+      const cross = lastCross(m.macd, m.signal, 3);
+      let vote;
+      let detail;
+      if (cross?.dir === 1) {
+        vote = line > 0 ? 2 : 1;
+        detail = `Croisement haussier du MACD il y a ${cross.barsAgo} j${line > 0 ? "" : " (sous la ligne z\xE9ro : \xE0 confirmer)"}.`;
+      } else if (cross?.dir === -1) {
+        vote = line < 0 ? -2 : -1;
+        detail = `Croisement baissier du MACD il y a ${cross.barsAgo} j${line < 0 ? "" : " (encore au-dessus de z\xE9ro)"}.`;
+      } else if (line > 0 && h0 > 0) {
+        vote = h0 >= h1 ? 2 : 1;
+        detail = h0 >= h1 ? "MACD positif et en acc\xE9l\xE9ration." : "MACD positif, le momentum ralentit un peu.";
+      } else if (line < 0 && h0 < 0) {
+        vote = h0 <= h1 ? -2 : -1;
+        detail = h0 <= h1 ? "MACD n\xE9gatif et en acc\xE9l\xE9ration baissi\xE8re." : "MACD n\xE9gatif, la baisse ralentit.";
+      } else if (line > 0) {
+        vote = 0;
+        detail = "MACD positif mais sous son signal : essoufflement.";
+      } else {
+        vote = 0;
+        detail = "MACD n\xE9gatif mais au-dessus de son signal : la pression vendeuse s\u2019att\xE9nue.";
+      }
+      tr.push({ key: "macd", label: "Momentum (MACD)", detail, vote, weight: 2 });
+    }
+  }
+  if (Number.isFinite(rsi14)) {
+    const downTrend = Number.isFinite(sma50) && price < sma50;
+    const upTrend = Number.isFinite(sma50) && price > sma50;
+    let vote = 0;
+    let detail = `RSI ${Math.round(rsi14)} : ni exc\xE8s d'achat ni de vente.`;
+    if (rsi14 < 30) {
+      vote = downTrend ? 1 : 2;
+      detail = downTrend ? `RSI ${Math.round(rsi14)} : survente, mais contre la tendance \u2014 rebond technique possible, pas encore un retournement.` : `RSI ${Math.round(rsi14)} : survente, un rebond est fr\xE9quent.`;
+    } else if (rsi14 < 40) {
+      vote = downTrend ? 0 : 1;
+      detail = `RSI ${Math.round(rsi14)} : proche de la survente.`;
+    } else if (rsi14 > 75) {
+      vote = upTrend ? -1 : -2;
+      detail = upTrend ? `RSI ${Math.round(rsi14)} : surachat dans une tendance forte \u2014 risque de pause ou de correction.` : `RSI ${Math.round(rsi14)} : surachat marqu\xE9, risque de correction.`;
+    } else if (rsi14 > 65) {
+      vote = upTrend ? 0 : -1;
+      detail = `RSI ${Math.round(rsi14)} : proche du surachat.`;
+    }
+    tr.push({ key: "rsi", label: "Exc\xE8s (RSI 14 j)", detail, vote, weight: 1.5 });
+  }
+  {
+    const lo = last(bb.lower) ?? NaN;
+    const up = last(bb.upper) ?? NaN;
+    if (Number.isFinite(lo) && Number.isFinite(up)) {
+      let vote = 0;
+      let detail = "Prix dans ses bandes de Bollinger.";
+      if (price < lo) {
+        vote = 1;
+        detail = "Prix sous la bande de Bollinger basse : exc\xE8s baissier, souvent suivi d\u2019un retour vers la moyenne.";
+      } else if (price > up) {
+        vote = -1;
+        detail = "Prix au-dessus de la bande haute : extension, attention au retour vers la moyenne.";
+      }
+      tr.push({ key: "bb", label: "Bandes de Bollinger", detail, vote, weight: 1 });
+    }
+  }
+  if (candles.length > 22) {
+    const highs = candles.map((c) => c.high);
+    const lows = candles.map((c) => c.low);
+    const prevHigh = highest(highs, 20, candles.length - 2);
+    const prevLow = lowest(lows, 20, candles.length - 2);
+    const vr = volumeRatio(candles, 20, opts);
+    let vote = 0;
+    let detail = "Pas de cassure significative des plus hauts/bas 20 jours.";
+    if (price > prevHigh && vr > 1.5) {
+      vote = 2;
+      detail = `Cassure des plus hauts 20 j avec un volume \xD7${num(vr, 1)} : signal de force.`;
+    } else if (price > prevHigh) {
+      vote = 1;
+      detail = "Cassure des plus hauts 20 j, mais sans volume convaincant.";
+    } else if (price < prevLow && vr > 1.5) {
+      vote = -2;
+      detail = `Cassure des plus bas 20 j avec un volume \xD7${num(vr, 1)} : signal de faiblesse.`;
+    } else if (price < prevLow) {
+      vote = -1;
+      detail = "Le prix enfonce ses plus bas 20 j.";
+    }
+    tr.push({ key: "breakout", label: "Cassure & volume", detail, vote, weight: 2 });
+  }
+  const investorV1 = combine(inv, "investor", candles.length);
+  const traderV1 = combine(tr, "trader", candles.length);
+  let breakoutVolume = null;
+  if (candles.length > 22) {
+    const vr = volumeRatio(candles, 20, opts);
+    if (price > highest(candles.map((c) => c.high), 20, candles.length - 2) && vr >= 1.5) breakoutVolume = vr;
+  }
+  const excess = Number.isFinite(rsiWeekly) && rsiWeekly > 80 || Number.isFinite(mayer) && mayer > 2;
+  const investor = investorV2(investorV1, ctx.temperature ?? null, candles.length, excess, !!ctx.isBitcoin);
+  const trader2 = traderV2(traderV1, breakoutVolume);
+  const levels = supportResistance(candles, 5, 2.5, 365);
+  const supports = levels.filter((l) => l.price < price).map((l) => l.price);
+  const resistances = levels.filter((l) => l.price > price).map((l) => l.price);
+  const support = supports.length ? supports[supports.length - 1] : null;
+  const resistance = resistances.length ? resistances[0] : null;
+  let plan = null;
+  if (Number.isFinite(atr14) && atr14 > 0) {
+    const entry = price;
+    let stop = support != null ? support - 0.5 * atr14 : price - 2 * atr14;
+    stop = Math.max(stop, price - 3 * atr14);
+    if (stop > price - 0.8 * atr14) stop = price - 1.5 * atr14;
+    const risk = entry - stop;
+    plan = {
+      entry,
+      stop,
+      tp1: entry + 1.5 * risk,
+      tp2: entry + 3 * risk,
+      exitOnClose: true,
+      riskPct: risk / entry * 100,
+      atr: atr14,
+      support,
+      resistance
+    };
+  }
+  const accumulation = Number.isFinite(sma200) ? { low: sma200 * 0.85, high: sma200 * 1.02 } : null;
+  const profitZone = Number.isFinite(sma200) ? sma200 * 2 : null;
+  return {
+    price,
+    sma20,
+    sma50,
+    sma200,
+    rsi14,
+    rsiWeekly,
+    mayer,
+    atrPct,
+    change7d: changePct(closes, 7),
+    change30d: changePct(closes, 30),
+    investor,
+    trader: trader2,
+    plan,
+    accumulation,
+    profitZone,
+    setups: detectSetups(candles, { s20, s50, s200, r, m, bbWidth: bb.width }, opts),
+    bars: candles.length
+  };
+}
+function detectSetups(candles, s, opts = {}) {
+  const out = [];
+  const n2 = candles.length;
+  if (n2 < 30) return out;
+  const c = candles[n2 - 1];
+  const prev = candles[n2 - 2];
+  const price = c.close;
+  const sma50 = s.s50[n2 - 1];
+  const rsi14 = s.r[n2 - 1];
+  const highs = candles.map((k) => k.high);
+  const vr = volumeRatio(candles, 20, opts);
+  const prevHigh = highest(highs, 20, n2 - 2);
+  if (price > prevHigh && vr > 1.5) out.push({ key: "breakout", label: "Cassure avec volume", bias: "bull", detail: `Plus haut 20 j cass\xE9, volume \xD7${num(vr, 1)}.` });
+  if (rsi14 < 30 && price > prev.close) out.push({ key: "oversold", label: "Survente + rebond", bias: "bull", detail: `RSI ${Math.round(rsi14)} et premi\xE8re bougie verte (prometteur sur 14 jours, pas valid\xE9).` });
+  const mc = lastCross(s.m.macd, s.m.signal, 3);
+  if (mc?.dir === 1 && Number.isFinite(sma50) && price > sma50) out.push({ key: "macd", label: "Relance MACD", bias: "bull", detail: "MACD repasse au-dessus de son signal, prix au-dessus de la MM50 (prometteur, pas valid\xE9)." });
+  return out;
+}
+var SETUP_KEYS = {
+  breakout: "Cassure avec volume",
+  oversold: "Survente + rebond",
+  macd: "Relance MACD"
+};
+
+// src/runner/signals.ts
+var TRACKED_LABEL = {
+  "inv:All\xE9ger": "passe \xE0 \xAB All\xE9ger \xBB",
+  "inv:Prendre des profits": "passe \xE0 \xAB Prendre des profits \xBB"
+};
+function signalKeysOf(a) {
+  const keys = [];
+  const inv = `inv:${a.investor}`;
+  if (TRACKED_LABEL[inv]) keys.push(inv);
+  for (const s of a.setups) if (reliabilityOf(`setup:${s}`)?.verdict === "valid\xE9") keys.push(`setup:${s}`);
+  return keys;
+}
+async function computeSignals(coins, src, top = 20) {
+  const all = new Map(coins.map((c) => [c.coinId, c.symbol]));
+  const uni = await src.universe().catch(() => []);
+  for (const u of uni.slice(0, top)) if (!all.has(u.coinId)) all.set(u.coinId, u.symbol);
+  const out = {};
+  for (const [coinId, symbol] of all) {
+    const candles = await src.daily(coinId).catch(() => []);
+    const last2 = candles[candles.length - 1];
+    if (!last2) continue;
+    const day = new Date(last2.time * 1e3).toISOString().slice(0, 10);
+    const a = analyze(candles, { temperature: src.temperatureAt(day) ?? void 0, isBitcoin: coinId === "bitcoin" }, { closedOnly: true });
+    if (!a) continue;
+    out[coinId] = { symbol, keys: signalKeysOf({ investor: a.investor.label, setups: a.setups.map((s) => s.key) }) };
+  }
+  return out;
+}
+function advanceSignals(prev, today, day) {
+  const events = [];
+  const active = {};
+  const starts = { ...prev.starts };
+  for (const [coinId, { symbol, keys }] of Object.entries(today)) {
+    active[coinId] = keys;
+    const before = new Set(prev.active[coinId] ?? []);
+    for (const k of keys) {
+      if (before.has(k)) continue;
+      starts[`${coinId}|${k}`] = day;
+      events.push({ key: `sig:${coinId}:${k}:${day}`, coinId, symbol, signal: k, kind: "enter", episodeStart: day });
+    }
+    for (const k of before) {
+      if (keys.includes(k)) continue;
+      const start = starts[`${coinId}|${k}`] ?? day;
+      delete starts[`${coinId}|${k}`];
+      if (k.startsWith("inv:")) events.push({ key: `sig:${coinId}:${k}:${start}:fin`, coinId, symbol, signal: k, kind: "exit", episodeStart: start });
+    }
+  }
+  return { state: { active, starts }, events };
+}
+function signalMessage(e, phrase) {
+  const what = e.signal.startsWith("setup:") ? `setup \xAB ${e.signal === "setup:breakout" ? "Cassure avec volume" : e.signal.slice(6)} \xBB` : TRACKED_LABEL[e.signal] ?? e.signal;
+  const head = e.kind === "enter" ? `Signal ${e.symbol.toUpperCase()} : ${what}` : `Signal ${e.symbol.toUpperCase()} : fin de \xAB ${e.signal.slice(4)} \xBB (depuis le ${e.episodeStart.slice(8, 10)}/${e.episodeStart.slice(5, 7)})`;
+  return `${head}
+Fiabilit\xE9 : ${phrase}`;
+}
+
 // src/runner/cycle.ts
 var DAY_MS2 = 24 * 36e5;
 var ZONE_REPEAT_MS = 7 * DAY_MS2;
@@ -2263,6 +3311,26 @@ ${ev.advice}` });
     }
   }
   queue.push(...smartAlerts);
+  const utcDay = now.toISOString().slice(0, 10);
+  if (cfg.signalAlertsEnabled && deps.signals && state.signals?.day !== utcDay && now.getUTCHours() * 60 + now.getUTCMinutes() >= 10) {
+    const watchIds = Array.isArray(bundle.data.watchlist) ? bundle.data.watchlist : [];
+    const coins = /* @__PURE__ */ new Map();
+    for (const p of buildPositions(watch.transactions).values()) if (p.coinId && p.quantity > 0) coins.set(p.coinId, p.symbol);
+    for (const id of watchIds) if (!coins.has(id)) coins.set(id, id);
+    const today = await deps.signals([...coins].map(([coinId, symbol]) => ({ coinId, symbol }))).catch(() => null);
+    if (today) {
+      const r = advanceSignals({ active: state.signals?.active ?? {}, starts: state.signals?.starts ?? {} }, today, utcDay);
+      if (state.signals && !onVacation) {
+        let n2 = 0;
+        for (const e of r.events) {
+          if (n2 >= 3 || !shouldSend(state, e.key)) continue;
+          queue.push({ key: e.key, text: signalMessage(e, reliabilityPhrase(reliabilityOf(e.signal))) });
+          n2++;
+        }
+      }
+      if (!opts.dry) state = { ...state, signals: { day: utcDay, ...r.state } };
+    }
+  }
   if (cfg.autopilotTelegram && !onVacation) {
     for (const e of autopilotEvents) if (shouldSend(state, e.key)) queue.push(e);
   }
@@ -3134,9 +4202,10 @@ function applyIntent(book, intent, marketUsd, costs, opts) {
       costUsd: (prev?.costUsd ?? 0) + amount,
       openedOn: prev?.openedOn ?? opts.day,
       ...intent.stop != null ? { stop: intent.stop } : prev?.stop != null ? { stop: prev.stop } : {},
-      ...target != null ? { target } : prev?.target != null ? { target: prev.target } : {}
+      ...target != null ? { target } : prev?.target != null ? { target: prev.target } : {},
+      ...intent.stopOnClose ? { stopOnClose: true } : prev?.stopOnClose ? { stopOnClose: true } : {}
     };
-    const fill = { ...base, side: "buy", kind: "market", quantity, priceUsd: price, feeUsd: fee, ...intent.stop != null ? { stop: intent.stop } : {}, ...target != null ? { target } : {} };
+    const fill = { ...base, side: "buy", kind: "market", quantity, priceUsd: price, feeUsd: fee, ...intent.stop != null ? { stop: intent.stop } : {}, ...target != null ? { target } : {}, ...intent.stopOnClose ? { stopOnClose: true } : {} };
     return { book: { cashUsd: book.cashUsd - amount, positions: { ...book.positions, [intent.coinId]: pos2 } }, fill, skip: null };
   }
   const pos = book.positions[intent.coinId];
@@ -3167,7 +4236,7 @@ function settleBar(book, coinId, bar, costs, at, opts = {}) {
   const pos = book.positions[coinId];
   if (!pos) return { book, fill: null };
   const base = { coinId, symbol: pos.symbol, name: pos.name, at };
-  const stopAt = pos.stop != null ? pendingHit("stop", pos.stop, bar, opts) : null;
+  const stopAt = pos.stop != null && !pos.stopOnClose ? pendingHit("stop", pos.stop, bar, opts) : null;
   if (stopAt != null) {
     const r = sellOut(book, pos, 1, stopAt, costs, { ...base, marketUsd: stopAt, kind: "stop", reason: "stop touch\xE9", tag: "stop" });
     return { book: r.book, fill: r.fill };
@@ -3214,7 +4283,8 @@ function autoState(portfolio, logs, closeOf) {
           costUsd: (p?.costUsd ?? 0) + amount,
           openedOn: p?.openedOn ?? l.day,
           ...f.stop != null ? { stop: f.stop } : p?.stop != null ? { stop: p.stop } : {},
-          ...f.target != null ? { target: f.target } : p?.target != null ? { target: p.target } : {}
+          ...f.target != null ? { target: f.target } : p?.target != null ? { target: p.target } : {},
+          ...f.stopOnClose || p?.stopOnClose ? { stopOnClose: true } : {}
         };
       } else {
         cash += f.quantity * f.priceUsd - f.feeUsd;
@@ -3255,367 +4325,6 @@ function effectiveCursor(portfolio, logs) {
   for (const l of logs) if (l.portfolioId === portfolio.id && l.day > c) c = l.day;
   return c;
 }
-
-// src/lib/signals.ts
-var SIGNALS_VERSION = 1;
-var MIN_BARS_FOR_BUY = 200;
-function labelFor(score, horizon) {
-  const labels = horizon === "investor" ? ["Prendre des profits", "All\xE9ger", "Conserver", "Accumuler", "Accumuler fort"] : ["Vente forte", "Vente", "Neutre", "Achat", "Achat fort"];
-  if (score >= 45) return { label: labels[4], tone: "up", strength: 2 };
-  if (score >= 15) return { label: labels[3], tone: "up", strength: 1 };
-  if (score > -15) return { label: labels[2], tone: "neutral", strength: 0 };
-  if (score > -45) return { label: labels[1], tone: "down", strength: 1 };
-  return { label: labels[0], tone: "down", strength: 2 };
-}
-function combine(factors, horizon, bars) {
-  const usable = factors.filter((f) => Number.isFinite(f.vote));
-  const wsum = usable.reduce((s, f) => s + f.weight, 0);
-  const raw = usable.reduce((s, f) => s + f.vote * f.weight, 0);
-  const score = wsum > 0 ? Math.round(raw / (2 * wsum) * 100) : 0;
-  let l = labelFor(score, horizon);
-  const confidence = bars >= 200 && usable.length >= 4 ? "haute" : bars >= 100 ? "moyenne" : "faible";
-  let limitedBy;
-  if (bars < MIN_BARS_FOR_BUY && l.tone === "up") {
-    l = { label: horizon === "investor" ? "Conserver" : "Neutre", tone: "neutral", strength: 0 };
-    limitedBy = `Seulement ${bars} jours d\u2019historique : moins de 200, donc pas de signal d\u2019achat (le score ${score > 0 ? "+" : ""}${score} est indicatif).`;
-  }
-  return { score, ...l, factors: usable, confidence, limitedBy };
-}
-var pct = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
-var num = (v, d = 2) => v.toFixed(d).replace(".", ",");
-function analyze(candles, ctx = {}, opts = {}) {
-  if (candles.length < 30) return null;
-  const closes = candles.map((c) => c.close);
-  const price = closes[closes.length - 1];
-  const s20 = sma(closes, 20);
-  const s50 = sma(closes, 50);
-  const s200 = sma(closes, 200);
-  const r = rsi(closes, 14);
-  const m = macd(closes);
-  const bb = bollinger(closes, 20, 2);
-  const a = atr(candles, 14);
-  const weekly = toWeekly(candles);
-  const rw = rsi(weekly.map((w) => w.close), 14);
-  const sma20 = last(s20) ?? NaN;
-  const sma50 = last(s50) ?? NaN;
-  const sma200 = last(s200) ?? NaN;
-  const rsi14 = last(r) ?? NaN;
-  const rsiWeekly = last(rw) ?? NaN;
-  const mayer = Number.isFinite(sma200) && sma200 > 0 ? price / sma200 : NaN;
-  const atr14 = last(a) ?? NaN;
-  const atrPct = Number.isFinite(atr14) ? atr14 / price * 100 : NaN;
-  const inv = [];
-  if (Number.isFinite(sma200)) {
-    const slope = slopePct(s200, 20);
-    const above = price > sma200;
-    let vote;
-    let detail;
-    if (above && slope > 0) {
-      vote = 2;
-      detail = `Prix au-dessus d'une moyenne 200 jours qui monte (${pct(slope)} sur 20 j) : tendance de fond haussi\xE8re.`;
-    } else if (above) {
-      vote = 1;
-      detail = "Prix au-dessus de la moyenne 200 jours, mais celle-ci plafonne : tendance \xE0 confirmer.";
-    } else if (slope > 0) {
-      vote = 0;
-      detail = "Repli sous une moyenne 200 jours encore haussi\xE8re : zone de test, surveille la r\xE9action.";
-    } else {
-      vote = -2;
-      detail = `Prix sous une moyenne 200 jours qui baisse (${pct(slope)} sur 20 j) : tendance de fond baissi\xE8re, la patience paie.`;
-    }
-    inv.push({ key: "trend200", label: "Tendance de fond (MM200)", detail, vote, weight: 3 });
-    let mv;
-    let md;
-    if (mayer < 0.8) {
-      mv = 2;
-      md = `Prix \xE0 ${num(mayer)}\xD7 sa moyenne 200 j : historiquement une zone \xAB sold\xE9e \xBB d'accumulation.`;
-    } else if (mayer < 1) {
-      mv = 1;
-      md = `Prix l\xE9g\xE8rement sous sa moyenne 200 j (${num(mayer)}\xD7) : valorisation attractive.`;
-    } else if (mayer < 1.5) {
-      mv = 0;
-      md = `Multiple de Mayer ${num(mayer)} : valorisation normale.`;
-    } else if (mayer < 2) {
-      mv = -1;
-      md = `Multiple de Mayer ${num(mayer)} : le prix s'\xE9tire au-dessus de sa moyenne, marge de s\xE9curit\xE9 r\xE9duite.`;
-    } else {
-      mv = -2;
-      md = `Multiple de Mayer ${num(mayer)} : surchauffe, historiquement zone de prises de profits.`;
-    }
-    inv.push({ key: "mayer", label: "Valorisation (multiple de Mayer)", detail: md, vote: mv, weight: 3 });
-  }
-  if (Number.isFinite(sma50) && Number.isFinite(sma200)) {
-    const cross = lastCross(s50, s200, 20);
-    let vote;
-    let detail;
-    if (cross?.dir === 1) {
-      vote = 2;
-      detail = `Croisement dor\xE9 il y a ${cross.barsAgo} j (MM50 passe au-dessus de la MM200).`;
-    } else if (cross?.dir === -1) {
-      vote = -2;
-      detail = `Croisement de la mort il y a ${cross.barsAgo} j (MM50 passe sous la MM200).`;
-    } else if (sma50 > sma200) {
-      vote = 1;
-      detail = "MM50 au-dessus de la MM200 : structure haussi\xE8re.";
-    } else {
-      vote = -1;
-      detail = "MM50 sous la MM200 : structure baissi\xE8re.";
-    }
-    inv.push({ key: "cross", label: "Structure (MM50 / MM200)", detail, vote, weight: 2 });
-  }
-  if (Number.isFinite(rsiWeekly)) {
-    let vote = 0;
-    let detail = `RSI hebdo ${Math.round(rsiWeekly)} : zone neutre.`;
-    if (rsiWeekly < 30) {
-      vote = 2;
-      detail = `RSI hebdo ${Math.round(rsiWeekly)} : survente rare sur ce temps long, opportunit\xE9 historique.`;
-    } else if (rsiWeekly < 45) {
-      vote = 1;
-      detail = `RSI hebdo ${Math.round(rsiWeekly)} : momentum faible, prix plut\xF4t bas.`;
-    } else if (rsiWeekly > 80) {
-      vote = -2;
-      detail = `RSI hebdo ${Math.round(rsiWeekly)} : euphorie, risque de correction violente.`;
-    } else if (rsiWeekly > 65) {
-      vote = -1;
-      detail = `RSI hebdo ${Math.round(rsiWeekly)} : march\xE9 chaud.`;
-    }
-    inv.push({ key: "rsiw", label: "Momentum long (RSI hebdo)", detail, vote, weight: 2 });
-  }
-  if (ctx.athChangePct != null && Number.isFinite(ctx.athChangePct)) {
-    const d = ctx.athChangePct;
-    let vote = 0;
-    let detail = `\xC0 ${pct(d)} de son plus haut historique.`;
-    if (d <= -85) {
-      vote = 0;
-      detail = `\xC0 ${pct(d)} de son ATH : soit une opportunit\xE9, soit un projet en d\xE9clin. V\xE9rifie les fondamentaux avant tout.`;
-    } else if (d <= -50) {
-      vote = 1;
-      detail = `\xC0 ${pct(d)} de son ATH : forte d\xE9cote si le projet est toujours solide.`;
-    } else if (d > -15) {
-      vote = -1;
-      detail = `\xC0 ${pct(d)} de son ATH : peu de marge de s\xE9curit\xE9.`;
-    }
-    inv.push({ key: "ath", label: "Distance au plus haut (ATH)", detail, vote, weight: 1 });
-  }
-  if (ctx.temperature != null && Number.isFinite(ctx.temperature)) {
-    const t = ctx.temperature;
-    let vote = 0;
-    let detail = `Temp\xE9rature du march\xE9 ${Math.round(t)}/100 : neutre.`;
-    if (t < TEMPERATURE.extremeFear) {
-      vote = 2;
-      detail = `Temp\xE9rature ${Math.round(t)}/100 : peur extr\xEAme, les meilleures opportunit\xE9s naissent ici.`;
-    } else if (t < TEMPERATURE.fear) {
-      vote = 1;
-      detail = `Temp\xE9rature ${Math.round(t)}/100 : climat d'accumulation.`;
-    } else if (t >= TEMPERATURE.euphoria) {
-      vote = -2;
-      detail = `Temp\xE9rature ${Math.round(t)}/100 : euphorie g\xE9n\xE9rale, s\xE9curise des gains.`;
-    } else if (t >= TEMPERATURE.warm) {
-      vote = -1;
-      detail = `Temp\xE9rature ${Math.round(t)}/100 : march\xE9 chaud, sois s\xE9lectif.`;
-    }
-    inv.push({ key: "cycle", label: "Contexte de march\xE9 (cycle)", detail, vote, weight: 2 });
-  }
-  const tr = [];
-  if (Number.isFinite(sma20) && Number.isFinite(sma50)) {
-    let vote;
-    let detail;
-    if (price > sma20 && sma20 > sma50) {
-      vote = 2;
-      detail = "Prix > MM20 > MM50 : tendance court terme haussi\xE8re bien align\xE9e.";
-    } else if (price > sma20) {
-      vote = 1;
-      detail = "Prix repasse au-dessus de la MM20 : tentative de rebond.";
-    } else if (sma20 > sma50) {
-      vote = -1;
-      detail = "Prix sous la MM20 dans une tendance encore haussi\xE8re : repli en cours.";
-    } else {
-      vote = -2;
-      detail = "Prix < MM20 < MM50 : tendance court terme baissi\xE8re.";
-    }
-    tr.push({ key: "trend", label: "Tendance court terme", detail, vote, weight: 3 });
-  }
-  {
-    const h0 = last(m.hist) ?? NaN;
-    const h1 = last(m.hist, 1) ?? NaN;
-    const line = last(m.macd) ?? NaN;
-    if (Number.isFinite(h0) && Number.isFinite(h1) && Number.isFinite(line)) {
-      const cross = lastCross(m.macd, m.signal, 3);
-      let vote;
-      let detail;
-      if (cross?.dir === 1) {
-        vote = line > 0 ? 2 : 1;
-        detail = `Croisement haussier du MACD il y a ${cross.barsAgo} j${line > 0 ? "" : " (sous la ligne z\xE9ro : \xE0 confirmer)"}.`;
-      } else if (cross?.dir === -1) {
-        vote = line < 0 ? -2 : -1;
-        detail = `Croisement baissier du MACD il y a ${cross.barsAgo} j${line < 0 ? "" : " (encore au-dessus de z\xE9ro)"}.`;
-      } else if (line > 0 && h0 > 0) {
-        vote = h0 >= h1 ? 2 : 1;
-        detail = h0 >= h1 ? "MACD positif et en acc\xE9l\xE9ration." : "MACD positif, le momentum ralentit un peu.";
-      } else if (line < 0 && h0 < 0) {
-        vote = h0 <= h1 ? -2 : -1;
-        detail = h0 <= h1 ? "MACD n\xE9gatif et en acc\xE9l\xE9ration baissi\xE8re." : "MACD n\xE9gatif, la baisse ralentit.";
-      } else if (line > 0) {
-        vote = 0;
-        detail = "MACD positif mais sous son signal : essoufflement.";
-      } else {
-        vote = 0;
-        detail = "MACD n\xE9gatif mais au-dessus de son signal : la pression vendeuse s\u2019att\xE9nue.";
-      }
-      tr.push({ key: "macd", label: "Momentum (MACD)", detail, vote, weight: 2 });
-    }
-  }
-  if (Number.isFinite(rsi14)) {
-    const downTrend = Number.isFinite(sma50) && price < sma50;
-    const upTrend = Number.isFinite(sma50) && price > sma50;
-    let vote = 0;
-    let detail = `RSI ${Math.round(rsi14)} : ni exc\xE8s d'achat ni de vente.`;
-    if (rsi14 < 30) {
-      vote = downTrend ? 1 : 2;
-      detail = downTrend ? `RSI ${Math.round(rsi14)} : survente, mais contre la tendance \u2014 rebond technique possible, pas encore un retournement.` : `RSI ${Math.round(rsi14)} : survente, un rebond est fr\xE9quent.`;
-    } else if (rsi14 < 40) {
-      vote = downTrend ? 0 : 1;
-      detail = `RSI ${Math.round(rsi14)} : proche de la survente.`;
-    } else if (rsi14 > 75) {
-      vote = upTrend ? -1 : -2;
-      detail = upTrend ? `RSI ${Math.round(rsi14)} : surachat dans une tendance forte \u2014 risque de pause ou de correction.` : `RSI ${Math.round(rsi14)} : surachat marqu\xE9, risque de correction.`;
-    } else if (rsi14 > 65) {
-      vote = upTrend ? 0 : -1;
-      detail = `RSI ${Math.round(rsi14)} : proche du surachat.`;
-    }
-    tr.push({ key: "rsi", label: "Exc\xE8s (RSI 14 j)", detail, vote, weight: 1.5 });
-  }
-  {
-    const lo = last(bb.lower) ?? NaN;
-    const up = last(bb.upper) ?? NaN;
-    if (Number.isFinite(lo) && Number.isFinite(up)) {
-      let vote = 0;
-      let detail = "Prix dans ses bandes de Bollinger.";
-      if (price < lo) {
-        vote = 1;
-        detail = "Prix sous la bande de Bollinger basse : exc\xE8s baissier, souvent suivi d\u2019un retour vers la moyenne.";
-      } else if (price > up) {
-        vote = -1;
-        detail = "Prix au-dessus de la bande haute : extension, attention au retour vers la moyenne.";
-      }
-      tr.push({ key: "bb", label: "Bandes de Bollinger", detail, vote, weight: 1 });
-    }
-  }
-  if (candles.length > 22) {
-    const highs = candles.map((c) => c.high);
-    const lows = candles.map((c) => c.low);
-    const prevHigh = highest(highs, 20, candles.length - 2);
-    const prevLow = lowest(lows, 20, candles.length - 2);
-    const vr = volumeRatio(candles, 20, opts);
-    let vote = 0;
-    let detail = "Pas de cassure significative des plus hauts/bas 20 jours.";
-    if (price > prevHigh && vr > 1.5) {
-      vote = 2;
-      detail = `Cassure des plus hauts 20 j avec un volume \xD7${num(vr, 1)} : signal de force.`;
-    } else if (price > prevHigh) {
-      vote = 1;
-      detail = "Cassure des plus hauts 20 j, mais sans volume convaincant.";
-    } else if (price < prevLow && vr > 1.5) {
-      vote = -2;
-      detail = `Cassure des plus bas 20 j avec un volume \xD7${num(vr, 1)} : signal de faiblesse.`;
-    } else if (price < prevLow) {
-      vote = -1;
-      detail = "Le prix enfonce ses plus bas 20 j.";
-    }
-    tr.push({ key: "breakout", label: "Cassure & volume", detail, vote, weight: 2 });
-  }
-  const investor = combine(inv, "investor", candles.length);
-  const trader2 = combine(tr, "trader", candles.length);
-  const levels = supportResistance(candles, 5, 2.5, 365);
-  const supports = levels.filter((l) => l.price < price).map((l) => l.price);
-  const resistances = levels.filter((l) => l.price > price).map((l) => l.price);
-  const support = supports.length ? supports[supports.length - 1] : null;
-  const resistance = resistances.length ? resistances[0] : null;
-  let plan = null;
-  if (Number.isFinite(atr14) && atr14 > 0) {
-    const entry = price;
-    let stop = support != null ? support - 0.5 * atr14 : price - 2 * atr14;
-    stop = Math.max(stop, price - 3 * atr14);
-    if (stop > price - 0.8 * atr14) stop = price - 1.5 * atr14;
-    const risk = entry - stop;
-    plan = {
-      entry,
-      stop,
-      tp1: entry + 1.5 * risk,
-      tp2: entry + 3 * risk,
-      riskPct: risk / entry * 100,
-      atr: atr14,
-      support,
-      resistance
-    };
-  }
-  const accumulation = Number.isFinite(sma200) ? { low: sma200 * 0.85, high: sma200 * 1.02 } : null;
-  const profitZone = Number.isFinite(sma200) ? sma200 * 2 : null;
-  return {
-    price,
-    sma20,
-    sma50,
-    sma200,
-    rsi14,
-    rsiWeekly,
-    mayer,
-    atrPct,
-    change7d: changePct(closes, 7),
-    change30d: changePct(closes, 30),
-    investor,
-    trader: trader2,
-    plan,
-    accumulation,
-    profitZone,
-    setups: detectSetups(candles, { s20, s50, s200, r, m, bbWidth: bb.width }, opts),
-    bars: candles.length
-  };
-}
-function detectSetups(candles, s, opts = {}) {
-  const out = [];
-  const n2 = candles.length;
-  if (n2 < 30) return out;
-  const c = candles[n2 - 1];
-  const prev = candles[n2 - 2];
-  const price = c.close;
-  const sma50 = s.s50[n2 - 1];
-  const sma200 = s.s200[n2 - 1];
-  const rsi14 = s.r[n2 - 1];
-  const highs = candles.map((k) => k.high);
-  const lows = candles.map((k) => k.low);
-  const vr = volumeRatio(candles, 20, opts);
-  if (Number.isFinite(sma200) && Number.isFinite(sma50) && price > sma200 && sma50 > sma200 && rsi14 < 42) {
-    out.push({ key: "pullback", label: "Repli en tendance haussi\xE8re", bias: "bull", detail: `Tendance de fond haussi\xE8re et RSI \xE0 ${Math.round(rsi14)} : zone d\u2019achat sur repli. Attends un signe de reprise (bougie verte, RSI qui repasse 40) avant d\u2019entrer.` });
-  }
-  const gc = lastCross(s.s50, s.s200, 10);
-  if (gc?.dir === 1) out.push({ key: "golden", label: "Croisement dor\xE9", bias: "bull", detail: `MM50 au-dessus de la MM200 depuis ${gc.barsAgo} j.` });
-  if (gc?.dir === -1) out.push({ key: "death", label: "Croisement de la mort", bias: "bear", detail: `MM50 sous la MM200 depuis ${gc.barsAgo} j.` });
-  const prevHigh = highest(highs, 20, n2 - 2);
-  const prevLow = lowest(lows, 20, n2 - 2);
-  if (price > prevHigh && vr > 1.5) out.push({ key: "breakout", label: "Cassure avec volume", bias: "bull", detail: `Plus haut 20 j cass\xE9, volume \xD7${num(vr, 1)}.` });
-  if (price < prevLow && vr > 1.5) out.push({ key: "breakdown", label: "Cassure baissi\xE8re", bias: "bear", detail: `Plus bas 20 j enfonc\xE9, volume \xD7${num(vr, 1)}.` });
-  const w = s.bbWidth.slice(-120).filter(Number.isFinite);
-  const wNow = s.bbWidth[n2 - 1];
-  if (w.length > 60 && Number.isFinite(wNow) && wNow <= Math.min(...w) * 1.08) {
-    out.push({ key: "squeeze", label: "Compression de volatilit\xE9", bias: "neutral", detail: "Bandes de Bollinger au plus serr\xE9 depuis 4 mois : un mouvement violent se pr\xE9pare (sens \xE0 confirmer)." });
-  }
-  if (rsi14 < 30 && price > prev.close) out.push({ key: "oversold", label: "Survente + rebond", bias: "bull", detail: `RSI ${Math.round(rsi14)} et premi\xE8re bougie verte.` });
-  if (rsi14 > 75) out.push({ key: "overbought", label: "Surachat", bias: "bear", detail: `RSI ${Math.round(rsi14)} : prise de profits probable \xE0 court terme.` });
-  const mc = lastCross(s.m.macd, s.m.signal, 3);
-  if (mc?.dir === 1 && Number.isFinite(sma50) && price > sma50) out.push({ key: "macd", label: "Relance MACD", bias: "bull", detail: "MACD repasse au-dessus de son signal, prix au-dessus de la MM50." });
-  return out;
-}
-var SETUP_KEYS = {
-  pullback: "Repli en tendance haussi\xE8re",
-  golden: "Croisement dor\xE9",
-  breakout: "Cassure avec volume",
-  squeeze: "Compression de volatilit\xE9",
-  oversold: "Survente + rebond",
-  macd: "Relance MACD",
-  death: "Croisement de la mort",
-  breakdown: "Cassure baissi\xE8re",
-  overbought: "Surachat"
-};
 
 // src/lib/gems.ts
 var DEFAULT_SMALLCAP_FILTER = { minCap: 5e6, maxCap: 5e8, minVolume: 3e5 };
@@ -3708,8 +4417,7 @@ function split(picks, maxLines, amount, minOrder, kind, reasonOf) {
     reason: reasonOf(c)
   }));
 }
-var investorLabel = (s) => s >= 45 ? "Accumuler fort" : s >= 15 ? "Accumuler" : s > -15 ? "Conserver" : s > -45 ? "All\xE9ger" : "Prendre des profits";
-var signed = (s) => `${s > 0 ? "+" : ""}${s}`;
+var signed = (s) => `${s > 0 ? "+" : s < 0 ? "\u2212" : ""}${Math.abs(s)}`;
 function planAutoBasket(s, ctx) {
   const notes = [];
   const warnings = [];
@@ -3732,7 +4440,7 @@ function planAutoBasket(s, ctx) {
       const sym = c.coin.symbol.toUpperCase();
       if (c.cdc === "unknown") excluded.push({ symbol: sym, reason: "absente de la liste Crypto.com" });
       else if (c.change7d != null && c.change7d > FOMO_7D_PCT) excluded.push({ symbol: sym, reason: `+${Math.round(c.change7d)} % en 7 jours (FOMO)` });
-      else if (side === "base" && c.score != null && c.score <= AUTO_MIN_INVESTOR_SCORE) excluded.push({ symbol: sym, reason: `signal investisseur \xAB ${investorLabel(c.score)} \xBB (${signed(c.score)})` });
+      else if (side === "base" && c.score != null && c.score <= AUTO_MIN_INVESTOR_SCORE) excluded.push({ symbol: sym, reason: `score investisseur ${signed(c.score)} (bas)` });
       else if (side === "discovery" && total >= 20 * amount && total > 0 && c.heldUsd / total * 100 >= ctx.maxPerGemPct) excluded.push({ symbol: sym, reason: `plafond de ${pct2(ctx.maxPerGemPct)} par p\xE9pite atteint` });
       else ok.push(c);
     }
@@ -3770,7 +4478,7 @@ function planAutoBasket(s, ctx) {
     const basePool = keepOpen(screen(ctx.base, "base"), ctx.canOpenBase, "Base");
     remember(basePool, "core");
     baseOrders = split(basePool, Math.min(AUTO_MAX_LINES, s.maxBaseLines), base, s.minOrderUsd, "core", (c) => {
-      const sig = c.score != null ? ` \xB7 signal investisseur \xAB ${investorLabel(c.score)} \xBB (${signed(c.score)})` : " \xB7 signal indisponible";
+      const sig = c.score != null ? ` \xB7 score investisseur ${signed(c.score)}` : " \xB7 score indisponible";
       return `${c.rank != null ? `Rang ${c.rank} (20 premi\xE8res hors stablecoins)` : "20 premi\xE8res hors stablecoins"}${sig}${c.heldUsd > 0 ? " \xB7 tu en d\xE9tiens d\xE9j\xE0" : ""}`;
     });
     if (!baseOrders.length) notes.push(base < Math.max(s.minOrderUsd, 0.01) ? `Part base (${usdc(base)}) sous le minimum de ${usdc(s.minOrderUsd)} : mise en r\xE9serve.` : "Aucune crypto du top 20 ne passe les r\xE8gles aujourd\u2019hui : le montant part en r\xE9serve.");
@@ -3953,7 +4661,7 @@ var dcaBoussole = {
       const cs = ctx.candles(u.coinId);
       if (!cs.length) continue;
       change7d[u.coinId] = cs.length > 7 ? (cs[cs.length - 1].close / cs[cs.length - 8].close - 1) * 100 : null;
-      const a = cs.length >= 30 ? analyze(cs, { temperature: ctx.temperature ?? void 0 }, { closedOnly: true }) : null;
+      const a = cs.length >= 30 ? analyze(cs, { temperature: ctx.temperature ?? void 0, isBitcoin: u.coinId === "bitcoin" }, { closedOnly: true }) : null;
       if (a) scores[u.coinId] = a.investor.score;
     }
     const heldUsd = {};
@@ -4052,928 +4760,6 @@ var SIGNAL_KEYS = [
   ...TR.flatMap((l) => PLAN_TARGETS.map((r) => ({ key: `plan:${l}@${r}`, label: `Plan de trade, signal \xAB ${l} \xBB, objectif ${String(r).replace(".", ",")} R`, bias: "bull", horizon: 30, horizons: [30] })))
 ];
 
-// src/data/reliability.json
-var reliability_default = {
-  generatedAt: "2026-11-15",
-  dataThrough: "2026-11-14",
-  rulesVersion: 1,
-  universe: {
-    assets: 101,
-    from: "2019-01-01",
-    top: 50
-  },
-  entries: {
-    "inv:Accumuler": {
-      label: "Investisseur \xAB Accumuler \xBB",
-      bias: "bull",
-      horizon: 90,
-      days: 61117,
-      episodes: 4185,
-      frequencyPct: 47.7659,
-      hitPct: 44.0621,
-      hitLow: 42.8039,
-      hitHigh: 45.328,
-      medianPct: -6.9675,
-      excessMedianPct: -0.3821,
-      worstMedianPct: -30.4125,
-      baselineHitPct: 44.086,
-      baselineMedianPct: -6.7213,
-      control: {
-        episodes: 2084,
-        hitPct: 36.5643,
-        medianPct: -12.4553,
-        baselineHitPct: 41.1726
-      },
-      verdict: "sans effet"
-    },
-    "inv:Accumuler fort": {
-      label: "Investisseur \xAB Accumuler fort \xBB",
-      bias: "bull",
-      horizon: 90,
-      days: 1664,
-      episodes: 383,
-      frequencyPct: 1.3005,
-      hitPct: 59.7911,
-      hitLow: 55.6149,
-      hitHigh: 63.8299,
-      medianPct: 11.659,
-      excessMedianPct: -0.3446,
-      worstMedianPct: -22.9782,
-      baselineHitPct: 44.086,
-      baselineMedianPct: -6.7213,
-      control: {
-        episodes: 145,
-        hitPct: 52.4138,
-        medianPct: 0.9452,
-        baselineHitPct: 41.1726
-      },
-      verdict: "valid\xE9"
-    },
-    "inv:All\xE9ger": {
-      label: "Investisseur \xAB All\xE9ger \xBB",
-      bias: "bear",
-      horizon: 90,
-      days: 8078,
-      episodes: 1583,
-      frequencyPct: 6.3134,
-      hitPct: 45.6728,
-      hitLow: 43.6224,
-      hitHigh: 47.7379,
-      medianPct: -6.7986,
-      excessMedianPct: -1.0834,
-      worstMedianPct: -31.5749,
-      baselineHitPct: 44.086,
-      baselineMedianPct: -6.7213,
-      control: {
-        episodes: 845,
-        hitPct: 43.432,
-        medianPct: -7.8264,
-        baselineHitPct: 41.1726
-      },
-      verdict: "sans effet"
-    },
-    "inv:Conserver": {
-      label: "Investisseur \xAB Conserver \xBB",
-      bias: "neutral",
-      horizon: 90,
-      days: 57092,
-      episodes: 5319,
-      frequencyPct: 44.6202,
-      hitPct: 42.9216,
-      hitLow: 41.8091,
-      hitHigh: 44.0413,
-      medianPct: -8.136,
-      excessMedianPct: -0.3869,
-      worstMedianPct: -31.1517,
-      baselineHitPct: 44.086,
-      baselineMedianPct: -6.7213,
-      control: {
-        episodes: 2817,
-        hitPct: 38.3032,
-        medianPct: -11.079,
-        baselineHitPct: 41.1726
-      },
-      verdict: "sans effet"
-    },
-    "plan:Achat fort@1.5": {
-      label: "Plan de trade, signal \xAB Achat fort \xBB, objectif 1,5 R",
-      bias: "bull",
-      horizon: 30,
-      days: 12924,
-      episodes: 5589,
-      frequencyPct: 10.1007,
-      hitPct: 44.4981,
-      hitLow: 43.4075,
-      hitHigh: 45.594,
-      medianPct: -1.0148,
-      excessMedianPct: -2e-4,
-      worstMedianPct: null,
-      baselineHitPct: 40.2604,
-      baselineMedianPct: -1.0146,
-      control: {
-        episodes: 2868,
-        hitPct: 41.1437,
-        medianPct: -1.0213,
-        baselineHitPct: 37.8261
-      },
-      verdict: "sans effet",
-      expectancyR: 0.0746
-    },
-    "plan:Achat fort@2": {
-      label: "Plan de trade, signal \xAB Achat fort \xBB, objectif 2 R",
-      bias: "bull",
-      horizon: 30,
-      days: 12924,
-      episodes: 5589,
-      frequencyPct: 10.1007,
-      hitPct: 38.9157,
-      hitLow: 37.8485,
-      hitHigh: 39.9937,
-      medianPct: -1.0202,
-      excessMedianPct: -29e-4,
-      worstMedianPct: null,
-      baselineHitPct: 35.734,
-      baselineMedianPct: -1.0173,
-      control: {
-        episodes: 2868,
-        hitPct: 35.7043,
-        medianPct: -1.0247,
-        baselineHitPct: 32.9752
-      },
-      verdict: "sans effet",
-      expectancyR: 0.1083
-    },
-    "plan:Achat fort@3": {
-      label: "Plan de trade, signal \xAB Achat fort \xBB, objectif 3 R",
-      bias: "bull",
-      horizon: 30,
-      days: 12924,
-      episodes: 5589,
-      frequencyPct: 10.1007,
-      hitPct: 33.387,
-      hitLow: 32.3576,
-      hitHigh: 34.4325,
-      medianPct: -1.0234,
-      excessMedianPct: -42e-4,
-      worstMedianPct: null,
-      baselineHitPct: 31.5509,
-      baselineMedianPct: -1.0192,
-      control: {
-        episodes: 2868,
-        hitPct: 30.8577,
-        medianPct: -1.0267,
-        baselineHitPct: 28.5688
-      },
-      verdict: "sans effet",
-      expectancyR: 0.1977
-    },
-    "plan:Achat@1.5": {
-      label: "Plan de trade, signal \xAB Achat \xBB, objectif 1,5 R",
-      bias: "bull",
-      horizon: 30,
-      days: 44498,
-      episodes: 12417,
-      frequencyPct: 34.7774,
-      hitPct: 42.772,
-      hitLow: 42.0433,
-      hitHigh: 43.5039,
-      medianPct: -1.0149,
-      excessMedianPct: -3e-4,
-      worstMedianPct: null,
-      baselineHitPct: 40.2604,
-      baselineMedianPct: -1.0146,
-      control: {
-        episodes: 6748,
-        hitPct: 39.3894,
-        medianPct: -1.0197,
-        baselineHitPct: 37.8261
-      },
-      verdict: "sans effet",
-      expectancyR: 0.0303
-    },
-    "plan:Achat@2": {
-      label: "Plan de trade, signal \xAB Achat \xBB, objectif 2 R",
-      bias: "bull",
-      horizon: 30,
-      days: 44498,
-      episodes: 12417,
-      frequencyPct: 34.7774,
-      hitPct: 37.9158,
-      hitLow: 37.2022,
-      hitHigh: 38.6346,
-      medianPct: -1.0181,
-      excessMedianPct: -8e-4,
-      worstMedianPct: null,
-      baselineHitPct: 35.734,
-      baselineMedianPct: -1.0173,
-      control: {
-        episodes: 6748,
-        hitPct: 34.1583,
-        medianPct: -1.0223,
-        baselineHitPct: 32.9752
-      },
-      verdict: "sans effet",
-      expectancyR: 0.0661
-    },
-    "plan:Achat@3": {
-      label: "Plan de trade, signal \xAB Achat \xBB, objectif 3 R",
-      bias: "bull",
-      horizon: 30,
-      days: 44498,
-      episodes: 12417,
-      frequencyPct: 34.7774,
-      hitPct: 32.9387,
-      hitLow: 32.2487,
-      hitHigh: 33.6362,
-      medianPct: -1.0204,
-      excessMedianPct: -12e-4,
-      worstMedianPct: null,
-      baselineHitPct: 31.5509,
-      baselineMedianPct: -1.0192,
-      control: {
-        episodes: 6748,
-        hitPct: 29.2976,
-        medianPct: -1.0243,
-        baselineHitPct: 28.5688
-      },
-      verdict: "sans effet",
-      expectancyR: 0.1334
-    },
-    "plan:Neutre@1.5": {
-      label: "Plan de trade, signal \xAB Neutre \xBB, objectif 1,5 R",
-      bias: "bull",
-      horizon: 30,
-      days: 2081,
-      episodes: 1761,
-      frequencyPct: 1.6264,
-      hitPct: 41.2834,
-      hitLow: 39.3682,
-      hitHigh: 43.2253,
-      medianPct: -1.0171,
-      excessMedianPct: -25e-4,
-      worstMedianPct: null,
-      baselineHitPct: 40.2604,
-      baselineMedianPct: -1.0146,
-      control: {
-        episodes: 1009,
-        hitPct: 38.7512,
-        medianPct: -1.0215,
-        baselineHitPct: 37.8261
-      },
-      verdict: "sans effet",
-      expectancyR: -0.0111
-    },
-    "plan:Neutre@2": {
-      label: "Plan de trade, signal \xAB Neutre \xBB, objectif 2 R",
-      bias: "bull",
-      horizon: 30,
-      days: 2081,
-      episodes: 1761,
-      frequencyPct: 1.6264,
-      hitPct: 35.8319,
-      hitLow: 33.9753,
-      hitHigh: 37.732,
-      medianPct: -1.0202,
-      excessMedianPct: -29e-4,
-      worstMedianPct: null,
-      baselineHitPct: 35.734,
-      baselineMedianPct: -1.0173,
-      control: {
-        episodes: 1009,
-        hitPct: 33.2012,
-        medianPct: -1.0238,
-        baselineHitPct: 32.9752
-      },
-      verdict: "sans effet",
-      expectancyR: -3e-3
-    },
-    "plan:Neutre@3": {
-      label: "Plan de trade, signal \xAB Neutre \xBB, objectif 3 R",
-      bias: "bull",
-      horizon: 30,
-      days: 2081,
-      episodes: 1761,
-      frequencyPct: 1.6264,
-      hitPct: 31.6298,
-      hitLow: 29.8362,
-      hitHigh: 33.4797,
-      medianPct: -1.0223,
-      excessMedianPct: -31e-4,
-      worstMedianPct: null,
-      baselineHitPct: 31.5509,
-      baselineMedianPct: -1.0192,
-      control: {
-        episodes: 1009,
-        hitPct: 28.3449,
-        medianPct: -1.0255,
-        baselineHitPct: 28.5688
-      },
-      verdict: "sans effet",
-      expectancyR: 0.0755
-    },
-    "plan:Vente forte@1.5": {
-      label: "Plan de trade, signal \xAB Vente forte \xBB, objectif 1,5 R",
-      bias: "bull",
-      horizon: 30,
-      days: 12018,
-      episodes: 5048,
-      frequencyPct: 9.3927,
-      hitPct: 38.1735,
-      hitLow: 37.0554,
-      hitHigh: 39.3044,
-      medianPct: -1.0141,
-      excessMedianPct: 5e-4,
-      worstMedianPct: null,
-      baselineHitPct: 40.2604,
-      baselineMedianPct: -1.0146,
-      control: {
-        episodes: 2971,
-        hitPct: 34.3992,
-        medianPct: -1.0184,
-        baselineHitPct: 37.8261
-      },
-      verdict: "sans effet",
-      expectancyR: -0.0916
-    },
-    "plan:Vente forte@2": {
-      label: "Plan de trade, signal \xAB Vente forte \xBB, objectif 2 R",
-      bias: "bull",
-      horizon: 30,
-      days: 12018,
-      episodes: 5048,
-      frequencyPct: 9.3927,
-      hitPct: 34.3502,
-      hitLow: 33.2594,
-      hitHigh: 35.4578,
-      medianPct: -1.0161,
-      excessMedianPct: 12e-4,
-      worstMedianPct: null,
-      baselineHitPct: 35.734,
-      baselineMedianPct: -1.0173,
-      control: {
-        episodes: 2971,
-        hitPct: 30.3601,
-        medianPct: -1.0196,
-        baselineHitPct: 32.9752
-      },
-      verdict: "sans effet",
-      expectancyR: -0.0828
-    },
-    "plan:Vente forte@3": {
-      label: "Plan de trade, signal \xAB Vente forte \xBB, objectif 3 R",
-      bias: "bull",
-      horizon: 30,
-      days: 12018,
-      episodes: 5048,
-      frequencyPct: 9.3927,
-      hitPct: 31.3193,
-      hitLow: 30.2558,
-      hitHigh: 32.4029,
-      medianPct: -1.0173,
-      excessMedianPct: 19e-4,
-      worstMedianPct: null,
-      baselineHitPct: 31.5509,
-      baselineMedianPct: -1.0192,
-      control: {
-        episodes: 2971,
-        hitPct: 26.8596,
-        medianPct: -1.0209,
-        baselineHitPct: 28.5688
-      },
-      verdict: "sans effet",
-      expectancyR: -0.046
-    },
-    "plan:Vente@1.5": {
-      label: "Plan de trade, signal \xAB Vente \xBB, objectif 1,5 R",
-      bias: "bull",
-      horizon: 30,
-      days: 56430,
-      episodes: 11957,
-      frequencyPct: 44.1028,
-      hitPct: 39.7006,
-      hitLow: 38.9669,
-      hitHigh: 40.4389,
-      medianPct: -1.0141,
-      excessMedianPct: 5e-4,
-      worstMedianPct: null,
-      baselineHitPct: 40.2604,
-      baselineMedianPct: -1.0146,
-      control: {
-        episodes: 6866,
-        hitPct: 37.0813,
-        medianPct: -1.0178,
-        baselineHitPct: 37.8261
-      },
-      verdict: "sans effet",
-      expectancyR: -0.0474
-    },
-    "plan:Vente@2": {
-      label: "Plan de trade, signal \xAB Vente \xBB, objectif 2 R",
-      bias: "bull",
-      horizon: 30,
-      days: 56430,
-      episodes: 11957,
-      frequencyPct: 44.1028,
-      hitPct: 35.7364,
-      hitLow: 35.0188,
-      hitHigh: 36.4605,
-      medianPct: -1.0165,
-      excessMedianPct: 8e-4,
-      worstMedianPct: null,
-      baselineHitPct: 35.734,
-      baselineMedianPct: -1.0173,
-      control: {
-        episodes: 6866,
-        hitPct: 32.741,
-        medianPct: -1.0197,
-        baselineHitPct: 32.9752
-      },
-      verdict: "sans effet",
-      expectancyR: -0.0146
-    },
-    "plan:Vente@3": {
-      label: "Plan de trade, signal \xAB Vente \xBB, objectif 3 R",
-      bias: "bull",
-      horizon: 30,
-      days: 56430,
-      episodes: 11957,
-      frequencyPct: 44.1028,
-      hitPct: 31.6886,
-      hitLow: 30.9928,
-      hitHigh: 32.3926,
-      medianPct: -1.0182,
-      excessMedianPct: 1e-3,
-      worstMedianPct: null,
-      baselineHitPct: 31.5509,
-      baselineMedianPct: -1.0192,
-      control: {
-        episodes: 6866,
-        hitPct: 28.2552,
-        medianPct: -1.0213,
-        baselineHitPct: 28.5688
-      },
-      verdict: "sans effet",
-      expectancyR: 0.0258
-    },
-    "setup:breakdown": {
-      label: "Cassure baissi\xE8re",
-      bias: "bear",
-      horizon: 30,
-      days: 1556,
-      episodes: 1289,
-      frequencyPct: 1.2161,
-      hitPct: 44.3755,
-      hitLow: 42.1132,
-      hitHigh: 46.6613,
-      medianPct: -2.5551,
-      excessMedianPct: 0.544,
-      worstMedianPct: -18.8724,
-      baselineHitPct: 45.5186,
-      baselineMedianPct: -2.6854,
-      control: {
-        episodes: 760,
-        hitPct: 44.7368,
-        medianPct: -2.1912,
-        baselineHitPct: 43.1175
-      },
-      verdict: "sans effet"
-    },
-    "setup:breakout": {
-      label: "Cassure avec volume",
-      bias: "bull",
-      horizon: 30,
-      days: 4894,
-      episodes: 3580,
-      frequencyPct: 3.8249,
-      hitPct: 51.8715,
-      hitLow: 50.4969,
-      hitHigh: 53.2433,
-      medianPct: 1.5825,
-      excessMedianPct: -0.065,
-      worstMedianPct: -17.0549,
-      baselineHitPct: 45.5186,
-      baselineMedianPct: -2.6854,
-      control: {
-        episodes: 1851,
-        hitPct: 50.081,
-        medianPct: 0.1427,
-        baselineHitPct: 43.1175
-      },
-      verdict: "valid\xE9"
-    },
-    "setup:death": {
-      label: "Croisement de la mort",
-      bias: "bear",
-      horizon: 30,
-      days: 4002,
-      episodes: 416,
-      frequencyPct: 3.1278,
-      hitPct: 46.1538,
-      hitLow: 42.171,
-      hitHigh: 50.1865,
-      medianPct: -2.4146,
-      excessMedianPct: 0,
-      worstMedianPct: -18.9955,
-      baselineHitPct: 45.5186,
-      baselineMedianPct: -2.6854,
-      control: {
-        episodes: 227,
-        hitPct: 33.9207,
-        medianPct: -9.434,
-        baselineHitPct: 43.1175
-      },
-      verdict: "sans effet"
-    },
-    "setup:golden": {
-      label: "Croisement dor\xE9",
-      bias: "bull",
-      horizon: 30,
-      days: 4408,
-      episodes: 475,
-      frequencyPct: 3.4451,
-      hitPct: 46.5263,
-      hitLow: 42.7918,
-      hitHigh: 50.3001,
-      medianPct: -3.6324,
-      excessMedianPct: 0.0871,
-      worstMedianPct: -18.4239,
-      baselineHitPct: 45.5186,
-      baselineMedianPct: -2.6854,
-      control: {
-        episodes: 293,
-        hitPct: 45.7338,
-        medianPct: -4.0154,
-        baselineHitPct: 43.1175
-      },
-      verdict: "sans effet"
-    },
-    "setup:macd": {
-      label: "Relance MACD",
-      bias: "bull",
-      horizon: 30,
-      days: 5685,
-      episodes: 2317,
-      frequencyPct: 4.4431,
-      hitPct: 49.7626,
-      hitLow: 48.0552,
-      hitHigh: 51.4706,
-      medianPct: -0.1295,
-      excessMedianPct: 0.0919,
-      worstMedianPct: -15.8304,
-      baselineHitPct: 45.5186,
-      baselineMedianPct: -2.6854,
-      control: {
-        episodes: 1286,
-        hitPct: 46.9673,
-        medianPct: -2.0222,
-        baselineHitPct: 43.1175
-      },
-      verdict: "prometteur"
-    },
-    "setup:overbought": {
-      label: "Surachat",
-      bias: "bear",
-      horizon: 30,
-      days: 3768,
-      episodes: 1287,
-      frequencyPct: 2.9449,
-      hitPct: 51.4375,
-      hitLow: 49.1451,
-      hitHigh: 53.7238,
-      medianPct: 1.3446,
-      excessMedianPct: -0.4513,
-      worstMedianPct: -18.6383,
-      baselineHitPct: 45.5186,
-      baselineMedianPct: -2.6854,
-      control: {
-        episodes: 659,
-        hitPct: 52.5038,
-        medianPct: 1.6804,
-        baselineHitPct: 43.1175
-      },
-      verdict: "invers\xE9"
-    },
-    "setup:oversold": {
-      label: "Survente + rebond",
-      bias: "bull",
-      horizon: 30,
-      days: 1066,
-      episodes: 844,
-      frequencyPct: 0.8331,
-      hitPct: 47.2749,
-      hitLow: 44.4611,
-      hitHigh: 50.106,
-      medianPct: -1.641,
-      excessMedianPct: 0.9706,
-      worstMedianPct: -15.6908,
-      baselineHitPct: 45.5186,
-      baselineMedianPct: -2.6854,
-      control: {
-        episodes: 486,
-        hitPct: 43.0041,
-        medianPct: -2.6973,
-        baselineHitPct: 43.1175
-      },
-      verdict: "sans effet"
-    },
-    "setup:pullback": {
-      label: "Repli en tendance haussi\xE8re",
-      bias: "bull",
-      horizon: 30,
-      days: 6123,
-      episodes: 2009,
-      frequencyPct: 4.7854,
-      hitPct: 33.1508,
-      hitLow: 31.4468,
-      hitHigh: 34.9002,
-      medianPct: -9.6447,
-      excessMedianPct: -0.1698,
-      worstMedianPct: -22.7166,
-      baselineHitPct: 45.5186,
-      baselineMedianPct: -2.6854,
-      control: {
-        episodes: 1100,
-        hitPct: 34.6364,
-        medianPct: -7.7151,
-        baselineHitPct: 43.1175
-      },
-      verdict: "invers\xE9"
-    },
-    "setup:squeeze": {
-      label: "Compression de volatilit\xE9",
-      bias: "neutral",
-      horizon: 30,
-      days: 6478,
-      episodes: 1511,
-      frequencyPct: 5.0629,
-      hitPct: 48.5109,
-      hitLow: 46.4005,
-      hitHigh: 50.6267,
-      medianPct: -0.6697,
-      excessMedianPct: -0.2534,
-      worstMedianPct: -15.6749,
-      baselineHitPct: 45.5186,
-      baselineMedianPct: -2.6854,
-      control: {
-        episodes: 792,
-        hitPct: 46.5909,
-        medianPct: -2.3806,
-        baselineHitPct: 43.1175
-      },
-      verdict: "sans effet"
-    },
-    "temp:accumulation": {
-      label: "Temp\xE9rature : Accumulation (Bitcoin)",
-      bias: "bull",
-      horizon: 365,
-      days: 793,
-      episodes: 64,
-      frequencyPct: 27.5826,
-      hitPct: 70.3125,
-      hitLow: 60.2496,
-      hitHigh: 78.7274,
-      medianPct: 101.0815,
-      excessMedianPct: 30.2732,
-      worstMedianPct: -14.2938,
-      baselineHitPct: 64.1833,
-      baselineMedianPct: 43.8944,
-      control: {
-        episodes: 21,
-        hitPct: 66.6667,
-        medianPct: 93.8188,
-        baselineHitPct: 65.7769
-      },
-      verdict: "prometteur"
-    },
-    "temp:capitulation": {
-      label: "Temp\xE9rature : Peur extr\xEAme (Bitcoin)",
-      bias: "bull",
-      horizon: 365,
-      days: 421,
-      episodes: 13,
-      frequencyPct: 14.6435,
-      hitPct: 92.3077,
-      hitLow: 71.7719,
-      hitHigh: 98.265,
-      medianPct: 184.3572,
-      excessMedianPct: 63.888,
-      worstMedianPct: -6.3084,
-      baselineHitPct: 64.1833,
-      baselineMedianPct: 43.8944,
-      control: {
-        episodes: 0,
-        hitPct: null,
-        medianPct: null,
-        baselineHitPct: 65.7769
-      },
-      verdict: "trop peu de cas"
-    },
-    "temp:chaleur": {
-      label: "Temp\xE9rature : March\xE9 chaud (Bitcoin)",
-      bias: "bear",
-      horizon: 365,
-      days: 510,
-      episodes: 46,
-      frequencyPct: 17.7391,
-      hitPct: 54.3478,
-      hitLow: 42.363,
-      hitHigh: 65.8495,
-      medianPct: 12.7482,
-      excessMedianPct: 22.8224,
-      worstMedianPct: -32.1111,
-      baselineHitPct: 64.1833,
-      baselineMedianPct: 43.8944,
-      control: {
-        episodes: 21,
-        hitPct: 57.1429,
-        medianPct: 31.9038,
-        baselineHitPct: 65.7769
-      },
-      verdict: "prometteur"
-    },
-    "temp:euphorie": {
-      label: "Temp\xE9rature : Euphorie (Bitcoin)",
-      bias: "bear",
-      horizon: 365,
-      days: 106,
-      episodes: 10,
-      frequencyPct: 3.687,
-      hitPct: 50,
-      hitLow: 26.9256,
-      hitHigh: 73.0744,
-      medianPct: -2.6836,
-      excessMedianPct: -27.7742,
-      worstMedianPct: -29.6636,
-      baselineHitPct: 64.1833,
-      baselineMedianPct: 43.8944,
-      control: {
-        episodes: 0,
-        hitPct: null,
-        medianPct: null,
-        baselineHitPct: 65.7769
-      },
-      verdict: "trop peu de cas"
-    },
-    "temp:neutre": {
-      label: "Temp\xE9rature : Neutre (Bitcoin)",
-      bias: "neutral",
-      horizon: 365,
-      days: 1045,
-      episodes: 87,
-      frequencyPct: 36.3478,
-      hitPct: 58.6207,
-      hitLow: 49.8026,
-      hitHigh: 66.9187,
-      medianPct: 41.1574,
-      excessMedianPct: 32.349,
-      worstMedianPct: -25.0685,
-      baselineHitPct: 64.1833,
-      baselineMedianPct: 43.8944,
-      control: {
-        episodes: 41,
-        hitPct: 58.5366,
-        medianPct: 81.8789,
-        baselineHitPct: 65.7769
-      },
-      verdict: "sans effet"
-    },
-    "tr:Achat": {
-      label: "Trader \xAB Achat \xBB",
-      bias: "bull",
-      horizon: 14,
-      days: 44498,
-      episodes: 12400,
-      frequencyPct: 34.7774,
-      hitPct: 46.6613,
-      hitLow: 45.9251,
-      hitHigh: 47.3989,
-      medianPct: -1.3711,
-      excessMedianPct: 48e-4,
-      worstMedianPct: -11.6846,
-      baselineHitPct: 46.5857,
-      baselineMedianPct: -1.27,
-      control: {
-        episodes: 6731,
-        hitPct: 44.4362,
-        medianPct: -2.0599,
-        baselineHitPct: 44.5362
-      },
-      verdict: "sans effet"
-    },
-    "tr:Achat fort": {
-      label: "Trader \xAB Achat fort \xBB",
-      bias: "bull",
-      horizon: 14,
-      days: 12924,
-      episodes: 5586,
-      frequencyPct: 10.1007,
-      hitPct: 50.734,
-      hitLow: 49.6335,
-      hitHigh: 51.8337,
-      medianPct: 0.3175,
-      excessMedianPct: 0,
-      worstMedianPct: -11.9975,
-      baselineHitPct: 46.5857,
-      baselineMedianPct: -1.27,
-      control: {
-        episodes: 2865,
-        hitPct: 48.4119,
-        medianPct: -0.7053,
-        baselineHitPct: 44.5362
-      },
-      verdict: "prometteur"
-    },
-    "tr:Neutre": {
-      label: "Trader \xAB Neutre \xBB",
-      bias: "neutral",
-      horizon: 14,
-      days: 2081,
-      episodes: 1756,
-      frequencyPct: 1.6264,
-      hitPct: 45.2164,
-      hitLow: 43.2715,
-      hitHigh: 47.1761,
-      medianPct: -1.8783,
-      excessMedianPct: 0.0891,
-      worstMedianPct: -11.0463,
-      baselineHitPct: 46.5857,
-      baselineMedianPct: -1.27,
-      control: {
-        episodes: 1004,
-        hitPct: 42.2311,
-        medianPct: -2.5632,
-        baselineHitPct: 44.5362
-      },
-      verdict: "sans effet"
-    },
-    "tr:Vente": {
-      label: "Trader \xAB Vente \xBB",
-      bias: "bear",
-      horizon: 14,
-      days: 56430,
-      episodes: 11831,
-      frequencyPct: 44.1028,
-      hitPct: 46.7839,
-      hitLow: 46.0301,
-      hitHigh: 47.5391,
-      medianPct: -1.1499,
-      excessMedianPct: -28e-4,
-      worstMedianPct: -11.065,
-      baselineHitPct: 46.5857,
-      baselineMedianPct: -1.27,
-      control: {
-        episodes: 6740,
-        hitPct: 45.2819,
-        medianPct: -1.5507,
-        baselineHitPct: 44.5362
-      },
-      verdict: "sans effet"
-    },
-    "tr:Vente forte": {
-      label: "Trader \xAB Vente forte \xBB",
-      bias: "bear",
-      horizon: 14,
-      days: 12018,
-      episodes: 4925,
-      frequencyPct: 9.3927,
-      hitPct: 49.3401,
-      hitLow: 48.1689,
-      hitHigh: 50.5121,
-      medianPct: -0.2745,
-      excessMedianPct: 62e-4,
-      worstMedianPct: -11.1517,
-      baselineHitPct: 46.5857,
-      baselineMedianPct: -1.27,
-      control: {
-        episodes: 2848,
-        hitPct: 45.8919,
-        medianPct: -1.3712,
-        baselineHitPct: 44.5362
-      },
-      verdict: "sans effet"
-    }
-  }
-};
-
-// src/lib/lab/reliability.ts
-var VERDICTS = /* @__PURE__ */ new Set(["valid\xE9", "prometteur", "sans effet", "invers\xE9", "trop peu de cas"]);
-var NUM = ["horizon", "days", "episodes", "frequencyPct", "hitPct", "hitLow", "hitHigh", "medianPct", "excessMedianPct", "baselineHitPct", "baselineMedianPct"];
-var isObj = (x) => !!x && typeof x === "object" && !Array.isArray(x);
-var isNum = (x) => typeof x === "number" || x === null;
-function validateReliability(x) {
-  if (!isObj(x) || typeof x.rulesVersion !== "number" || typeof x.generatedAt !== "string" || !isObj(x.universe) || !isObj(x.entries)) return null;
-  for (const e of Object.values(x.entries)) {
-    if (!isObj(e) || typeof e.label !== "string" || !VERDICTS.has(e.verdict) || !isObj(e.control)) return null;
-    if (NUM.some((k) => !isNum(e[k]))) return null;
-  }
-  return x;
-}
-var EMPTY = { generatedAt: "", dataThrough: "", rulesVersion: -1, universe: { assets: 0, from: "2019-01-01", top: 50 }, entries: {} };
-var RELIABILITY = validateReliability(reliability_default) ?? EMPTY;
-function reliabilityOf(key) {
-  return RELIABILITY.entries[key] ?? null;
-}
-
 // src/lib/lab/strategies/trader.ts
 function validatedBullSetups() {
   return SIGNAL_KEYS.filter((k) => k.key.startsWith("setup:") && k.bias === "bull").filter((k) => ["valid\xE9", "prometteur"].includes(reliabilityOf(k.key)?.verdict ?? "")).map((k) => k.key.slice("setup:".length));
@@ -4982,10 +4768,10 @@ var daysBetween3 = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.par
 var signed2 = (x) => `${x > 0 ? "+" : ""}${x}`;
 var trader = {
   id: "trader",
-  version: 1,
+  version: 2,
   label: "Trader (setups avec stop)",
-  describe: "Entre sur les seuls setups valid\xE9s par le banc d\u2019essai, avec un stop et un objectif \xE0 2 R ; risque 1 % par trade, 5 positions au plus, pause apr\xE8s \u221220 %.",
-  defaults: { riskPct: 1, maxPositions: 5, maxPositionPct: 20, targetR: 2, maxHoldDays: 30, cooldownDays: 5, maxChasePct: 3, regime: true, pauseDrawdownPct: 20, onlyAvailable: true, setups: validatedBullSetups() },
+  describe: "Entre sur les seuls setups valid\xE9s par le banc d\u2019essai ; stop jug\xE9 \xE0 la cl\xF4ture, objectif \xE0 3 R (le plan le mieux mesur\xE9) ; risque 1 % par trade, 5 positions au plus, pause apr\xE8s \u221220 %.",
+  defaults: { riskPct: 1, maxPositions: 5, maxPositionPct: 20, targetR: 3, maxHoldDays: 30, cooldownDays: 5, maxChasePct: 3, regime: false, pauseDrawdownPct: 20, onlyAvailable: true, setups: validatedBullSetups() },
   uses: ["signals"],
   replayable: true,
   kind: "trades",
@@ -4995,13 +4781,16 @@ var trader = {
     const pf = ctx.portfolio;
     const analysisOf = (coinId) => {
       const cs = ctx.candles(coinId);
-      return cs.length >= 30 ? analyze(cs, { temperature: ctx.temperature ?? void 0 }, { closedOnly: true }) : null;
+      return cs.length >= 30 ? analyze(cs, { temperature: ctx.temperature ?? void 0, isBitcoin: coinId === "bitcoin" }, { closedOnly: true }) : null;
     };
     for (const pos of pf.positions) {
+      const cs = ctx.candles(pos.coinId);
+      if (pos.stopOnClose && pos.stop != null && cs.length && cs[cs.length - 1].close <= pos.stop) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "stop", reason: "Cl\xF4ture sous le stop : sortie" });
+        continue;
+      }
       if (daysBetween3(pos.openedOn, ctx.execDay) >= p.maxHoldDays) {
         out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "time-exit", reason: `Dur\xE9e maximale atteinte (${p.maxHoldDays} jours)` });
-      } else if (analysisOf(pos.coinId)?.trader.label === "Vente forte") {
-        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "signal-exit", reason: "Signal trader pass\xE9 \xE0 \xAB Vente forte \xBB" });
       }
     }
     const paused = pf.minSincePeakUsd <= pf.peakEquityUsd * (1 - p.pauseDrawdownPct / 100) && pf.equityUsd < pf.peakEquityUsd * (1 - p.pauseDrawdownPct / 200);
@@ -5028,6 +4817,7 @@ var trader = {
         sizing: { riskUsd, maxUsd },
         stop,
         targetR: p.targetR,
+        stopOnClose: true,
         skipAbove: c * (1 + p.maxChasePct / 100),
         skipBelow: stop,
         tag: `setup:${setup.key}`,
@@ -5075,7 +4865,8 @@ var toPaperFill = (f) => ({
   reason: f.reason,
   ...f.tag ? { tag: f.tag } : {},
   ...f.stop != null ? { stop: f.stop } : {},
-  ...f.target != null ? { target: f.target } : {}
+  ...f.target != null ? { target: f.target } : {},
+  ...f.stopOnClose ? { stopOnClose: true } : {}
 });
 async function tickAutopilot(p, logs, nowMs, src, device, strategies = STRATEGIES) {
   const strategy = p.strategyId ? strategies[p.strategyId] : void 0;
@@ -5669,7 +5460,7 @@ var strategies_bench_default = {
       ]
     },
     "dca-boussole": {
-      rules: "dca-boussole@1+signals1+cycle1+autoBasket1",
+      rules: "dca-boussole@1+signals2+cycle1+autoBasket1",
       runs: [
         {
           fill: "nextOpen",
@@ -5822,17 +5613,17 @@ var strategies_bench_default = {
       ]
     },
     trader: {
-      rules: "trader@1+signals1",
+      rules: "trader@2+signals2",
       runs: [
         {
           fill: "nextOpen",
           costs: "exchange",
-          twrPct: -11.6303,
-          twrPerYearPct: -1.5575,
-          maxDrawdownPct: -20.3917,
+          twrPct: 14.7679,
+          twrPerYearPct: 1.7641,
+          maxDrawdownPct: -21.1173,
           referenceTwrPct: 1589.4294,
-          trades: 99,
-          expectancyR: -0.1003,
+          trades: 68,
+          expectancyR: 0.257,
           windows: {
             "30": {
               p10: 0,
@@ -5840,22 +5631,22 @@ var strategies_bench_default = {
               p90: 0
             },
             "60": {
-              p10: -0.4469,
+              p10: 0,
               p50: 0,
               p90: 0
             },
             "90": {
-              p10: -1.5832,
+              p10: 0,
               p50: 0,
               p90: 0
             },
             "180": {
-              p10: -3.903,
+              p10: 0,
               p50: 0,
               p90: 0
             },
             "365": {
-              p10: -6.4856,
+              p10: -1.6629,
               p50: 0,
               p90: 0
             }
@@ -5864,12 +5655,12 @@ var strategies_bench_default = {
         {
           fill: "nextOpen",
           costs: "app",
-          twrPct: -22.0455,
-          twrPerYearPct: -3.1123,
-          maxDrawdownPct: -24.2813,
+          twrPct: 5.4503,
+          twrPerYearPct: 0.676,
+          maxDrawdownPct: -21.2986,
           referenceTwrPct: 1589.4294,
-          trades: 77,
-          expectancyR: -0.2961,
+          trades: 62,
+          expectancyR: 0.1312,
           windows: {
             "30": {
               p10: 0,
@@ -5877,22 +5668,22 @@ var strategies_bench_default = {
               p90: 0
             },
             "60": {
-              p10: -2.2576,
+              p10: 0,
               p50: 0,
               p90: 0
             },
             "90": {
-              p10: -3.9624,
+              p10: 0,
               p50: 0,
               p90: 0
             },
             "180": {
-              p10: -7.2692,
+              p10: 0,
               p50: 0,
               p90: 0
             },
             "365": {
-              p10: -11.6344,
+              p10: -2.8459,
               p50: 0,
               p90: 0
             }
@@ -5901,49 +5692,49 @@ var strategies_bench_default = {
         {
           fill: "nextClose",
           costs: "exchange",
-          twrPct: 73.7087,
-          twrPerYearPct: 7.2623,
-          maxDrawdownPct: -20.497,
+          twrPct: 8.5327,
+          twrPerYearPct: 1.045,
+          maxDrawdownPct: -20.3492,
           referenceTwrPct: 1589.4294,
-          trades: 520,
-          expectancyR: 0.0474,
+          trades: 51,
+          expectancyR: 0.4139,
           windows: {
             "30": {
-              p10: -3.1768,
+              p10: 0,
               p50: 0,
-              p90: 6.3704
+              p90: 0
             },
             "60": {
-              p10: -4.1559,
+              p10: 0,
               p50: 0,
-              p90: 9.3972
+              p90: 0
             },
             "90": {
-              p10: -5.1328,
+              p10: 0,
               p50: 0,
-              p90: 12.1389
+              p90: 0
             },
             "180": {
-              p10: -6.7667,
+              p10: 0,
               p50: 0,
-              p90: 17.2633
+              p90: 0
             },
             "365": {
-              p10: -7.7346,
-              p50: 2.1152,
-              p90: 36.9426
+              p10: 0,
+              p50: 0,
+              p90: 0
             }
           }
         },
         {
           fill: "nextClose",
           costs: "app",
-          twrPct: -3.4982,
-          twrPerYearPct: -0.4511,
-          maxDrawdownPct: -20.4306,
+          twrPct: 3.1846,
+          twrPerYearPct: 0.3988,
+          maxDrawdownPct: -23.1198,
           referenceTwrPct: 1589.4294,
-          trades: 60,
-          expectancyR: -0.075,
+          trades: 51,
+          expectancyR: 0.1794,
           windows: {
             "30": {
               p10: 0,
@@ -5966,7 +5757,7 @@ var strategies_bench_default = {
               p90: 0
             },
             "365": {
-              p10: -0.9161,
+              p10: 0,
               p50: 0,
               p90: 0
             }
@@ -6312,7 +6103,7 @@ async function runAutopilots(bundle, src, nowMs, device) {
 // src/api/binance.ts
 var BASE = "https://data-api.binance.vision/api/v3";
 function toCandle(k) {
-  return { time: Math.floor(k[0] / 1e3), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[7] };
+  return { time: Math.floor(k[0] / 1e3), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[7], ...k[10] != null ? { takerBuyQuote: +k[10] } : {} };
 }
 var klineCache = /* @__PURE__ */ new Map();
 var KLINE_TTL = { "1h": 2 * 6e4, "4h": 5 * 6e4, "1d": 10 * 6e4, "1w": 30 * 6e4 };
@@ -6609,7 +6400,8 @@ var depsOf = (cfg) => ({
     const profile = bundle.data.profile;
     const rules = rulesOf({ archetype: profile?.archetype ?? "Ma strat\xE9gie", rules: profile?.rules ?? {} });
     return runAutopilots(bundle, await runnerAutopilotSources(cfg.coingeckoKey, rules), nowMs, cfg.device);
-  }
+  },
+  signals: async (coins) => computeSignals(coins, await runnerAutopilotSources(cfg.coingeckoKey, rulesOf({ archetype: "Ma strat\xE9gie", rules: {} })))
 });
 async function modeCheck(cfg) {
   const { result } = await runCycle(cfg, loadState(cfg), { dry: true, forceBrief: true, onDry: (text) => log(`[\xE0 blanc] ${text.split("\n").join(" \u2014 ")}`) }, depsOf(cfg));
@@ -6641,7 +6433,7 @@ async function modeMain(cfg, mode) {
     await run();
     return;
   }
-  log(`Surveillance d\xE9marr\xE9e : contr\xF4le toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : "matin d\xE9sactiv\xE9"}${cfg.briefUsOpen ? ", ouverture US (9 h 30 New York)" : ""}${cfg.briefUsClose ? ", cl\xF4ture US (16 h New York)" : ""}.${cfg.quietStart !== cfg.quietEnd ? ` Silence nocturne : les alertes arrivent regroup\xE9es apr\xE8s ${cfg.quietEnd} h (fen\xEAtre ${cfg.quietStart} h \u2192 ${cfg.quietEnd} h).` : ""} Veille presse : ${cfg.newsEnabled ? `activ\xE9e${cfg.mistralApiKey ? " (r\xE9sum\xE9s IA)" : " (heuristique, sans cl\xE9 IA)"}` : "d\xE9sactiv\xE9e"}. Smart money : ${cfg.smartMoneyEnabled ? "activ\xE9" : "d\xE9sactiv\xE9"}. Autopilotes : ${cfg.autopilotEnabled ? `activ\xE9s${cfg.autopilotTelegram ? " (ordres sur Telegram)" : ""}` : "d\xE9sactiv\xE9s"}${cfg.emergingEnabled ? ", digest \xE9mergentes dans le brief du matin" : ""}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffr\xE9 de bout en bout).`);
+  log(`Surveillance d\xE9marr\xE9e : contr\xF4le toutes les ${cfg.intervalMinutes} min ${cfg.timeZone}. Briefs : ${cfg.briefEnabled ? `matin ${cfg.briefHour} h` : "matin d\xE9sactiv\xE9"}${cfg.briefUsOpen ? ", ouverture US (9 h 30 New York)" : ""}${cfg.briefUsClose ? ", cl\xF4ture US (16 h New York)" : ""}.${cfg.quietStart !== cfg.quietEnd ? ` Silence nocturne : les alertes arrivent regroup\xE9es apr\xE8s ${cfg.quietEnd} h (fen\xEAtre ${cfg.quietStart} h \u2192 ${cfg.quietEnd} h).` : ""} Veille presse : ${cfg.newsEnabled ? `activ\xE9e${cfg.mistralApiKey ? " (r\xE9sum\xE9s IA)" : " (heuristique, sans cl\xE9 IA)"}` : "d\xE9sactiv\xE9e"}. Smart money : ${cfg.smartMoneyEnabled ? "activ\xE9" : "d\xE9sactiv\xE9"}. Autopilotes : ${cfg.autopilotEnabled ? `activ\xE9s${cfg.autopilotTelegram ? " (ordres sur Telegram)" : ""}` : "d\xE9sactiv\xE9s"}${cfg.emergingEnabled ? ", digest \xE9mergentes dans le brief du matin" : ""} Alertes de signal : ${cfg.signalAlertsEnabled ? "activ\xE9es (une fois par jour)" : "d\xE9sactiv\xE9es"}. Source : ${cfg.syncRepo}/${cfg.syncPath} (chiffr\xE9 de bout en bout).`);
   for (; ; ) {
     try {
       await run();

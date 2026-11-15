@@ -19,6 +19,8 @@ import { eventKey, refsOf, relevantEvents, smartBriefLines, smartMessage, type S
 import { nextMacroEvents } from '../lib/macro';
 import type { SmartWallet } from '../types';
 import type { AutopilotRun } from './autopilot';
+import { advanceSignals, signalMessage } from './signals';
+import { reliabilityOf, reliabilityPhrase } from '../lib/lab/reliability';
 
 const DAY_MS = 24 * 3600_000;
 /** Une même zone de marché ne re-sonne pas plus d'une fois par semaine (les allers-retours rapides restent silencieux). */
@@ -59,6 +61,8 @@ export interface CycleDeps {
   emerging?: (wallets: SmartWallet[]) => Promise<string[]>;
   /** Autopilotes et ordres papier (facultatif) : faisceau mis à jour, messages et lignes du brief. */
   autopilot?: (bundle: SyncBundle, nowMs: number) => Promise<AutopilotRun>;
+  /** Signaux suivis du jour par crypto (positions et watchlist ; le serveur ajoute les 20 premières). */
+  signals?: (coins: { coinId: string; symbol: string }[]) => Promise<Record<string, { symbol: string; keys: string[] }>>;
 }
 
 export interface CycleOptions {
@@ -264,6 +268,29 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
     }
   }
   queue.push(...smartAlerts);
+
+  // 1 sext. Alertes de signal : une fois par jour, après la clôture de la bougie journalière (0 h 10 UTC).
+  const utcDay = now.toISOString().slice(0, 10);
+  if (cfg.signalAlertsEnabled && deps.signals && state.signals?.day !== utcDay && now.getUTCHours() * 60 + now.getUTCMinutes() >= 10) {
+    const watchIds = Array.isArray(bundle.data.watchlist) ? (bundle.data.watchlist as string[]) : [];
+    const coins = new Map<string, string>();
+    for (const p of buildPositions(watch.transactions).values()) if (p.coinId && p.quantity > 0) coins.set(p.coinId, p.symbol);
+    for (const id of watchIds) if (!coins.has(id)) coins.set(id, id);
+    const today = await deps.signals([...coins].map(([coinId, symbol]) => ({ coinId, symbol }))).catch(() => null);
+    if (today) {
+      const r = advanceSignals({ active: state.signals?.active ?? {}, starts: state.signals?.starts ?? {} }, today, utcDay);
+      // Premier calcul : on mémorise sans prévenir (sinon tous les états en cours sonneraient d'un coup).
+      if (state.signals && !onVacation) {
+        let n = 0;
+        for (const e of r.events) {
+          if (n >= 3 || !shouldSend(state, e.key)) continue;
+          queue.push({ key: e.key, text: signalMessage(e, reliabilityPhrase(reliabilityOf(e.signal))) });
+          n++;
+        }
+      }
+      if (!opts.dry) state = { ...state, signals: { day: utcDay, ...r.state } };
+    }
+  }
 
   // 1 quint. Autopilotes (papier) : ordres du jour, stops et objectifs, ordres manuels exécutés. Pas en vacances.
   if (cfg.autopilotTelegram && !onVacation) for (const e of autopilotEvents) if (shouldSend(state, e.key)) queue.push(e);
