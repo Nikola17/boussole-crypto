@@ -1,6 +1,7 @@
 // Panier automatique : montant + jours + part base/découverte → les ordres exacts, avec les garde-fous du panier.
 import { describe, expect, it } from 'vitest';
-import { planAutoBasket, topBaseUniverse, type AutoBasketContext, type AutoBasketSettings, type AutoCandidate } from './autoBasket';
+import { autoBaseUniverse, autoDiscoveryPicks, buildAutoBasketPlan, planAutoBasket, topBaseUniverse, type AutoBasketContext, type AutoBasketSettings, type AutoCandidate } from './autoBasket';
+import type { CgMarket } from '../api/coingecko';
 
 const c = (id: string, over: Partial<AutoCandidate> = {}): AutoCandidate => ({
   coin: { coinId: id, symbol: id.slice(0, 3), name: id },
@@ -117,5 +118,36 @@ describe('planAutoBasket', () => {
     const p = planAutoBasket(settings(), ctx({ temperature: null }));
     expect(p.investUsd).toBe(60);
     expect(p.warnings.join(' ')).toMatch(/indisponible/);
+  });
+});
+
+describe('calcul extrait du crochet useBasket', () => {
+  const row = (id: string, rank: number, over: Partial<CgMarket> = {}): CgMarket => ({
+    id, symbol: id.slice(0, 4), name: id, image: `img-${id}`, current_price: 1, market_cap: 1e9 / rank, market_cap_rank: rank, fully_diluted_valuation: 1e9 / rank,
+    total_volume: 5e7 / rank, high_24h: null, low_24h: null, price_change_percentage_24h: 0, circulating_supply: null, total_supply: null, max_supply: null,
+    ath: 2, ath_change_percentage: -50, ath_date: '', last_updated: '', price_change_percentage_7d_in_currency: 5, price_change_percentage_30d_in_currency: 20, ...over,
+  });
+  const markets = [row('bitcoin', 1), row('ethereum', 2), row('tether', 3, { symbol: 'usdt' }), row('solana', 5), ...Array.from({ length: 30 }, (_, i) => row(`coin${i}`, 21 + i))];
+  const inputs = {
+    basket: { amountUsd: 60, basePct: 70, maxBaseLines: 3, maxDiscoveryLines: 3, minOrderUsd: 5, reserveUsd: 20, discoverySource: 'mid' as const },
+    markets, smallCaps: null, scores: { bitcoin: 30, ethereum: 20, solana: 40 }, change7d: {}, cdc: null, temperature: 50,
+    heldUsd: { bitcoin: 100 }, totalValueUsd: 100, rules: { maxPerGemPct: 3, maxPerAltPct: 5, cashReservePct: 5, riskPerTradePct: 1, maxLines: 12, minLinePct: 1, maxDiscoveryLines: 5 }, linesOpen: 1, discoveryLinesOpen: 0,
+  };
+  it('donne le même ordre que planAutoBasket sur les mêmes candidates', () => {
+    const r = buildAutoBasketPlan(inputs);
+    const base = autoBaseUniverse(markets);
+    expect(base.map((b) => b.id)).not.toContain('tether');
+    const picks = autoDiscoveryPicks(markets, null, 'mid', base);
+    const direct = planAutoBasket(
+      { amountUsd: 60, basePct: 70, maxBaseLines: 3, maxDiscoveryLines: 3, minOrderUsd: 5, reserveUsd: 20 },
+      {
+        temperature: 50, totalValueUsd: 100, maxPerGemPct: 3,
+        base: base.map((b) => ({ coin: { coinId: b.id, symbol: b.symbol, name: b.name, image: b.image }, rank: b.rank, score: inputs.scores[b.id as 'bitcoin'] ?? null, change7d: null, heldUsd: b.id === 'bitcoin' ? 100 : 0, cdc: null })),
+        discovery: picks.map((p) => ({ coin: { ...p.coin, image: `img-${p.coin.coinId}` }, rank: null, score: p.score, change7d: null, heldUsd: 0, cdc: null })),
+        canOpenBase: true, canOpenDiscovery: true,
+      },
+    );
+    expect(r).toEqual(direct);
+    expect(r.orders.length).toBeGreaterThan(0);
   });
 });

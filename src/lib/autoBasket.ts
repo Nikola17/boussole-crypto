@@ -6,7 +6,9 @@
 // découverte réduite puis coupée quand le marché est chaud, anti-FOMO (+50 % en 7 jours), disponibilité sur
 // Crypto.com, plafond par pépite, et plus de nouvelles lignes quand ton maximum de lignes est atteint.
 
-import type { CoinRef } from '../types';
+import type { BasketPlan, CoinRef, ProfileRules } from '../types';
+import type { CgMarket } from '../api/coingecko';
+import { autoDiscoveryCandidates, MIDCAP_FILTER, type AutoPick } from './discovery';
 import { discoveryTemperatureFactor, type BasketPlanResult, type CdcState, type PlannedOrder } from './basket';
 import { temperatureMultiplier } from './dca';
 import { FOMO_7D_PCT } from './thresholds';
@@ -178,4 +180,67 @@ export function planAutoBasket(s: AutoBasketSettings, ctx: AutoBasketContext): B
   if (orders.length > 1) notes.push('Le montant de chaque côté est partagé à parts égales entre les cryptos retenues.');
   const invest = round2(orders.reduce((sum, o) => sum + o.usd, 0));
   return { baseUsd: amount, investUsd: invest, reserveDeltaUsd: round2(amount - invest), multiplier: mult, discoveryShare: 1 - basePart, orders, notes, warnings, excluded, pool };
+}
+
+// ------------------------------------------------------------------ calcul complet (écran du panier et autopilote)
+
+/** Ligne de marché → entrée du score des pépites. */
+const toSmallCapInput = (m: CgMarket) => ({
+  id: m.id, symbol: m.symbol, name: m.name, marketCap: m.market_cap, fdv: m.fully_diluted_valuation, volume24h: m.total_volume,
+  change7d: m.price_change_percentage_7d_in_currency ?? null, change30d: m.price_change_percentage_30d_in_currency ?? null,
+  athChangePct: m.ath_change_percentage, rank: m.market_cap_rank,
+});
+
+/** Les 20 premières capitalisations éligibles à la base. */
+export function autoBaseUniverse(markets: CgMarket[]) {
+  return topBaseUniverse(markets.map((m) => ({ id: m.id, symbol: m.symbol, name: m.name, image: m.image, rank: m.market_cap_rank })), AUTO_BASE_TOP);
+}
+
+/** Candidates « découverte » : pépites du scan et/ou milieu de classement (rangs 21 et plus), 8 au plus, sans la base. */
+export function autoDiscoveryPicks(markets: CgMarket[], smallCaps: CgMarket[] | null, source: 'gems' | 'mid' | 'both', base: { id: string; symbol: string }[]): AutoPick[] {
+  const opts = { excluded: new Set(base.map((c) => c.id)), excludedSymbols: new Set(base.map((c) => c.symbol.toUpperCase())), max: 8 };
+  const gems = source !== 'mid' && smallCaps ? autoDiscoveryCandidates(smallCaps.map(toSmallCapInput), { ...opts, label: 'Pépite du scan' }) : [];
+  const mids = source !== 'gems' ? autoDiscoveryCandidates(markets.filter((m) => (m.market_cap_rank ?? 0) > AUTO_BASE_TOP).map(toSmallCapInput), { ...opts, filter: MIDCAP_FILTER, label: 'Milieu de classement' }) : [];
+  const seen = new Set<string>();
+  return [...gems, ...mids].sort((a, b) => b.score - a.score).filter((p) => (seen.has(p.coin.coinId) ? false : (seen.add(p.coin.coinId), true))).slice(0, 8);
+}
+
+export interface AutoBasketInputs {
+  basket: Pick<BasketPlan, 'amountUsd' | 'basePct' | 'maxBaseLines' | 'maxDiscoveryLines' | 'minOrderUsd' | 'reserveUsd' | 'discoverySource'>;
+  markets: CgMarket[];
+  smallCaps: CgMarket[] | null;
+  /** Score investisseur par crypto (base). */
+  scores: Record<string, number>;
+  change7d: Record<string, number | null>;
+  cdc: Record<string, CdcState> | null;
+  temperature: number | null;
+  heldUsd: Record<string, number>;
+  totalValueUsd: number;
+  rules: ProfileRules;
+  /** Lignes ouvertes (toutes, puis « découverte ») : au maximum, la base et la découverte ne font que renforcer. */
+  linesOpen: number;
+  discoveryLinesOpen: number;
+}
+
+/** L'ordre du panier automatique, de bout en bout : univers, candidates, règles. Même résultat sur l'écran et dans l'autopilote. */
+export function buildAutoBasketPlan(i: AutoBasketInputs): BasketPlanResult {
+  const base = autoBaseUniverse(i.markets);
+  const picks = autoDiscoveryPicks(i.markets, i.smallCaps, i.basket.discoverySource ?? 'both', base);
+  const imageOf = (id: string) => i.markets.find((m) => m.id === id)?.image ?? i.smallCaps?.find((m) => m.id === id)?.image;
+  const cand = (coin: CoinRef, rank: number | null, score: number | null): AutoCandidate => ({
+    coin, rank, score, change7d: i.change7d[coin.coinId] ?? null, heldUsd: i.heldUsd[coin.coinId] ?? 0, cdc: i.cdc ? i.cdc[coin.coinId] ?? 'unknown' : null,
+  });
+  const b = i.basket;
+  return planAutoBasket(
+    { amountUsd: b.amountUsd, basePct: b.basePct ?? 70, maxBaseLines: b.maxBaseLines ?? 3, maxDiscoveryLines: b.maxDiscoveryLines ?? 3, minOrderUsd: b.minOrderUsd, reserveUsd: b.reserveUsd },
+    {
+      temperature: i.temperature,
+      totalValueUsd: i.totalValueUsd,
+      maxPerGemPct: i.rules.maxPerGemPct,
+      base: base.map((c) => cand({ coinId: c.id, symbol: c.symbol, name: c.name, image: c.image }, c.rank, i.scores[c.id] ?? null)),
+      discovery: picks.map((p) => cand({ ...p.coin, image: imageOf(p.coin.coinId) }, null, p.score)),
+      canOpenBase: i.linesOpen < i.rules.maxLines,
+      canOpenDiscovery: i.discoveryLinesOpen < i.rules.maxDiscoveryLines,
+    },
+  );
 }

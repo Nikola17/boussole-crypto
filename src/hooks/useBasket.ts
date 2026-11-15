@@ -12,8 +12,8 @@ import {
 } from '../lib/basket';
 import { rulesOf } from '../lib/profile';
 import { scatterReport } from '../lib/scatter';
-import { autoDiscoveryCandidates, MIDCAP_FILTER, type AutoPick } from '../lib/discovery';
-import { AUTO_BASE_TOP, planAutoBasket, topBaseUniverse, type AutoCandidate } from '../lib/autoBasket';
+import { autoDiscoveryCandidates, type AutoPick } from '../lib/discovery';
+import { autoBaseUniverse, autoDiscoveryPicks, buildAutoBasketPlan } from '../lib/autoBasket';
 import type { BasketExecution, CoinRef } from '../types';
 import { useToday } from './useClock';
 
@@ -45,28 +45,12 @@ export function useBasket() {
   // Panier entièrement automatique : base = top 20 hors stablecoins, découverte = pépites et/ou milieu de classement.
   const fullAuto = basket?.mode === 'auto';
   const source = basket?.discoverySource ?? 'both';
-  const baseUniverse = useMemo(() => {
-    if (!fullAuto) return [];
-    return topBaseUniverse((markets.data ?? []).map((m) => ({ id: m.id, symbol: m.symbol, name: m.name, image: m.image, rank: m.market_cap_rank })), AUTO_BASE_TOP);
-  }, [fullAuto, markets.data]);
+  const baseUniverse = useMemo(() => (fullAuto ? autoBaseUniverse(markets.data ?? []) : []), [fullAuto, markets.data]);
 
   // Découverte automatique : tu ne choisis plus rien — les candidates viennent du scan des pépites.
   const autoMode = basket?.discoveryMode === 'auto' && !fullAuto;
   const smalls = useSmallCaps(autoMode || (fullAuto && source !== 'mid'));
-  const fullAutoPicks = useMemo((): AutoPick[] => {
-    if (!fullAuto) return [];
-    const baseIds = new Set(baseUniverse.map((c) => c.id));
-    const opts = { excluded: baseIds, excludedSymbols: new Set(baseUniverse.map((c) => c.symbol.toUpperCase())), max: 8 };
-    const toInput = (m: NonNullable<typeof markets.data>[number]) => ({
-      id: m.id, symbol: m.symbol, name: m.name, marketCap: m.market_cap, fdv: m.fully_diluted_valuation, volume24h: m.total_volume,
-      change7d: m.price_change_percentage_7d_in_currency ?? null, change30d: m.price_change_percentage_30d_in_currency ?? null,
-      athChangePct: m.ath_change_percentage, rank: m.market_cap_rank,
-    });
-    const gems = source !== 'mid' && smalls.data ? autoDiscoveryCandidates(smalls.data.map(toInput), { ...opts, label: 'Pépite du scan' }) : [];
-    const mids = source !== 'gems' ? autoDiscoveryCandidates((markets.data ?? []).filter((m) => (m.market_cap_rank ?? 0) > AUTO_BASE_TOP).map(toInput), { ...opts, filter: MIDCAP_FILTER, label: 'Milieu de classement' }) : [];
-    const seen = new Set<string>();
-    return [...gems, ...mids].sort((a, b) => b.score - a.score).filter((p) => (seen.has(p.coin.coinId) ? false : (seen.add(p.coin.coinId), true))).slice(0, 8);
-  }, [fullAuto, source, baseUniverse, smalls.data, markets.data]);
+  const fullAutoPicks = useMemo((): AutoPick[] => (fullAuto ? autoDiscoveryPicks(markets.data ?? [], smalls.data ?? null, source, baseUniverse) : []), [fullAuto, source, baseUniverse, smalls.data, markets.data]);
 
   const autoPicks = useMemo(() => {
     if (!autoMode || !basket || !smalls.data) return [];
@@ -141,22 +125,11 @@ export function useBasket() {
     if (!fullAuto) return planBasketOrder(basket, ctx);
     const rules = rulesOf(profile);
     const scatter = scatterReport(pf.holdings, rules);
-    const cand = (coinId: string, coin: CoinRef, rank: number | null, score: number | null): AutoCandidate => ({
-      coin, rank, score, change7d: ctx.change7d[coinId] ?? null, heldUsd: ctx.values[coinId] ?? 0, cdc: ctx.cdc ? ctx.cdc[coinId] ?? 'unknown' : null,
+    return buildAutoBasketPlan({
+      basket, markets: markets.data ?? [], smallCaps: smalls.data ?? null, scores: ctx.scores, change7d: ctx.change7d, cdc: ctx.cdc,
+      temperature: ctx.temperature, heldUsd: ctx.values, totalValueUsd: ctx.totalValueUsd, rules, linesOpen: scatter.lines.length, discoveryLinesOpen: scatter.discoveryLines,
     });
-    return planAutoBasket(
-      { amountUsd: basket.amountUsd, basePct: basket.basePct ?? 70, maxBaseLines: basket.maxBaseLines ?? 3, maxDiscoveryLines: basket.maxDiscoveryLines ?? 3, minOrderUsd: basket.minOrderUsd, reserveUsd: basket.reserveUsd },
-      {
-        temperature: ctx.temperature,
-        totalValueUsd: ctx.totalValueUsd,
-        maxPerGemPct: rules.maxPerGemPct,
-        base: baseUniverse.map((c) => cand(c.id, { coinId: c.id, symbol: c.symbol, name: c.name, image: c.image }, c.rank, ctx.scores[c.id] ?? null)),
-        discovery: fullAutoPicks.map((p) => cand(p.coin.coinId, { ...p.coin, image: marketMap.get(p.coin.coinId)?.image ?? coins.find((m) => m.id === p.coin.coinId)?.image }, null, p.score)),
-        canOpenBase: scatter.lines.length < rules.maxLines,
-        canOpenDiscovery: scatter.discoveryLines < rules.maxDiscoveryLines,
-      },
-    );
-  }, [basket, ctx, fullAuto, profile, pf.holdings, baseUniverse, fullAutoPicks, marketMap, coins]);
+  }, [basket, ctx, fullAuto, profile, pf.holdings, markets.data, smalls.data]);
 
   const { last, periodKey, done, doneExecution, due, next } = useBasketDue();
 
