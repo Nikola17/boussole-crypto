@@ -44,18 +44,21 @@ describe('verdicts', () => {
   const ps = (o: Partial<PeriodStats>): PeriodStats => ({ days: 100, episodes: 40, hitPct: 50, hitLow: 40, hitHigh: 60, medianPct: 0, meanPct: 0, excessMedianPct: 0, worstMedianPct: -10, baselineHitPct: 50, baselineMedianPct: 0, ...o });
   const bull: KeyMeta = { key: 'x', label: 'x', bias: 'bull', horizon: 30, horizons: [30] };
   const v = (all: Partial<PeriodStats>, tuning: Partial<PeriodStats>, control: Partial<PeriodStats>) => verdictOf({ all: ps(all), tuning: ps(tuning), control: ps(control) }, bull);
+  it('un signal de moment n’est pas effacé par l’excès du jour', () => {
+    expect(v({ hitPct: 60 }, { medianPct: 3, excessMedianPct: -1 }, { hitPct: 58, hitLow: 52, medianPct: 4, excessMedianPct: -1 })).toBe('validé');
+  });
   it('validé, prometteur, sans effet, inversé, trop peu de cas', () => {
-    expect(v({ hitPct: 60 }, { excessMedianPct: 1 }, { hitPct: 58, hitLow: 52, excessMedianPct: 2 })).toBe('validé');
-    expect(v({ hitPct: 54 }, { excessMedianPct: 1 }, { hitPct: 56, hitLow: 47, excessMedianPct: 1 })).toBe('prometteur');
+    expect(v({ hitPct: 60 }, { medianPct: 1 }, { hitPct: 58, hitLow: 52, medianPct: 2 })).toBe('validé');
+    expect(v({ hitPct: 54 }, { medianPct: 1 }, { hitPct: 56, hitLow: 47, medianPct: 1 })).toBe('prometteur');
     expect(v({ hitPct: 50 }, {}, { hitPct: 50 })).toBe('sans effet');
-    expect(v({ hitPct: 42 }, { excessMedianPct: -1 }, { hitPct: 43, excessMedianPct: -2 })).toBe('inversé');
+    expect(v({ hitPct: 42 }, { medianPct: -1 }, { hitPct: 43, medianPct: -2 })).toBe('inversé');
     expect(v({ episodes: 40 }, {}, { episodes: 11, hitPct: 80, hitLow: 70, excessMedianPct: 5 })).toBe('trop peu de cas');
     expect(v({ episodes: 29 }, {}, { episodes: 20 })).toBe('trop peu de cas');
   });
   it('clé baissière : symétrique', () => {
     const bear: KeyMeta = { ...bull, bias: 'bear' };
-    expect(verdictOf({ all: ps({ hitPct: 40 }), tuning: ps({ excessMedianPct: -1 }), control: ps({ hitPct: 42, hitHigh: 48, excessMedianPct: -2 }) }, bear)).toBe('validé');
-    expect(verdictOf({ all: ps({ hitPct: 58 }), tuning: ps({ excessMedianPct: 1 }), control: ps({ hitPct: 57, excessMedianPct: 1 }) }, bear)).toBe('inversé');
+    expect(verdictOf({ all: ps({ hitPct: 40 }), tuning: ps({ medianPct: -1 }), control: ps({ hitPct: 42, hitHigh: 48, medianPct: -2 }) }, bear)).toBe('validé');
+    expect(verdictOf({ all: ps({ hitPct: 58 }), tuning: ps({ medianPct: 1 }), control: ps({ hitPct: 57, medianPct: 1 }) }, bear)).toBe('inversé');
   });
   it('plan : verdict sur l’espérance en R', () => {
     const plan: KeyMeta = { key: 'plan:Achat@2', label: 'p', bias: 'bull', horizon: 30, horizons: [30] };

@@ -19,7 +19,8 @@
     "cap:sync": "vite build && cap sync android",
     "build:apk": "node scripts/build-apk.mjs",
     "build:runner": "esbuild src/runner/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=runner/boussole-runner.mjs",
-    "release": "node scripts/release.mjs"
+    "release": "node scripts/release.mjs",
+    "bench": "esbuild scripts/bench/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=.cache/bench/bench.mjs --log-level=warning && node .cache/bench/bench.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.1.0",

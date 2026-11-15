@@ -107,7 +107,9 @@ export function verdictOf(s: HorizonStats, meta: KeyMeta): Verdict {
   }
   if (meta.bias === 'neutral') return 'sans effet';
   const sign = meta.bias === 'bull' ? 1 : -1;
-  const ex = (p: PeriodStats) => sign * p.excessMedianPct;
+  // Écart de médiane avec la référence de la même période : un signal de moment (investisseur, température) gagne
+  // souvent avec tout le marché ; l'excès du jour, qui retire le mouvement du marché, l'effacerait par construction.
+  const ex = (p: PeriodStats) => sign * (p.medianPct - p.baselineMedianPct);
   const c = s.control;
   const ctrlEdge = sign * (c.hitPct - c.baselineHitPct);
   const bound = sign === 1 ? c.hitLow > c.baselineHitPct : c.hitHigh < c.baselineHitPct;
@@ -175,7 +177,8 @@ export function studySignals(input: StudyInput): { keys: KeyStats[]; observation
     const dayMean: Record<number, number> = {};
     for (const h of horizons) {
       const xs = uni.map((a) => fwd.get(a.id)![h]?.ret).filter((x): x is number => x != null);
-      dayMean[h] = xs.length >= 5 ? meanOf(xs) : NaN;
+      // Médiane et non moyenne : quelques envolées tireraient la moyenne vers le haut et rendraient tout « excès » négatif.
+      dayMean[h] = xs.length >= 5 ? median(xs) : NaN;
     }
     for (const a of uni) {
       const i = a.dayIndex.get(day)!;
