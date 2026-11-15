@@ -20,6 +20,7 @@ import { TransactionModal } from '../components/forms';
 import { AccountsPanel } from '../components/AccountsPanel';
 import { ImportCryptoCom } from '../components/ImportCryptoCom';
 import { RealFeesCard } from '../components/RealFeesCard';
+import { PortfolioChart } from '../components/PortfolioChart';
 import { ConsolidateCard } from '../components/ConsolidateCard';
 import { ExitPlanCard } from '../components/ExitPlanCard';
 import { BenchmarkCard } from '../components/BenchmarkCard';
@@ -53,6 +54,7 @@ export default function Portfolio() {
         <Stat label="Plus-value latente" value={fmtMoney(pf.totals.unrealized, currency, 0)} delta={<Delta value={pf.totals.unrealizedPct} />} />
         <Stat label="Plus-value réalisée" value={fmtMoney(pf.totals.realized, currency, 0)} />
       </div>
+      <PortfolioChart />
       <PortfolioAlerts />
       <Segmented
         value={tab}
