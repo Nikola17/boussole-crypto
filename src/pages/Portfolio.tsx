@@ -24,6 +24,7 @@ import { PortfolioChart } from '../components/PortfolioChart';
 import { ConsolidateCard } from '../components/ConsolidateCard';
 import { ExitPlanCard } from '../components/ExitPlanCard';
 import { BenchmarkCard } from '../components/BenchmarkCard';
+import { RiskCard } from '../components/RiskCard';
 import { isExtendedKey, isExtendedPrivateKey, SCRIPT_LABEL, type BtcScript, type BtcScriptChoice } from '../lib/xpub';
 import type { Bucket, Transaction, WalletAddress } from '../types';
 
@@ -149,6 +150,8 @@ function Positions() {
       <ExitPlanCard />
 
       <BenchmarkCard />
+
+      <RiskCard />
 
       <ConsolidateCard />
 
@@ -293,13 +296,14 @@ function Wallets() {
       <Banner tone="info" title="Lecture seule, 100 % sûr">Boussole ne lit que des adresses publiques et des clés publiques étendues (xpub). Il ne te demandera JAMAIS ta phrase secrète (seed) ni ta clé privée : quiconque te la demande essaie de te voler. À savoir : le suivi d'une xpub Bitcoin interroge mempool.space adresse par adresse — cette adresse IP demande donc pour toi, ce qui relie momentanément ton IP à tes adresses (c'est aussi ce que fait Ledger Live, mais via ses propres serveurs).</Banner>
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setOpen(true)}>Ajouter une adresse</Button>
-        <Button icon={<RefreshCw className="size-4" />} onClick={() => void qc.invalidateQueries({ queryKey: ['wallet'] })}>Actualiser les soldes</Button>
+        <Button icon={<RefreshCw className="size-4" />} onClick={() => void qc.invalidateQueries({ queryKey: ['wallet'] }).then(() => qc.invalidateQueries({ queryKey: ['binanceAccount'] }))}>Actualiser les soldes</Button>
       </div>
-      {!pf.wallets.length && <Empty icon={<Wallet className="size-8" />} title="Aucun wallet suivi">Ajoute une adresse Bitcoin (bc1…, 1…, 3…), Ethereum / EVM (0x…, scanne aussi Base, Arbitrum, BNB Chain…) ou Solana.</Empty>}
+      {/* Les comptes plateforme (Binance…) sont des « wallets » synthétiques : on ne les liste pas ici (ils ont leur carte compte). */}
+      {(() => { const real = pf.wallets.map((w, i) => ({ w, r: pf.walletResults[i], data: pf.walletData[i] })).filter((x) => !x.w.id.startsWith('exchange:')); return (
+      <>
+      {!real.length && <Empty icon={<Wallet className="size-8" />} title="Aucun wallet suivi">Ajoute une adresse Bitcoin (bc1…, 1…, 3…), Ethereum / EVM (0x…, scanne aussi Base, Arbitrum, BNB Chain…) ou Solana.</Empty>}
       <div className="grid gap-4 lg:grid-cols-2">
-        {pf.wallets.map((w, i) => {
-          const r = pf.walletResults[i];
-          const data = pf.walletData[i];
+        {real.map(({ w, r, data }) => {
           const total = (data?.totalUsd ?? 0) * pf.rate;
           return (
             <Card key={w.id} title={w.label} subtitle={`${w.chain === 'bitcoin' ? 'Bitcoin' : w.chain === 'solana' ? 'Solana' : `EVM · ${(w.evmChains ?? []).join(', ')}`} · ${shortAddress(w.address)}`} actions={<Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} aria-label="Supprimer" onClick={() => remove(w.id)} />}>
@@ -327,6 +331,8 @@ function Wallets() {
           );
         })}
       </div>
+      </>
+      ); })()}
       <Modal open={open} onClose={() => setOpen(false)} title="Suivre une adresse publique" footer={<><Button variant="ghost" onClick={() => setOpen(false)}>Annuler</Button><Button variant="primary" disabled={!detected || isPrivate} onClick={save}>Ajouter</Button></>}>
         <div className="space-y-3">
           <Field label="Adresse publique ou clé publique étendue (xpub)" hint={address ? (isPrivate ? 'Clé privée : refusée' : isXpub ? 'Clé publique étendue : toutes les adresses de ton compte Bitcoin seront lues' : detected ? `Détectée : ${detected === 'evm' ? 'EVM (Ethereum & compatibles)' : detected === 'bitcoin' ? 'Bitcoin' : 'Solana'}` : 'Format non reconnu') : 'Bitcoin (adresse ou xpub), EVM (0x…) ou Solana. Pour tout ton Ledger Bitcoin, utilise la clé publique étendue du compte : Ledger Live l’affiche dans les réglages avancés du compte (selon la version).'}>

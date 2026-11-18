@@ -293,6 +293,14 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v1.29.0 — Lot A « Connaissance de toi » + écosystème Binance / DeFi
+
+- **Connexion Binance en lecture seule** : clé API + secret dans Réglages → « Plateformes — lecture seule » (créée sur Binance avec UNIQUEMENT « Enable Reading », IP restreinte si possible). Les deux champs sont chiffrés par le système comme les autres secrets : jamais en clair, jamais dans les sauvegardes ni la synchronisation. Bouton « Tester la connexion » (nombre d'actifs lus, ou l'erreur exacte : IP non autorisée, clé invalide…), puis « Lier à un compte Binance » : le compte apparaît dans le portefeuille et **ses soldes font foi** (comme un wallet) — le journal ne sert plus que pour le coût d'acquisition, avec rapprochement habituel. Prix lus sur les paires USDT Binance, id CoinGecko retrouvé via le top marché ; un actif sans paire conocida affiche « prix inconnu », jamais 0.
+- **Carte « Écarts à ta cible » (Cockpit)** : dérive poche par poche vs ton profil, calculée par tes règles uniquement — renforcer / alléger / « orienter le DCA » (le cœur ne se vend pas hors euphorie), limites par ligne dépassées, poussières sous `minLinePct` à regrouper.
+- **Carte « Risque du portefeuille » (Wallet)** : concentration (HHI), plus grosse ligne et top 3, corrélation moyenne au Bitcoin sur 7 jours (sparkline), répartition par plateforme (risque de contrepartie : Ledger / Crypto.com / Binance / Phantom…), scénarios de krach (BTC −30 % / −50 %, les alts amplifient via les bêtas par poche).
+- **Onglet « Earn & plateformes » (Rendement & DeFi)** : Simple Earn flexible Binance (taux lus sur l'API publique, retirable à tout moment), top pools DefiLlama de Jupiter, Orca, Raydium et Hyperliquid, et la correspondance fonction par fonction entre Binance (Spot, Earn, Démo, Bots, Copy trading, API, DEX/Alpha, Marge, Convert/P2P) et l'endroit où Boussole le couvre déjà.
+- **Tests** : HMAC-SHA256 (vecteur connu), mapping des soldes Binance, dérives, métriques de risque — 703 tests au total.
+
 ## Idées pour la suite (priorisées)
 
 ### Priorité haute

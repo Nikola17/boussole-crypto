@@ -2,18 +2,22 @@
 
 import { ExternalLink } from 'lucide-react';
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useStore } from '../store/useStore';
 import { useFx } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { useYields } from '../hooks/useYields';
 import { YIELD_OPTIONS, yieldRows, type YieldRow } from '../lib/staking';
 import { fmtMoney, fmtNum } from '../lib/format';
 import { openExternal } from '../lib/platform';
-import { setQuery, useHashPath } from '../router';
+import { getBinanceFlexibleEarn } from '../api/binanceAccount';
+import { getProjectTopPools } from '../api/yields';
+import { Link, setQuery, useHashPath } from '../router';
 import { Badge, Banner, Card, ErrorNote, PageHeader, Segmented, Spinner } from '../components/ui';
 import { Envelope } from '../components/Envelope';
 import { FALLBACK_EUR_PER_USD } from '../lib/fx';
 
-type Tab = 'rendement' | 'enveloppe';
+type Tab = 'rendement' | 'enveloppe' | 'earn';
 const RISK_LABEL = { 1: 'Classique', 2: 'Modéré', 3: 'Élevé' } as const;
 const RISK_TONE = { 1: 'up', 2: 'warn', 3: 'down' } as const;
 const ASSETS: { coinId: string; label: string }[] = [
@@ -29,8 +33,8 @@ export default function Defi() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader title="Rendement & DeFi" subtitle="Ce que rapporte vraiment le staking à ta taille, et un cadre strict pour les paris sur Solana." />
-      <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[{ value: 'rendement', label: 'Rendement' }, { value: 'enveloppe', label: 'Enveloppe DeFi' }]} />
-      {tab === 'rendement' ? <Yields /> : <Envelope />}
+      <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[{ value: 'rendement', label: 'Rendement' }, { value: 'enveloppe', label: 'Enveloppe DeFi' }, { value: 'earn', label: 'Earn & plateformes' }]} />
+      {tab === 'rendement' ? <Yields /> : tab === 'enveloppe' ? <Envelope /> : <Earn />}
     </div>
   );
 }
@@ -84,8 +88,99 @@ function Yields() {
   );
 }
 
-function YieldItem({ r, eur, minGain }: { r: YieldRow; eur: (usd: number) => string; minGain: number }) {
-  const o = r.option;
+/** Onglet « Earn & plateformes » : Simple Earn Binance, pools DeFi (Jupiter, Orca, Raydium, Hyperliquid) et
+ *  correspondance entre les fonctions Binance et ce que Boussole fait déjà (ou où le faire). */
+const DEFI_PROJECTS: { slug: string; label: string; url: string }[] = [
+  { slug: 'jupiter', label: 'Jupiter (Solana)', url: 'https://jup.ag' },
+  { slug: 'orca', label: 'Orca (Solana)', url: 'https://www.orca.so' },
+  { slug: 'raydium', label: 'Raydium (Solana)', url: 'https://raydium.io' },
+  { slug: 'hyperliquid', label: 'Hyperliquid (HYPE)', url: 'https://app.hyperliquid.xyz' },
+];
+
+const BINANCE_MAP: { binance: string; boussole: string; to?: string }[] = [
+  { binance: 'Spot', boussole: 'Signaux, DCA et portefeuille suivis ici', to: '/marche' },
+  { binance: 'Earn / Advanced Earn', boussole: 'Cet onglet : rendements lus en direct (Binance + DefiLlama)' },
+  { binance: 'Démo de trading', boussole: 'Labo → Papier : portefeuille fictif aux prix réels, autopilotes testés en direct', to: '/labo' },
+  { binance: 'Bots de trading', boussole: 'Labo → Autopilotes : stratégies de Boussole exécutées seules, avec verdict de confiance mesuré', to: '/labo' },
+  { binance: 'Copy trading', boussole: 'Pépites → Smart money : wallets suivis, mouvements notés gagnant/perdant à 7 et 30 jours', to: '/pepites' },
+  { binance: 'API', boussole: 'Réglages → Plateformes : ta clé Binance en lecture seule alimente ton portefeuille', to: '/reglages' },
+  { binance: 'DEX (Binance Wallet) & Alpha', boussole: 'Pépites → Émergentes : jeunes paires Solana/Base avec scan de sécurité', to: '/pepites' },
+  { binance: 'Marge (levier)', boussole: 'Trading → calculateur : taille avec levier, prix de liquidation et avertissements', to: '/trading' },
+  { binance: 'Convert & P2P', boussole: 'Wallet → Fiscalité : chaque échange crypto→crypto est une cession imposable en France, calculée pour toi', to: '/portefeuille' },
+];
+
+function Earn() {
+  const binanceKey = useStore((s) => s.settings.binanceApiKey);
+  const earn = useQuery({ queryKey: ['binanceEarn', binanceKey.slice(-6)], queryFn: () => getBinanceFlexibleEarn(binanceKey || undefined), staleTime: 30 * 60_000, retry: 1 });
+  const projects = useQuery({
+    queryKey: ['defiProjects'],
+    queryFn: async () => {
+      const out: { slug: string; label: string; url: string; pools: Awaited<ReturnType<typeof getProjectTopPools>> }[] = [];
+      for (const p of DEFI_PROJECTS) out.push({ ...p, pools: await getProjectTopPools(p.slug) });
+      return out;
+    },
+    staleTime: 30 * 60_000,
+    retry: 1,
+  });
+
+  return (
+    <div className="space-y-4">
+      <Banner tone="info" title="Lecture seule : Boussole ne passe aucun ordre">
+        Ces rendements sont lus sur des API publiques (Binance, DefiLlama) et affichés pour t’aider à choisir — tout ordre se passe sur le site officiel du protocole, après vérification de l’adresse. N’achète jamais un jeton uniquement pour son rendement.
+      </Banner>
+
+      <Card title="Binance Simple Earn (flexible)" subtitle="Taux du moment lus sur l’API publique Binance — retirable à tout moment" actions={<button type="button" className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline" onClick={() => openExternal('https://www.binance.com/fr/earn/simple-earn')}>binance.com/earn <ExternalLink className="size-3" /></button>}>
+        {earn.isLoading && <Spinner label="Lecture des produits Earn…" />}
+        {earn.data == null && !earn.isLoading && <p className="text-sm text-muted">Données indisponibles pour le moment.</p>}
+        {earn.data && earn.data.length > 0 && (
+          <ul className="divide-y divide-line">
+            {earn.data.slice(0, 12).map((p) => (
+              <li key={p.asset} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="font-medium text-ink">{p.asset}</span>
+                <span className="tnum text-ink-2">{p.apy != null ? `${fmtNum(p.apy, 2)} %/an` : '—'}{p.minAmount != null ? <span className="text-xs text-muted"> · min {fmtNum(p.minAmount, 2)} {p.asset}</span> : null}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card title="DeFi — protocoles suivis (DefiLlama)" subtitle="Top pools par TVL ; l’APY est variable et non garanti">
+        {projects.isLoading && <Spinner label="Lecture des pools…" />}
+        {projects.data?.map((p) => (
+          <div key={p.slug} className="mb-3 last:mb-0">
+            <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-ink hover:underline" onClick={() => openExternal(p.url)}>{p.label} <ExternalLink className="size-3 text-muted" /></button>
+            {!p.pools && <p className="mt-1 text-xs text-muted">Données indisponibles.</p>}
+            {p.pools && p.pools.length > 0 && (
+              <ul className="mt-1 divide-y divide-line">
+                {p.pools.map((pool) => (
+                  <li key={pool.pool} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                    <span className="min-w-0 truncate text-ink-2">{pool.symbol} <span className="text-xs text-muted">{pool.chain}</span></span>
+                    <span className="tnum shrink-0 text-ink">{pool.apy != null ? `${fmtNum(pool.apy, 2)} %` : '—'}<span className="text-xs text-muted"> · {pool.tvlUsd != null ? `${fmtNum(pool.tvlUsd / 1e6, 1)} M$` : ''}</span></span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </Card>
+
+      <Card title="Binance ↔ Boussole : à quoi servent tes fonctions Binance ici ?" subtitle="Boussole ne remplace pas Binance : elle t’évite de devoir y aller pour décider">
+        <ul className="divide-y divide-line">
+          {BINANCE_MAP.map((m) => (
+            <li key={m.binance} className="flex items-baseline justify-between gap-3 py-2 text-sm">
+              <span className="shrink-0 font-medium text-ink">{m.binance}</span>
+              <span className="text-right text-xs text-ink-2">
+                {m.to ? <Link to={m.to} className="hover:underline">{m.boussole}</Link> : m.boussole}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+function YieldItem({ r, eur, minGain }: { r: YieldRow; eur: (usd: number) => string; minGain: number }) {  const o = r.option;
   return (
     <li className="py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

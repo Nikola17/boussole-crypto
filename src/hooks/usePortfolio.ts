@@ -1,11 +1,14 @@
 // Agrège les positions saisies (journal de transactions) et les wallets suivis, valorisés au prix du marché.
 
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { useFx, useMarkets, usePrices } from './useMarket';
 import { buildPositions, allocation, type Position } from '../lib/portfolio';
 import { getBtcBalance, getEvmBalances, getSolanaHoldings, scanXpub, xpubNote, type WalletHolding, type WalletResult } from '../api/wallets';
+import { getAllPrices } from '../api/binance';
+import { getBinanceAccount } from '../api/binanceAccount';
+import { buildExchangeHoldings } from '../lib/exchangeHoldings';
 import { coveredAccountIds, journalByAccount } from '../lib/accounts';
 import { computeHoldings, computeTotals } from '../lib/holdings';
 import { isExtendedKey } from '../lib/xpub';
@@ -57,7 +60,49 @@ export function usePortfolio() {
   const currency = useStore((s) => s.settings.currency);
   const fx = useFx();
   const markets = useMarkets();
-  const { wallets, results } = useWalletBalances();
+  const { wallets: storeWallets, results: storeResults } = useWalletBalances();
+
+  // Plateformes connectées en lecture seule (Binance) : leurs soldes sont traités comme un « wallet »
+  // synthétique — la plateforme fait foi pour le compte, le journal ne sert plus qu'au coût d'acquisition.
+  const rawAccounts = useStore((s) => s.accounts);
+  const binanceKey = useStore((s) => s.settings.binanceApiKey);
+  const binanceSecret = useStore((s) => s.settings.binanceApiSecret);
+  const exAccounts = useMemo(() => rawAccounts.filter((a) => a.exchangePlatform === 'binance'), [rawAccounts]);
+  const exEnabled = exAccounts.length > 0 && binanceKey.length > 8 && binanceSecret.length > 8;
+  const pricesQuery = useQuery({ queryKey: ['binanceAllPrices'], queryFn: getAllPrices, enabled: exEnabled, staleTime: 5 * 60_000, retry: 1 });
+  const exQuery = useQuery({
+    queryKey: ['binanceAccount', binanceKey.slice(-8)],
+    queryFn: () => getBinanceAccount(binanceKey, binanceSecret),
+    enabled: exEnabled,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+  const bySymbol = useMemo(() => {
+    const m = new Map<string, { id: string; name?: string; image?: string; rank?: number | null }>();
+    for (const c of markets.data ?? []) m.set(c.symbol.toUpperCase(), { id: c.id, name: c.name, image: c.image, rank: c.market_cap_rank });
+    return m;
+  }, [markets.data]);
+  const exWalletId = (accountId: string) => `exchange:binance:${accountId}`;
+  const exWallets = useMemo(
+    () => exAccounts.map((a) => ({ id: exWalletId(a.id), label: a.name, includeInTotal: true, chain: 'evm', address: '' }) as unknown as WalletAddress),
+    [exAccounts],
+  );
+  const accounts = useMemo(
+    () => rawAccounts.map((a) => (a.exchangePlatform ? { ...a, walletIds: [exWalletId(a.id)] } : a)),
+    [rawAccounts],
+  );
+  const exResults = useMemo(
+    () => exAccounts.map((a) => {
+      const holdings = exQuery.data && pricesQuery.data ? buildExchangeHoldings(exQuery.data, pricesQuery.data, bySymbol) : [];
+      const data: WalletResult | null = exEnabled
+        ? { walletId: exWalletId(a.id), holdings, totalUsd: holdings.reduce((s, h) => s + (h.valueUsd ?? 0), 0), errors: exQuery.error ? [(exQuery.error as Error).message] : [], fetchedAt: Date.now() }
+        : null;
+      return { isLoading: exEnabled && exQuery.isLoading, isError: exEnabled && exQuery.isError, data };
+    }) as unknown as typeof storeResults,
+    [exAccounts, exEnabled, exQuery.data, exQuery.isLoading, exQuery.isError, exQuery.error, pricesQuery.data, bySymbol],
+  );
+  const wallets = useMemo(() => [...storeWallets, ...exWallets], [storeWallets, exWallets]);
+  const results = useMemo(() => [...storeResults, ...exResults], [storeResults, exResults]);
 
   const positions = useMemo(() => buildPositions(transactions), [transactions]);
   const marketMap = useMemo(() => new Map((markets.data ?? []).map((m) => [m.id, m])), [markets.data]);
@@ -83,7 +128,6 @@ export function usePortfolio() {
 
   const rate = currency === 'EUR' ? fx : 1;
 
-  const accounts = useStore((s) => s.accounts);
   const journal = useMemo(() => journalByAccount(transactions), [transactions]);
   const walletLoaded = useMemo(() => walletData.map((d) => !!d), [walletData]);
   /** Comptes dont la blockchain fait foi : leurs quantités viennent des wallets, pas du journal. */

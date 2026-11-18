@@ -10,6 +10,7 @@ import { buildAiConfig, testConnection } from '../ai/run';
 import { NOUS_BASE_URL } from '../ai/openai';
 import { listMistralModels, MISTRAL_SUGGESTED } from '../ai/mistral';
 import { useCompatModels } from '../hooks/useAiModels';
+import { testBinanceKey, type BinanceKeyTest } from '../api/binanceAccount';
 import { backupFolderLabel, ensureNotificationPermission, isElectron, isNative, lockAvailable, openBackupFolder, openExternal, platformLabel, saveTextFile } from '../lib/platform';
 import { useAiContext } from '../ai/context';
 import { checkPassphrase } from '../lib/sync/crypto';
@@ -81,6 +82,80 @@ function MistralFields({ show, onToggleShow }: { show: boolean; onToggleShow: ()
         L’app lui fournit les derniers titres de CoinDesk, Cointelegraph, Decrypt et The Block, et lui interdit d’inventer une actualité. Le coût n’étant pas renvoyé par Mistral, il s’affiche en jetons consommés.
       </Banner>
     </>
+  );
+}
+
+
+/** Plateformes en lecture seule (Binance) : clé API restreinte « Enable Reading », soldes intégrés au portefeuille. */
+function ExchangeCard() {
+  const set = useStore((s) => s.setSettings);
+  const key = useStore((s) => s.settings.binanceApiKey);
+  const secret = useStore((s) => s.settings.binanceApiSecret);
+  const accounts = useStore((s) => s.accounts);
+  const upsertAccount = useStore((s) => s.upsertAccount);
+  const [show, setShow] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<BinanceKeyTest | null>(null);
+  const exAccounts = accounts.filter((a) => a.exchangePlatform === 'binance');
+
+  async function test() {
+    setTesting(true);
+    setResult(null);
+    try {
+      setResult(await testBinanceKey(key.trim(), secret));
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  function link() {
+    const existing = exAccounts[0];
+    upsertAccount({
+      id: existing?.id ?? 'binance',
+      name: existing?.name ?? 'Binance',
+      kind: 'exchange',
+      exchangePlatform: 'binance',
+      walletIds: existing?.walletIds ?? [],
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+    });
+  }
+
+  return (
+    <Card title={<span className="inline-flex items-center gap-2"><KeyRound className="size-4 text-accent" />Plateformes — lecture seule</span>} subtitle="Boussole lit tes soldes, elle ne peut rien acheter ni retirer : crée la clé avec UNIQUEMENT « Enable Reading ».">
+      <div className="space-y-4">
+        <Banner tone="warn" title="Clé Binance en lecture seule">
+          Sur binance.com → Profil → Gestion des API : crée une clé, coche seulement <strong>Enable Reading</strong>, décoche tout le reste (pas de retrait, pas de trading), et restreins-la à ton IP si l’option existe. La clé et son secret sont chiffrés par le système sur cet appareil : jamais dans les sauvegardes, jamais dans la synchronisation.
+        </Banner>
+        <Field label="Clé API Binance" hint={<>Crée-la sur <button type="button" className="text-accent underline" onClick={() => openExternal('https://www.binance.com/fr/my/settings/api-management')}>binance.com → Gestion des API</button>.</>}>
+          <div className="flex gap-2">
+            <Input type={show ? 'text' : 'password'} value={key} onChange={(e) => { set({ binanceApiKey: e.target.value.trim() }); setResult(null); }} placeholder="Clé API (lecture seule)" autoComplete="off" spellCheck={false} />
+          </div>
+        </Field>
+        <Field label="Secret API Binance" hint="Le secret sert à signer les requêtes de lecture. Il reste sur cet appareil.">
+          <div className="flex gap-2">
+            <Input type={show ? 'text' : 'password'} value={secret} onChange={(e) => { set({ binanceApiSecret: e.target.value }); setResult(null); }} placeholder="Secret API" autoComplete="off" spellCheck={false} />
+            <Button variant="ghost" icon={show ? <EyeOff className="size-4" /> : <Eye className="size-4" />} aria-label={show ? 'Masquer' : 'Afficher'} onClick={() => setShow((v) => !v)} />
+          </div>
+        </Field>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => void test()} disabled={testing || !key || !secret}>{testing ? 'Test en cours…' : 'Tester la connexion'}</Button>
+          {!exAccounts.length && <Button size="sm" variant="primary" onClick={link} disabled={!key || !secret}>Lier à un compte « Binance » du portefeuille</Button>}
+        </div>
+        {result && (result.ok
+          ? <Banner tone="success" title="Connexion réussie">{result.assets} actif(s) lus sur ton compte Binance. Les soldes apparaîtront dans le portefeuille dès que le compte est lié.</Banner>
+          : <Banner tone="danger" title="Échec de la connexion">{result.error} — vérifie que la clé a « Enable Reading » et, si tu as restreint l’IP, qu’elle correspond à celle-ci.</Banner>)}
+        {!!exAccounts.length && (
+          <ul className="divide-y divide-line rounded-lg border border-line">
+            {exAccounts.map((a) => (
+              <li key={a.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                <span className="text-ink">{a.name} <span className="text-xs text-muted">— compte relié en lecture seule</span></span>
+                <Button size="sm" variant="ghost" onClick={() => upsertAccount({ ...a, exchangePlatform: undefined })}>Dissocier</Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -266,6 +341,8 @@ export default function Settings() {
             <p className="text-xs text-muted">{mistral ? 'Chaque rapport affiche les jetons consommés ; le tarif de ton modèle est sur console.mistral.ai.' : compat ? 'Le coût réel de chaque analyse (renvoyé par le fournisseur) est affiché sur le rapport.' : 'Ordre de grandeur avec Opus 5.5 : ~0,15 à 0,40 $ par brief, ~0,60 à 1,50 $ par comité des sages. Le coût réel de chaque analyse est affiché sur le rapport.'}</p>
           </div>
         </Card>
+
+        <ExchangeCard />
 
         <Card title="Données & affichage">
           <div className="space-y-4">

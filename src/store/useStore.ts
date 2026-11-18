@@ -155,6 +155,8 @@ export const defaultSettings: Settings = {
   disclaimerAccepted: false,
   taxRatePct: 31.4,
   scanSize: 50,
+  binanceApiKey: '',
+  binanceApiSecret: '',
   syncEnabled: false,
   syncRepo: '',
   syncToken: '',
@@ -508,7 +510,7 @@ export function exportBackup(includeKeys = false): string {
   const s = useStore.getState();
   const data: Record<string, unknown> = { app: 'boussole-crypto', version: DATA_VERSION, exportedAt: new Date().toISOString() };
   for (const k of BACKUP_KEYS) data[k] = s[k];
-  if (!includeKeys) data.settings = { ...s.settings, anthropicKey: '', compatKey: '', mistralKey: '', coingeckoKey: '' };
+  if (!includeKeys) data.settings = { ...s.settings, anthropicKey: '', compatKey: '', mistralKey: '', coingeckoKey: '', binanceApiKey: '', binanceApiSecret: '' };
   data.settings = { ...(data.settings as Settings), syncToken: '', syncPassphrase: '' };
   return JSON.stringify(data, null, 2);
 }

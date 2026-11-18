@@ -24,6 +24,8 @@ import { WeeklyCard } from '../components/WeeklyCard';
 import { AutopilotCard } from '../components/AutopilotCard';
 import { DisciplineCard } from '../components/DisciplineCard';
 
+import { DriftCard } from '../components/DriftCard';
+
 function greeting(name: string) {
   const h = new Date().getHours();
   const g = h < 6 ? 'Bonne nuit' : h < 18 ? 'Bonjour' : 'Bonsoir';
@@ -231,6 +233,7 @@ export default function Dashboard() {
         <WeeklyCard />
         <AutopilotCard />
         <DisciplineCard />
+        <DriftCard />
       </div>
     </div>
   );

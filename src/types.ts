@@ -37,6 +37,10 @@ export interface Settings {
   disclaimerAccepted: boolean;
   taxRatePct: number;
   scanSize: 50 | 100;
+  /** Clé API Binance en LECTURE SEULE (solde spot) : chiffrée par le système, jamais synchronisée ni exportée. */
+  binanceApiKey: string;
+  /** Secret de la clé API Binance (signe les requêtes) : idem. */
+  binanceApiSecret: string;
   // Synchronisation PC ↔ téléphone : réglages propres à CET appareil, jamais synchronisés ni exportés.
   syncEnabled: boolean;
   /** Dépôt GitHub privé du transport (ex : Nikola17/boussole-sync). */
@@ -214,6 +218,8 @@ export interface Account {
   kind: AccountKind;
   /** Wallets suivis (adresses publiques) dont la blockchain fait foi pour ce compte. */
   walletIds: string[];
+  /** Plateforme connectée en lecture seule (ses soldes font foi pour ce compte, comme un wallet). */
+  exchangePlatform?: 'binance';
   createdAt: string;
 }
 
