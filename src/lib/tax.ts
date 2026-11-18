@@ -123,3 +123,23 @@ export function simulateSale(
     acquisitionAfter: Math.max(0, acquisition - fraction),
   };
 }
+
+/**
+ * CSV (point-virgule, guillemets échappés) des cessions d'une année, prêt à être repris
+ * dans le formulaire 2086 : une ligne par cession + une ligne TOTAL.
+ */
+export function taxYearCsv(y: TaxYear): string {
+  const head = ['Année', 'Date', 'Actif cédé', 'Prix de cession (€)', 'Fraction du prix d’acquisition imputée (€)', 'Plus-value / moins-value (€)', 'Valeur du portefeuille à la cession (€)'];
+  const rows: (string | number)[][] = y.events.map((e) => [
+    y.year,
+    e.date,
+    e.symbol,
+    e.cession.toFixed(2),
+    e.fractionImputed.toFixed(2),
+    e.gain.toFixed(2),
+    e.portfolioValue != null ? e.portfolioValue.toFixed(2) : 'non renseignée',
+  ]);
+  rows.push([y.year, 'TOTAL', '', y.totalCessions.toFixed(2), '', y.netGain.toFixed(2), '']);
+  const esc = (c: string | number) => `"${String(c).replace(/"/g, '""')}"`;
+  return [head, ...rows].map((r) => r.map(esc).join(';')).join('\r\n');
+}

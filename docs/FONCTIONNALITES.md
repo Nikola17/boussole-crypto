@@ -293,6 +293,13 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v1.30.0 — Lot D « Fiscalité FR » : export 2086 et moins-values
+
+- **Export CSV de chaque année fiscale** (bouton sur la carte « Mes années fiscales », Wallet) : cessions détaillées (date, actif, prix de cession, fraction imputée A×C/V, plus/moins-value, valeur du portefeuille) + ligne TOTAL, en CSV point-virgule prêt à être repris dans le formulaire 2086, avec BOM UTF-8 pour Excel.
+- **Moins-values signalées** : une année en moins-value nette affiche le montant reportable sur les 10 années suivantes (à déclarer aussi).
+- Rappel corrigé dans l'onglet Earn : depuis 2023, les échanges crypto→crypto ne sont pas imposables en France — seules les conversions en monnaie classique le sont (le calcul 150 VH bis du journal applique déjà cette règle via les indicateurs `toFiat`/`fromFiat`).
+- Tests du calcul 150 VH bis (imputation A×C/V, exonération ≤ 305 €, neutralité crypto→crypto, CSV) — 708 tests au total.
+
 ### v1.29.0 — Lot A « Connaissance de toi » + écosystème Binance / DeFi
 
 - **Connexion Binance en lecture seule** : clé API + secret dans Réglages → « Plateformes — lecture seule » (créée sur Binance avec UNIQUEMENT « Enable Reading », IP restreinte si possible). Les deux champs sont chiffrés par le système comme les autres secrets : jamais en clair, jamais dans les sauvegardes ni la synchronisation. Bouton « Tester la connexion » (nombre d'actifs lus, ou l'erreur exacte : IP non autorisée, clé invalide…), puis « Lier à un compte Binance » : le compte apparaît dans le portefeuille et **ses soldes font foi** (comme un wallet) — le journal ne sert plus que pour le coût d'acquisition, avec rapprochement habituel. Prix lus sur les paires USDT Binance, id CoinGecko retrouvé via le top marché ; un actif sans paire conocida affiche « prix inconnu », jamais 0.

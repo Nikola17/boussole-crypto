@@ -6,10 +6,11 @@ import { usePortfolio } from '../hooks/usePortfolio';
 import { useCycle, useFx } from '../hooks/useMarket';
 import { BUCKET_LABEL, BUCKET_ORDER, concentration, rebalance, rebalanceAction, stressTest } from '../lib/portfolio';
 import { TEMPERATURE } from '../lib/thresholds';
-import { computeFrenchTax, simulateSale, EXEMPTION_THRESHOLD_EUR } from '../lib/tax';
+import { computeFrenchTax, simulateSale, taxYearCsv, EXEMPTION_THRESHOLD_EUR } from '../lib/tax';
 import { unlinkedOverlap } from '../lib/accounts';
 import { missingStock } from '../lib/stock';
 import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtQty, shortAddress, uid } from '../lib/format';
+import { saveTextFile } from '../lib/platform';
 import { detectChain, EVM_CHAINS } from '../api/wallets';
 import { Link, setQuery, useHashPath } from '../router';
 import {
@@ -482,7 +483,11 @@ function Taxes() {
                   <div><div className="text-muted">Plus-value nette</div><div className="tnum text-ink">{fmtMoney(y.netGain, 'EUR', 0)}</div></div>
                   <div><div className="text-muted">Impôt estimé</div><div className="tnum font-medium text-ink">{fmtMoney(y.tax, 'EUR', 0)}</div></div>
                 </div>
+                {y.netGain < 0 && !y.exempt && <p className="mt-2 text-xs text-warn">Moins-value nette de {fmtMoney(-y.netGain, 'EUR', 0)} : reportable sur les 10 années suivantes (à déclarer aussi).</p>}
                 {y.incomplete && <p className="mt-2 text-xs text-down">Certaines ventes n’ont pas la « valeur globale du portefeuille » : modifie-les pour un calcul exact.</p>}
+                <div className="mt-2">
+                  <Button size="sm" variant="ghost" icon={<FileUp className="size-3.5" />} onClick={() => void saveTextFile(`boussole-cessions-${y.year}.csv`, '\ufeff' + taxYearCsv(y))}>Exporter le CSV {y.year} (relevé 2086)</Button>
+                </div>
               </li>
             ))}
           </ul>

@@ -106,7 +106,7 @@ const BINANCE_MAP: { binance: string; boussole: string; to?: string }[] = [
   { binance: 'API', boussole: 'Réglages → Plateformes : ta clé Binance en lecture seule alimente ton portefeuille', to: '/reglages' },
   { binance: 'DEX (Binance Wallet) & Alpha', boussole: 'Pépites → Émergentes : jeunes paires Solana/Base avec scan de sécurité', to: '/pepites' },
   { binance: 'Marge (levier)', boussole: 'Trading → calculateur : taille avec levier, prix de liquidation et avertissements', to: '/trading' },
-  { binance: 'Convert & P2P', boussole: 'Wallet → Fiscalité : chaque échange crypto→crypto est une cession imposable en France, calculée pour toi', to: '/portefeuille' },
+  { binance: 'Convert & P2P', boussole: 'Wallet → Fiscalité : seules les conversions en euros sont imposables (crypto→crypto neutre depuis 2023), calculées pour toi', to: '/portefeuille' },
 ];
 
 function Earn() {
