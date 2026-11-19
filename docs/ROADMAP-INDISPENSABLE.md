@@ -2,6 +2,21 @@
 
 > Outil d'aide à la décision, pas un conseil en investissement.
 
+## ✅ Livré (v1.29.0 → v1.33.0, release GitHub du 19 nov. 2026)
+
+- **Lot A** (v1.29.0) : connexion Binance lecture seule + compte « Binance » intégré au portefeuille, carte « Écarts à ta cible », carte « Risque » (HHI, corrélation BTC, contrepartie, stress tests), onglet « Earn & plateformes » (Simple Earn Binance + pools DefiLlama Jupiter/Orca/Raydium/Hyperliquid + correspondance Binance ↔ Boussole).
+- **Lot D** (v1.30.0) : export CSV 2086 par année, moins-values reportables.
+- **Lot C** (v1.31.0) : scanner d'approvals EVM sans clé (Blockscout + RPC, « À révoquer »), déblocages de tokens suivis (J-7/J-1, sync).
+- **Lot B** (v1.32.0) : radar dérivés & réseau BTC (OI, funding, long/short, mempool) sur le Cockpit.
+- **Lot E** (v1.33.0) : webhook HTTPS sur les alertes, rapport mensuel exportable (Markdown).
+
+## Reste à faire
+
+- Lot F : i18n anglais, page GitHub Pages, iOS (build Mac), widget Windows.
+- Lot G : circuit breakers anti-panique, brief IA actionnable ligne par ligne, simulations « et si ».
+- Côté serveur (VPS) : alerte Telegram J-1 sur les déblocages saisis, dashboard web en lecture seule (nginx + HTTPS).
+- Import CSV des autres plateformes (Binance, Kraken, Coinbase) sur le modèle Crypto.com.
+
 ## Diagnostic : ce que le projet fait déjà très bien
 
 - **Une mesure honnête** : le banc d'essai (`docs/bench/`) a montré que la plupart des signaux "malins" ne battent pas le hasard, que la température seule fait jeu égal avec le DCA Bitcoin, et que le trader v2 gagne +0,26 R avant frais. C'est une force rare : l'app ne promet pas de battre le marché, elle mesure.
