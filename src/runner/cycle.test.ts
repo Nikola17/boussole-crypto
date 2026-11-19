@@ -18,7 +18,7 @@ const PASS = 'phrase de passe du runner';
 const CFG: RunnerConfig = {
   syncRepo: 'Nikola17/boussole-sync', syncPath: 'boussole-sync.enc', syncToken: 'tok', passphrase: PASS,
   telegramToken: 'tg', telegramChatId: '42', coingeckoKey: null, currency: 'EUR',
-  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, smartMoneyEnabled: false, emergingEnabled: false, autopilotEnabled: false, autopilotTelegram: false, signalAlertsEnabled: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', quietStart: 0, quietEnd: 0, stateDir: '', device: 'vps-test',
+  intervalMinutes: 5, briefHour: 8, briefEnabled: true, briefUsOpen: false, briefUsClose: false, newsEnabled: false, smartMoneyEnabled: false, emergingEnabled: false, autopilotEnabled: false, autopilotTelegram: false, signalAlertsEnabled: false, mistralApiKey: null, mistralModel: 'mistral-small-latest', timeZone: 'Europe/Paris', quietStart: 0, quietEnd: 0, stateDir: '', dashboardDir: '', device: 'vps-test',
 };
 
 const txSol: Transaction = { id: 't1', coinId: 'solana', symbol: 'sol', name: 'Solana', date: '2026-01-10', type: 'buy', quantity: 100, price: 2, currency: 'USD', fee: 0, fxEurPerUsd: 0.87, updatedAt: '2026-01-10T00:00:00Z' };
@@ -628,5 +628,26 @@ describe('alertes de signal dans le cycle', () => {
     keys = ['inv:Alléger'];
     await runCycle(CFG_SIG, v1.state, { dry: false, forceBrief: false }, vac.deps, day(21, 9));
     expect(vac.sent.filter((t) => t.startsWith('Signal'))).toHaveLength(0);
+  });
+
+  it('déblocage de token suivi : alerte J-1 puis J-0, une fois chacune, même en mode vacances', async () => {
+    const unlock = { id: 'u1', symbol: 'arb', date: '2026-11-21', amount: 1000, pctSupply: 0.4, updatedAt: '2026-11-01T00:00:00Z' };
+    const d = (dayNum: number, h: number) => new Date(2026, 10, dayNum, h, 0); // 20 nov → J-1, 21 nov → J-0
+    const { deps, sent } = makeDeps({ transactions: [], unlocks: [unlock] }, { prices: FLAT });
+    const r1 = await runCycle(CFG, emptyState(), dry(), deps, d(20, 9));
+    expect(sent.filter((t) => t.includes('déblocage ARB'))).toHaveLength(1);
+    expect(sent.find((t) => t.includes('déblocage ARB'))).toContain('Demain');
+    expect(sent.find((t) => t.includes('déblocage ARB'))).toContain('0.4 % de l’offre');
+    // même jour, second passage : pas de doublon
+    await runCycle(CFG, r1.state, dry(), deps, d(20, 15));
+    expect(sent.filter((t) => t.includes('déblocage ARB'))).toHaveLength(1);
+    // le jour J : alerte J-0
+    await runCycle(CFG, r1.state, dry(), deps, d(21, 9));
+    expect(sent.filter((t) => t.includes('déblocage ARB'))).toHaveLength(2);
+    expect(sent.filter((t) => t.includes('déblocage ARB'))[1]).toContain('Aujourd’hui');
+    // mode vacances : la veille critique (déblocages compris) continue
+    const vac = makeDeps({ transactions: [], unlocks: [{ ...unlock, id: 'u2', date: '2026-11-22' }], profile: { vacationUntil: '2026-12-31' } }, { prices: FLAT });
+    await runCycle(CFG, emptyState(), dry(), vac.deps, d(21, 9));
+    expect(vac.sent.some((t) => t.includes('déblocage ARB') && t.includes('Demain'))).toBe(true);
   });
 });

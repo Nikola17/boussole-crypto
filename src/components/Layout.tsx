@@ -8,6 +8,7 @@ import { isNavActive, NAV_ROUTES } from '../lib/routes';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useHashPath } from '../router';
 import { useStore } from '../store/useStore';
+import { useT } from '../hooks/useT';
 import { aiReady } from '../ai/run';
 import { StaleDataBanner, StorageBanner } from './StatusBanners';
 
@@ -25,6 +26,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [menu, setMenu] = useState(false);
   const name = useStore((s) => s.profile.name);
   const hasKey = useStore((s) => aiReady(s.settings));
+  const t = useT();
 
   // Sur mobile, le clavier remonte la barre du bas au milieu de l'écran : on la masque pendant la saisie.
   const [typing, setTyping] = useState(false);
@@ -51,10 +53,10 @@ export function Layout({ children }: { children: ReactNode }) {
           <img src="./icon.svg" alt="" className="size-9" />
           <span>
             <span className="block text-[0.95rem] font-semibold leading-tight text-ink">Boussole</span>
-            <span className="block text-[0.7rem] text-muted">Copilote crypto</span>
+            <span className="block text-[0.7rem] text-muted">{t('Copilote crypto')}</span>
           </span>
         </Link>
-        <nav className="flex flex-1 flex-col gap-0.5" aria-label="Navigation principale">
+        <nav className="flex flex-1 flex-col gap-0.5" aria-label={t('Navigation principale')}>
           {NAV.map((n) => (
             <Link
               key={n.to}
@@ -65,14 +67,14 @@ export function Layout({ children }: { children: ReactNode }) {
               )}
             >
               <n.icon className={clsx('size-[18px]', isActive(path, n.to) ? 'text-accent' : 'text-muted')} />
-              {n.label}
+              {t(n.label)}
             </Link>
           ))}
         </nav>
         <div className="mt-4 rounded-lg border border-line p-3 text-xs text-muted">
           <div className="flex items-center gap-2">
             <span className={clsx('size-2 rounded-full', hasKey ? 'bg-good' : 'bg-surface-3')} />
-            {hasKey ? 'IA connectée' : 'IA non configurée'}
+            {hasKey ? t('IA connectée') : t('IA non configurée')}
           </div>
           {name && <div className="mt-1">Profil : {name}</div>}
         </div>
@@ -85,7 +87,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <img src="./icon.svg" alt="" className="size-8" />
             <span className="text-[0.95rem] font-semibold text-ink">Boussole</span>
           </Link>
-          <button type="button" aria-label="Ouvrir le menu" onClick={() => setMenu(true)} className="inline-flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2">
+          <button type="button" aria-label={t('Ouvrir le menu')} onClick={() => setMenu(true)} className="inline-flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2">
             <Menu className="size-5" />
           </button>
         </header>
@@ -96,11 +98,11 @@ export function Layout({ children }: { children: ReactNode }) {
         </main>
 
         {/* Barre du bas mobile */}
-        <nav className={clsx('safe-bottom fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface/95 backdrop-blur lg:hidden', typing && 'hidden')} aria-label="Navigation">
+        <nav className={clsx('safe-bottom fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface/95 backdrop-blur lg:hidden', typing && 'hidden')} aria-label={t('Navigation principale')}>
           {NAV.filter((n) => n.mobile).map((n) => (
             <Link key={n.to} to={n.to} className={clsx('flex flex-col items-center gap-0.5 py-2 text-[0.65rem]', isActive(path, n.to) ? 'text-accent' : 'text-muted')}>
               <n.icon className="size-5" />
-              {n.label.replace('Copilote ', '')}
+              {t(n.label).replace(/^Copilote /, '').replace(/^AI /, '')}
             </Link>
           ))}
         </nav>
@@ -111,14 +113,14 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="fixed inset-0 z-50 bg-black/55 lg:hidden" onClick={() => setMenu(false)}>
           <div className="safe-top absolute right-0 top-0 h-full w-72 max-w-[85vw] border-l border-line bg-surface p-4" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
-              <span className="font-semibold text-ink">Menu</span>
-              <button type="button" aria-label="Fermer le menu" onClick={() => setMenu(false)} className="inline-flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2"><X className="size-5" /></button>
+              <span className="font-semibold text-ink">{t('Menu')}</span>
+              <button type="button" aria-label={t('Fermer le menu')} onClick={() => setMenu(false)} className="inline-flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2"><X className="size-5" /></button>
             </div>
             <nav className="flex flex-col gap-0.5">
               {NAV.map((n) => (
                 <Link key={n.to} to={n.to} onClick={() => setMenu(false)} className={clsx('flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm', isActive(path, n.to) ? 'bg-surface-2 font-medium text-ink' : 'text-ink-2')}>
                   <n.icon className="size-[18px] text-muted" />
-                  {n.label}
+                  {t(n.label)}
                 </Link>
               ))}
             </nav>

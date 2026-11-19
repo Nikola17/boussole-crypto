@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boussole — tableau de bord serveur</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #101218; color: #e8e6e1; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.2rem; display: flex; align-items: center; gap: 8px; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .muted { color: #9ca3af; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; }
+  .card { background: #1a1d26; border: 1px solid #2a2e3a; border-radius: 12px; padding: 12px 14px; }
+  .card .k { font-size: .72rem; color: #9ca3af; text-transform: uppercase; letter-spacing: .04em; }
+  .card .v { font-size: 1.15rem; font-weight: 600; margin-top: 4px; }
+  .card .s { font-size: .75rem; color: #9ca3af; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  td, th { text-align: left; padding: 6px 4px; border-bottom: 1px solid #2a2e3a; }
+  .foot { margin-top: 24px; font-size: .72rem; color: #6b7280; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🧭 Boussole — serveur <span id="state" class="muted">…</span></h1>
+  <div class="cards" id="cards"></div>
+  <h2 style="font-size:.95rem">Prochains déblocages suivis</h2>
+  <table id="unlocks"><thead><tr><th>Token</th><th>Date</th><th>Dans</th></tr></thead><tbody></tbody></table>
+  <p class="foot" id="foot"></p>
+</main>
+<script>
+async function refresh() {
+  try {
+    const r = await fetch('status.json', { cache: 'no-store' });
+    const s = await r.json();
+    const state = document.getElementById('state');
+    state.textContent = s.ok ? '● en ligne' : '● en erreur';
+    state.className = s.ok ? 'ok' : 'ko';
+    const fmt = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString('fr-FR', { maximumFractionDigits: d });
+    const cards = [
+      ['BTC', s.btc?.usd != null ? fmt(s.btc.usd, 0) + ' $' : '—', s.btc?.change24h != null ? fmt(s.btc.change24h, 1) + ' % / 24 h' : ''],
+      ['Fear & Greed', s.fng ? s.fng.value + ' · ' + s.fng.label : '—', ''],
+      ['Température', s.temperature ? fmt(s.temperature.value) + '/100 · ' + s.temperature.zoneLabel : '—', s.zoneLabel ? 'zone mémorisée : ' + s.zoneLabel : ''],
+      ['Alertes armées', fmt(s.watching), ''],
+      ['Dernier brief', Object.entries(s.lastBrief || {}).map(([k, v]) => k + ' : ' + v).join(', ') || '—', ''],
+      ['Dernière synchro', s.sync?.savedAt ? new Date(s.sync.savedAt).toLocaleString('fr-FR') : '—', s.sync?.device ? 'depuis ' + s.sync.device : ''],
+    ];
+    document.getElementById('cards').innerHTML = cards.map(([k, v, s2]) =>
+      `<div class="card"><div class="k">${k}</div><div class="v">${v}</div>${s2 ? `<div class="s">${s2}</div>` : ''}</div>`).join('');
+    const tb = document.querySelector('#unlocks tbody');
+    tb.innerHTML = (s.unlocksNext || []).map(u =>
+      `<tr><td>${u.symbol.toUpperCase()}</td><td>${u.date}</td><td>${u.daysUntil === 0 ? "aujourd'hui" : u.daysUntil === 1 ? 'demain (J-1)' : 'J-' + u.daysUntil}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">Aucun déblocage à venir.</td></tr>';
+    document.getElementById('foot').textContent =
+      `Serveur : ${s.device} · statut écrit à ${new Date(s.at).toLocaleString('fr-FR')} · actualisation auto 60 s.` +
+      (s.error ? ` · erreur : ${s.error}` : '');
+  } catch (e) {
+    document.getElementById('state').textContent = '● statut illisible';
+    document.getElementById('state').className = 'ko';
+  }
+}
+refresh();
+setInterval(refresh, 60000);
+</script>
+</body>
+</html>

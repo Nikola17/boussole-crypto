@@ -140,6 +140,7 @@ export interface AppState {
 export const defaultSettings: Settings = {
   currency: 'EUR',
   theme: 'system',
+  locale: 'auto',
   aiProvider: 'compat',
   anthropicKey: '',
   aiModel: 'claude-opus-5-5',

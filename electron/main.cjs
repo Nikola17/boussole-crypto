@@ -17,7 +17,46 @@ if (!app.requestSingleInstanceLock()) {
 
 let mainWindow = null;
 let tray = null;
+let widgetWindow = null;
 let quitting = false;
+
+// Widget Windows : petite fenêtre toujours au-dessus (route #/widget de l'app), ouverte depuis le menu
+// de la zone de notification ou depuis les réglages. Fermée avec la fenêtre principale si « quitter ».
+function broadcastWidgetState() {
+  const open = !!widgetWindow && !widgetWindow.isDestroyed();
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send('widget:state', open);
+  }
+}
+
+function toggleWidget() {
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.close();
+    widgetWindow = null;
+    broadcastWidgetState();
+    return false;
+  }
+  widgetWindow = new BrowserWindow({
+    width: 320,
+    height: 210,
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    backgroundColor: '#14161c',
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  widgetWindow.on('closed', () => { widgetWindow = null; broadcastWidgetState(); });
+  if (DEV_URL) widgetWindow.loadURL(`${DEV_URL}#/widget`);
+  else widgetWindow.loadURL(`file://${path.join(APP_ROOT, 'dist', 'index.html')}#/widget`);
+  widgetWindow.once('ready-to-show', () => { widgetWindow.show(); broadcastWidgetState(); });
+  return true;
+}
+
+ipcMain.handle('widget:toggle', () => toggleWidget());
 
 // Préférences du bureau (zone de notification, démarrage avec Windows) : lues avant la création de la fenêtre.
 let desktop = { background: true, autoStart: false, noticeShown: false };
@@ -97,6 +136,7 @@ function ensureTray() {
   tray.setToolTip('Boussole Crypto');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Ouvrir Boussole', click: showWindow },
+    { label: widgetWindow && !widgetWindow.isDestroyed() ? 'Masquer le widget' : 'Afficher le widget', click: () => toggleWidget() },
     { type: 'separator' },
     { label: 'Quitter', click: () => { quitting = true; app.quit(); } },
   ]));

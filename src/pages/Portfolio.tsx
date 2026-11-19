@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../store/useStore';
 import { usePortfolio } from '../hooks/usePortfolio';
+import { WhatIfPanel } from '../components/WhatIf';
 import { useCycle, useFx } from '../hooks/useMarket';
 import { BUCKET_LABEL, BUCKET_ORDER, concentration, rebalance, rebalanceAction, stressTest } from '../lib/portfolio';
 import { TEMPERATURE } from '../lib/thresholds';
@@ -34,7 +35,7 @@ const BUCKET_COLOR: Record<Bucket, string> = {
   btc: 'var(--series-2)', eth: 'var(--series-3)', large: 'var(--series-4)', mid: 'var(--series-5)', small: 'var(--series-6)', stable: 'var(--series-7)',
 };
 
-type Tab = 'positions' | 'comptes' | 'wallets' | 'transactions' | 'fiscalite';
+type Tab = 'positions' | 'comptes' | 'wallets' | 'transactions' | 'fiscalite' | 'etsi';
 
 export default function Portfolio() {
   const { query } = useHashPath();
@@ -68,6 +69,7 @@ export default function Portfolio() {
           { value: 'wallets', label: `Wallets (${pf.wallets.length})` },
           { value: 'transactions', label: 'Transactions' },
           { value: 'fiscalite', label: 'Fiscalité 🇫🇷' },
+          { value: 'etsi', label: 'Et si ?' },
         ]}
       />
       {tab === 'positions' && <Positions />}
@@ -75,6 +77,7 @@ export default function Portfolio() {
       {tab === 'wallets' && <Wallets />}
       {tab === 'transactions' && <Transactions onImport={() => setImportOpen(true)} />}
       {tab === 'fiscalite' && <Taxes />}
+      {tab === 'etsi' && <WhatIfPanel />}
       <TransactionModal open={txOpen} onClose={() => setTxOpen(false)} />
       <ImportCryptoCom open={importOpen} onClose={() => setImportOpen(false)} />
     </div>

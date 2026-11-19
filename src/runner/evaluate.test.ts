@@ -10,7 +10,7 @@ const tx = (over: Partial<Transaction> = {}): Transaction => ({
   quantity: 100, price: 2, currency: 'USD', fee: 0, fxEurPerUsd: 0.87, updatedAt: '2026-01-10T00:00:00Z', ...over,
 });
 
-const watch = (over: Partial<WatchData> = {}): WatchData => ({ alerts: [], transactions: [], exitSteps: {}, exitDone: {}, paperTrades: [], paperPortfolios: [], paperOrders: [], paperDays: [], smartWallets: [], watchedTokens: [], vacationUntil: null, ...over });
+const watch = (over: Partial<WatchData> = {}): WatchData => ({ alerts: [], transactions: [], exitSteps: {}, exitDone: {}, paperTrades: [], paperPortfolios: [], paperOrders: [], paperDays: [], smartWallets: [], watchedTokens: [], unlocks: [], vacationUntil: null, ...over });
 
 const bundleOf = (data: Record<string, unknown>): SyncBundle => ({ data, deletions: [], stamps: {} });
 

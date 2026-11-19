@@ -29,6 +29,7 @@ import { useSyncLifecycle } from './hooks/useSync';
 import { updateAssetUrl, useLatestVersion } from './hooks/useUpdate';
 import { loadSecrets, saveSecrets, secretsSealed } from './lib/secure';
 import Dashboard from './pages/Dashboard';
+import Widget from './pages/Widget';
 import { usePaperSettle } from './hooks/usePaperSettle';
 import { useAutopilot } from './hooks/useAutopilot';
 import { useSnapshots } from './hooks/useSnapshots';
@@ -321,6 +322,17 @@ export default function App() {
   const autoBrief = useStore((s) => s.settings.briefingAuto && aiReady(s.settings));
   const { path } = useHashPath();
   if (!accepted) return <Welcome />;
+  // Widget Windows : fenêtre compacte sans barre de navigation (ouverte par le processus principal).
+  if (path === '/widget') {
+    return (
+      <>
+        <AppEffects />
+        <ErrorBoundary scope="page" resetKey={path}>
+          <Widget />
+        </ErrorBoundary>
+      </>
+    );
+  }
   return (
     <Layout>
       <AppEffects />

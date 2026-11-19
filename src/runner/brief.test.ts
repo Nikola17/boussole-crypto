@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BasketPlan, DcaPlan, Transaction } from '../types';
 import type { SyncBundle } from '../lib/sync/merge';
-import { buildBrief } from './brief';
+import { actionableLines, buildBrief } from './brief';
 
 const bundleOf = (data: Record<string, unknown>): SyncBundle => ({ data, deletions: [], stamps: {} });
 
@@ -49,7 +49,7 @@ describe('brief du runner', () => {
     const brief = buildBrief({ now: wednesday, bundle: bundleOf({ transactions: [solTx, btcTx, { ...solTx, id: 't3', coinId: 'jeton-x', symbol: 'xxxyz', name: 'Jeton X', quantity: 500 }] }), prices, fng: { value: 72, label: 'Avidité' }, currency: 'EUR', syncSavedAt: null, syncDevice: null });
     const lines = brief.split('\n');
     // 11 novembre : le CPI du lendemain figure dans l'horizon (une ligne) et sa conduite à tenir (une autre).
-    expect(lines).toHaveLength(9);
+    expect(lines.length).toBeGreaterThanOrEqual(9);
     expect(lines[1]).toContain('Fear & Greed 72 (Avidité)');
     expect(lines[1]).toContain('BTC');
     expect(lines[2]).toContain('À l’horizon :');
@@ -75,5 +75,32 @@ describe('brief du runner', () => {
   it('rien de prévu : le brief le dit plutôt qu’un blanc', () => {
     const brief = buildBrief({ now: wednesday, bundle: bundleOf({ transactions: [solTx] }), prices, fng: null, currency: 'USD', syncSavedAt: null, syncDevice: null });
     expect(brief).toContain('Aucune échéance DCA programmée.');
+  });
+
+  it('conduite à tenir numérotée : échéances du jour en lignes actionnables', () => {
+    const inputs = { now: wednesday, bundle: bundleOf({ basket: [basket], dcaPlans: [plan], transactions: [solTx] }), prices, fng: { value: 40, label: 'Peur' }, currency: 'EUR' as const, syncSavedAt: null, syncDevice: null };
+    const brief = buildBrief(inputs);
+    expect(brief).toContain('À faire aujourd’hui :');
+    expect(brief).toMatch(/1\. Panier « Cœur » : 25 USDC à répartir/);
+    expect(brief).toMatch(/2\. DCA Bitcoin : exécuter le versement prévu/);
+    const actions = actionableLines(inputs);
+    expect(actions[0]).toContain('Panier « Cœur »');
+    expect(actions[1]).toContain('DCA Bitcoin');
+  });
+
+  it('quand tout est déjà exécuté, la conduite à tenir dit de ne rien faire hors plan', () => {
+    const inputs = { now: wednesday, bundle: bundleOf({ basket: [basket], dcaPlans: [plan], transactions: [], basketExecutions: [{ id: 'e1', basketId: 'bk1', periodKey: '2026-11-11', date: '2026-11-11', orders: [], investedUsd: 0, reserveDeltaUsd: 0 }], dcaExecutions: [{ id: 'e2', planId: 'p1', periodKey: 'w-2026-11-9', date: '2026-11-11', amount: 50, price: 200_000, quantity: 0.00025, multiplier: 1 }] }), prices, fng: null, currency: 'EUR' as const, syncSavedAt: null, syncDevice: null };
+    const actions = actionableLines(inputs);
+    // panier et DCA déjà faits → plus d'échéance ; le CPI de demain reste l'action prioritaire
+    expect(actions.some((a) => a.includes('CPI'))).toBe(true);
+    expect(actions.some((a) => a.includes('Panier'))).toBe(false);
+    const none = actionableLines({ ...inputs, now: new Date(2026, 10, 13, 8, 0, 0), bundle: bundleOf({ transactions: [] }) });
+    expect(none).toEqual(['Aucune échéance aujourd’hui : ne rien exécuter, aucune vente hors plan de sortie.']);
+  });
+
+  it('palier atteint = ligne actionnable « vendre X % »', () => {
+    const inputs = { now: wednesday, bundle: bundleOf({ transactions: [solTx], alerts: [] }), prices, fng: null, currency: 'USD' as const, syncSavedAt: null, syncDevice: null };
+    const actions = actionableLines(inputs);
+    expect(actions.some((a) => a.includes('SOL ×2') && a.includes('vendre 25 %'))).toBe(true);
   });
 });

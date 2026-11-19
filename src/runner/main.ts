@@ -21,6 +21,7 @@ import { fetchRemote, pushRemote } from '../lib/sync/github';
 import { applyEnv, validateConfig, type RunnerConfig } from './config';
 import { emptyState, parseState, type RunnerState } from './state';
 import { runCycle, type CycleDeps } from './cycle';
+import { writePublicStatus } from './dashboard';
 import { fetchBtcDaily, fetchBtcFunding, fetchFearGreed, fetchMvrv, fetchPrices, fetchStablecoinShare } from './market';
 import { recentChats, sendMessage } from './telegram';
 import { fetchCoinNews, type NewsItem, type WatchedCoin } from './news';
@@ -205,6 +206,8 @@ const depsOf = (cfg: RunnerConfig): CycleDeps => ({
     return out;
   },
   signals: async (coins) => computeSignals(coins, await runnerAutopilotSources(cfg.coingeckoKey, rulesOf({ archetype: 'Ma stratégie', rules: {} as Profile['rules'] }))),
+  // Dashboard web : si dashboardDir est renseigné, le cycle y écrit status.json (données assainies, aucun secret).
+  status: cfg.dashboardDir ? (st) => writePublicStatus(cfg.dashboardDir, st) : undefined,
 });
 
 // ---------------------------------------------------------------- modes

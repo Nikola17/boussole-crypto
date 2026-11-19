@@ -230,5 +230,51 @@ export function buildBrief(i: BriefInputs): string {
     const when = new Date(i.syncSavedAt);
     if (!Number.isNaN(when.getTime())) lines.push(`Données de synchronisation : ${fmtDate(when, true)}${i.syncDevice ? ` (${i.syncDevice})` : ''}`);
   }
+
+  // Conduite à tenir, ligne par ligne et numérotée : le matin on détaille, aux moments américains on ne garde que la première action.
+  const actions = actionableLines(i);
+  if (actions.length) {
+    const shown = short ? actions.slice(0, 1) : actions.slice(0, 6);
+    lines.push(`À faire${short ? '' : ' aujourd’hui'} :`);
+    for (let k = 0; k < shown.length; k++) lines.push(`${k + 1}. ${shown[k]}`);
+  }
   return lines.join('\n');
+}
+
+/** Lignes actionnables du jour, déduites des échéances, paliers et événements — jamais inventées. */
+export function actionableLines(i: BriefInputs): string[] {
+  const watch = watchOf(i.bundle);
+  const today = isoDay(i.now);
+  const usd = new Map<string, number>();
+  for (const [id, p] of Object.entries(i.prices)) if (typeof p?.usd === 'number' && p.usd > 0) usd.set(id, p.usd as number);
+  const out: string[] = [];
+
+  // 1) Échéances du jour : paniers puis DCA, seulement si pas encore exécutés.
+  const basketExecs = list<BasketExecution>(i.bundle.data.basketExecutions);
+  for (const b of list<BasketPlan>(i.bundle.data.basket).filter((x) => x.active)) {
+    if (isBasketDay(b, i.now)) {
+      const done = basketExecs.some((e) => e.basketId === b.id && e.periodKey === today);
+      if (!done) out.push(`Panier « ${b.name} » : ${b.amountUsd} USDC à répartir — l’ordre est préparé dans l’app.`);
+    }
+  }
+  const dcaExecs = list<DcaExecution>(i.bundle.data.dcaExecutions);
+  for (const p of list<DcaPlan>(i.bundle.data.dcaPlans).filter((x) => x.active)) {
+    if (isScheduledDay(p, i.now)) {
+      const done = dcaExecs.some((e) => e.planId === p.id && e.periodKey === periodKey(p, i.now));
+      if (!done) out.push(`DCA ${p.name} : exécuter le versement prévu (montant dans l’app).`);
+    }
+  }
+
+  // 2) Paliers de vente atteints : ce que le plan prévoit de vendre.
+  for (const r of hitRungs(watch, usd).slice(0, 3)) {
+    out.push(`Palier ${r.symbol.toUpperCase()} ×${r.multiple} atteint : vendre ${r.pct} % si tu suis ton plan de sortie.`);
+  }
+
+  // 3) Événement macro imminent : la conduite à tenir associée.
+  const first = nextMacroEvents(i.now, 3, 21)[0];
+  if (first && first.daysTo <= 3) out.push(`${first.label} ${first.daysTo === 0 ? 'aujourd’hui' : first.daysTo === 1 ? 'demain' : `dans ${first.daysTo} j`} : ${first.advice}`);
+
+  // 4) Par défaut : rien à exécuter, et on ne vend jamais hors plan en panique.
+  if (!out.length) out.push('Aucune échéance aujourd’hui : ne rien exécuter, aucune vente hors plan de sortie.');
+  return out;
 }

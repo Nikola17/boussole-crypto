@@ -16,4 +16,7 @@ contextBridge.exposeInMainWorld('boussoleDesktop', {
   // Mise a jour : telecharge l'installeur officiel, la progression remonte au bandeau.
   installUpdate: (url) => ipcRenderer.invoke('desktop:installUpdate', typeof url === 'string' ? url : ''),
   onUpdateProgress: (cb) => { const h = (_e, pct) => cb(pct); ipcRenderer.on('update:progress', h); return () => ipcRenderer.removeListener('update:progress', h); },
+  // Widget Windows : fenêtre compacte toujours au-dessus, bascule + état remonté au renderer.
+  toggleWidget: () => ipcRenderer.invoke('widget:toggle'),
+  onWidgetState: (cb) => { const h = (_e, open) => cb(open === true); ipcRenderer.on('widget:state', h); return () => ipcRenderer.removeListener('widget:state', h); },
 });

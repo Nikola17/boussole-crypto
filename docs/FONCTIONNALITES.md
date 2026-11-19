@@ -293,12 +293,19 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v1.35.0 — Lots F & G complets + côté serveur (VPS)
+
+- **Lot F — ouverture au public** : i18n (FR par défaut, **anglais automatique** hors France + sélecteur Langue dans Réglages ; shell, navigation, Cockpit et réglages traduits, le reste retombe sur le FR), **widget Windows** (petite fenêtre toujours-au-dessus : BTC, Fear & Greed, valeur du portefeuille, alertes armées, échéance du jour — bascule depuis Réglages ou le menu de l'icône de la zone de notification), **projet iOS Capacitor versionné** (`npm run build:ios`, build sur Mac — `docs/BUILD-IOS.md`), page GitHub Pages (v1.34.0).
+- **Lot G — copilote** : **simulations « et si ? »** (nouvel onglet du portefeuille : rejoue tes achats/ventes du journal avec les prix d'aujourd'hui — ce qu'une vente t'a coûté vs garder, ce qu'un achat t'a rapporté), **brief VPS actionnable ligne par ligne** (section « À faire aujourd'hui » numérotée : panier, DCA, paliers atteints, événement macro imminent ; sinon « ne rien exécuter, aucune vente hors plan »).
+- **VPS (config publique, zéro secret)** : **alerte Telegram J-1 puis J-0** sur chaque déblocage de token suivi (veille critique, envoyée même en mode vacances), **dashboard web en lecture seule** (`scripts/vps/` : nginx + HTTPS Let's Encrypt + basic auth, page statique + `status.json` assaini écrit par le runner à chaque cycle — test prouvant qu'aucun secret n'y figure).
+- 746 tests, typecheck 0 erreur.
+
 ### v1.34.0 — Correctifs + lots F/G : mise à jour réparée, autopilote trader élargi, circuit breaker anti-panique, site public
 
 - **Mise à jour depuis l'app réparée/durcie** : Android suit manuellement les redirections cross-host (github.com → release-assets.githubusercontent.com) que `HttpURLConnection` ne suivait pas ; Windows vérifie la taille exacte (content-length), l'en-tête PE « MZ », et renvoie l'erreur exacte (HTTP + hôte) dans la bannière. Testé : l'URL de release répond 200 après redirection et stream correctement.
 - **Autopilote Trader élargi (v3)** : l'univers des autopilotes passe de top 20 à **top 100** (comme l'univers du banc d'essai), côté app ET côté serveur (les deux calculent les mêmes jours). Vérifié en rejouant 15 jours avec les vraies données : entrées sur cassure 20 j + volume validée (achat) et sorties au stop — là où top 20 ne donnait strictement rien. Les autopilotes v2 existants sont archivés automatiquement (empreinte changée).
 - **Circuit breaker anti-panique (lot G)** : en Fear & Greed < 25, une vente hors plan de sortie est bloquée 24 h dans le formulaire (attente synchronisée, comme l'anti-FOMO des achats) ; bannière « mode krach » sur le Cockpit. Les paliers prévus au plan de sortie restent gérables normalement.
-- **Lot F — site public** : GitHub Pages activé depuis `/docs` → [nikola17.github.io/boussole-crypto](https://nikola17.github.io/boussole-crypto/) (page d'accueil, fonctionnalités, avertissement, lien releases). iOS et i18n anglais restent en liste (iOS exige un Mac pour le build).
+- **Lot F — site public** : GitHub Pages activé depuis `/docs` → [nikola17.github.io/boussole-crypto](https://nikola17.github.io/boussole-crypto/) (page d'accueil, fonctionnalités, avertissement, lien releases). iOS : projet versionné en v1.35.0 (build sur Mac). i18n anglais livré en v1.35.0.
 - 730 tests, typecheck 0 erreur.
 
 ### v1.33.0 — Lot E « Sans friction » : webhook sortant + rapport mensuel exportable

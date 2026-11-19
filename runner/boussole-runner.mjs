@@ -554,9 +554,9 @@ var require_index_cjs = __commonJS({
 });
 
 // src/runner/main.ts
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync as chmodSync2, existsSync, mkdirSync as mkdirSync2, readFileSync, writeFileSync as writeFileSync2 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join as join2 } from "node:path";
 
 // src/lib/sync/github.ts
 var CONFLICT = "conflict";
@@ -692,6 +692,7 @@ function validateConfig(raw, opts = {}) {
       quietStart,
       quietEnd,
       stateDir: str(r.stateDir),
+      dashboardDir: str(r.dashboardDir),
       device: str(r.device) || "vps-boussole"
     },
     problems: []
@@ -710,6 +711,7 @@ function applyEnv(raw, env = process.env) {
   set("coingeckoKey", "COINGECKO_KEY");
   set("mistralApiKey", "MISTRAL_API_KEY");
   set("stateDir", "BOUSSOLE_STATE_DIR");
+  set("dashboardDir", "BOUSSOLE_DASHBOARD_DIR");
   return out;
 }
 
@@ -1427,7 +1429,7 @@ function watchOf(bundle) {
   const exitSteps = stamps.exitSteps && typeof stamps.exitSteps === "object" && !Array.isArray(stamps.exitSteps) ? stamps.exitSteps : {};
   const profileRaw = stamps.profile;
   const vacationUntil = profileRaw && typeof profileRaw === "object" && typeof profileRaw.vacationUntil === "string" && /^\d{4}-\d{2}-\d{2}$/.test(profileRaw.vacationUntil) ? profileRaw.vacationUntil : null;
-  return { alerts: list3("alerts"), transactions: list3("transactions"), exitSteps, exitDone, paperTrades: list3("paperTrades"), paperPortfolios: list3("paperPortfolios"), paperOrders: list3("paperOrders"), paperDays: list3("paperDays"), smartWallets: list3("smartWallets"), watchedTokens: list3("watchedTokens"), vacationUntil };
+  return { alerts: list3("alerts"), transactions: list3("transactions"), exitSteps, exitDone, paperTrades: list3("paperTrades"), paperPortfolios: list3("paperPortfolios"), paperOrders: list3("paperOrders"), paperDays: list3("paperDays"), smartWallets: list3("smartWallets"), watchedTokens: list3("watchedTokens"), unlocks: list3("unlocks"), vacationUntil };
 }
 var alertKey = (id) => `alert:${id}`;
 var rungKey = (coinId, multiple) => `exit:${coinId}:${multiple}`;
@@ -1934,7 +1936,41 @@ function buildBrief(i) {
     const when = new Date(i.syncSavedAt);
     if (!Number.isNaN(when.getTime())) lines.push(`Donn\xE9es de synchronisation : ${fmtDate(when, true)}${i.syncDevice ? ` (${i.syncDevice})` : ""}`);
   }
+  const actions = actionableLines(i);
+  if (actions.length) {
+    const shown = short ? actions.slice(0, 1) : actions.slice(0, 6);
+    lines.push(`\xC0 faire${short ? "" : " aujourd\u2019hui"} :`);
+    for (let k = 0; k < shown.length; k++) lines.push(`${k + 1}. ${shown[k]}`);
+  }
   return lines.join("\n");
+}
+function actionableLines(i) {
+  const watch = watchOf(i.bundle);
+  const today = isoDay(i.now);
+  const usd = /* @__PURE__ */ new Map();
+  for (const [id, p] of Object.entries(i.prices)) if (typeof p?.usd === "number" && p.usd > 0) usd.set(id, p.usd);
+  const out = [];
+  const basketExecs = list(i.bundle.data.basketExecutions);
+  for (const b of list(i.bundle.data.basket).filter((x) => x.active)) {
+    if (isBasketDay(b, i.now)) {
+      const done = basketExecs.some((e) => e.basketId === b.id && e.periodKey === today);
+      if (!done) out.push(`Panier \xAB ${b.name} \xBB : ${b.amountUsd} USDC \xE0 r\xE9partir \u2014 l\u2019ordre est pr\xE9par\xE9 dans l\u2019app.`);
+    }
+  }
+  const dcaExecs = list(i.bundle.data.dcaExecutions);
+  for (const p of list(i.bundle.data.dcaPlans).filter((x) => x.active)) {
+    if (isScheduledDay(p, i.now)) {
+      const done = dcaExecs.some((e) => e.planId === p.id && e.periodKey === periodKey(p, i.now));
+      if (!done) out.push(`DCA ${p.name} : ex\xE9cuter le versement pr\xE9vu (montant dans l\u2019app).`);
+    }
+  }
+  for (const r of hitRungs(watch, usd).slice(0, 3)) {
+    out.push(`Palier ${r.symbol.toUpperCase()} \xD7${r.multiple} atteint : vendre ${r.pct} % si tu suis ton plan de sortie.`);
+  }
+  const first = nextMacroEvents(i.now, 3, 21)[0];
+  if (first && first.daysTo <= 3) out.push(`${first.label} ${first.daysTo === 0 ? "aujourd\u2019hui" : first.daysTo === 1 ? "demain" : `dans ${first.daysTo} j`} : ${first.advice}`);
+  if (!out.length) out.push("Aucune \xE9ch\xE9ance aujourd\u2019hui : ne rien ex\xE9cuter, aucune vente hors plan de sortie.");
+  return out;
 }
 
 // src/runner/news.ts
@@ -2107,6 +2143,43 @@ function smartBriefLines(events, nowMs = Date.now(), max = 4) {
     lines.push(`${e.side === "sell" ? "A vendu" : "A achet\xE9"} ${qtyLabel(e)} \u2014 ${e.walletLabel}`);
   }
   return lines;
+}
+
+// src/lib/unlocks.ts
+function upcomingUnlocks(list3, todayIso, horizonDays = 30) {
+  const t = Date.parse(todayIso);
+  if (!Number.isFinite(t)) return [];
+  return list3.map((u) => ({ ...u, daysUntil: Math.round((Date.parse(u.date) - t) / 864e5) })).filter((u) => Number.isFinite(u.daysUntil) && u.daysUntil >= 0 && u.daysUntil <= horizonDays).sort((a, b) => a.daysUntil - b.daysUntil);
+}
+
+// src/runner/dashboard.ts
+import { mkdirSync, writeFileSync, chmodSync } from "node:fs";
+import { join } from "node:path";
+function buildDashboardStatus(i) {
+  const dayKey = i.now.toISOString().slice(0, 10);
+  return {
+    at: i.now.toISOString(),
+    device: i.device,
+    ok: i.result.error == null,
+    error: i.result.error,
+    watching: i.result.watching,
+    zoneLabel: i.state.zoneLabel,
+    fng: i.fng,
+    temperature: i.temperature,
+    btc: i.btcPrice ? { usd: i.btcPrice.usd ?? null, change24h: i.btcPrice.change ?? null } : null,
+    unlocksNext: upcomingUnlocks(i.unlocks, dayKey, 30).slice(0, 5).map((u) => ({ symbol: u.symbol, date: u.date, daysUntil: u.daysUntil })),
+    lastBrief: i.state.lastBriefSlot ?? {},
+    sync: { savedAt: i.syncSavedAt, device: i.syncDevice }
+  };
+}
+function writePublicStatus(dir, status) {
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, "status.json");
+  writeFileSync(file, JSON.stringify(status, null, 2) + "\n", "utf8");
+  try {
+    chmodSync(file, 420);
+  } catch {
+  }
 }
 
 // src/data/reliability.json
@@ -3425,6 +3498,16 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
     const key = rungKey(t.coinId, t.multiple);
     if (shouldSend(state, key)) queue.push({ key, text: rungMessage(t, cur) });
   }
+  for (const u of upcomingUnlocks(watch.unlocks, dayKey, 1)) {
+    const badge = u.daysUntil === 0 ? "J-0" : "J-1";
+    const key = `unlock:${u.id}:${badge}`;
+    if (shouldSend(state, key)) {
+      const qty = u.amount != null ? ` (${u.amount})` : "";
+      const pct4 = u.pctSupply != null ? ` \u2014 ${u.pctSupply} % de l\u2019offre totale` : "";
+      queue.push({ key, text: `${badge === "J-0" ? "Aujourd\u2019hui" : "Demain"} : d\xE9blocage ${u.symbol.toUpperCase()}${qty}${pct4}${u.note ? ` \u2014 ${u.note}` : ""}.
+Pr\xE9pare ta d\xE9cision : vendre, garder, ou attendre \u2014 et \xE0 quel palier.` });
+    }
+  }
   const fng = await deps.fearGreed().catch(() => null);
   const temperature = await marketTemperature(deps, fng);
   if (temperature) {
@@ -3668,6 +3751,23 @@ Ouvre Boussole pour cl\xF4turer le trade dans ton journal.` });
     }
   }
   state = recordStatus(state, result.error == null, result.error, nowMs);
+  if (!opts.dry && deps.status) {
+    try {
+      deps.status(buildDashboardStatus({
+        now,
+        device: cfg.device,
+        result,
+        state,
+        fng,
+        temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
+        btcPrice: priceRows.bitcoin ?? null,
+        unlocks: watch.unlocks,
+        syncSavedAt: bundle.savedAt ?? null,
+        syncDevice: bundle.device ?? null
+      }));
+    } catch {
+    }
+  }
   return { state, result };
 }
 function newsMessage(n2, now = /* @__PURE__ */ new Date()) {
@@ -6466,7 +6566,7 @@ function parseArgs(argv) {
     else if (a === "--help" || a === "-h") mode = "check";
     else throw new Error(`Option inconnue : ${a}. Options : --config <chemin>, --once, --check, --brief, --discover.`);
   }
-  if (!configPath) configPath = join(homedir(), ".config", "boussole", "runner.json");
+  if (!configPath) configPath = join2(homedir(), ".config", "boussole", "runner.json");
   return { configPath, mode };
 }
 function loadConfig(path, allowMissingChatId) {
@@ -6476,8 +6576,8 @@ function loadConfig(path, allowMissingChatId) {
 - ${problems.join("\n- ")}`);
   return config;
 }
-var defaultStateDir = () => join(homedir(), ".local", "state", "boussole");
-var stateFileOf = (cfg) => join(cfg.stateDir || defaultStateDir(), "runner-state.json");
+var defaultStateDir = () => join2(homedir(), ".local", "state", "boussole");
+var stateFileOf = (cfg) => join2(cfg.stateDir || defaultStateDir(), "runner-state.json");
 var HEARTBEAT_PATH = "heartbeat.json";
 var HEARTBEAT_PERIOD_MS = 10 * 6e4;
 var lastHeartbeatAt = 0;
@@ -6494,11 +6594,11 @@ function loadState(cfg) {
 }
 function saveState(cfg, st) {
   const dir = cfg.stateDir || defaultStateDir();
-  mkdirSync(dir, { recursive: true });
+  mkdirSync2(dir, { recursive: true });
   const p = stateFileOf(cfg);
-  writeFileSync(p, JSON.stringify(st, null, 2));
+  writeFileSync2(p, JSON.stringify(st, null, 2));
   try {
-    chmodSync(p, 384);
+    chmodSync2(p, 384);
   } catch {
   }
 }
@@ -6590,7 +6690,9 @@ var depsOf = (cfg) => ({
     }
     return out;
   },
-  signals: async (coins) => computeSignals(coins, await runnerAutopilotSources(cfg.coingeckoKey, rulesOf({ archetype: "Ma strat\xE9gie", rules: {} })))
+  signals: async (coins) => computeSignals(coins, await runnerAutopilotSources(cfg.coingeckoKey, rulesOf({ archetype: "Ma strat\xE9gie", rules: {} }))),
+  // Dashboard web : si dashboardDir est renseigné, le cycle y écrit status.json (données assainies, aucun secret).
+  status: cfg.dashboardDir ? (st) => writePublicStatus(cfg.dashboardDir, st) : void 0
 });
 async function modeCheck(cfg) {
   const { result } = await runCycle(cfg, loadState(cfg), { dry: true, forceBrief: true, onDry: (text) => log(`[\xE0 blanc] ${text.split("\n").join(" \u2014 ")}`) }, depsOf(cfg));

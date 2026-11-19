@@ -16,6 +16,8 @@ import { useAiContext } from '../ai/context';
 import { checkPassphrase } from '../lib/sync/crypto';
 import { fetchRaw } from '../lib/sync/github';
 import { runSync, useSyncStatus } from '../hooks/useSync';
+import { useT } from '../hooks/useT';
+import { WidgetToggle } from '../components/WidgetToggle';
 import { mergeBackupInto } from '../lib/sync/merge';
 import { describeRunnerStatus, readRunnerStatus } from '../lib/runnerSync';
 import { useQuery } from '@tanstack/react-query';
@@ -171,6 +173,7 @@ function RunnerStatusLine() {
 export default function Settings() {
   const settings = useStore((s) => s.settings);
   const set = useStore((s) => s.setSettings);
+  const t = useT();
   const importAll = useStore((s) => s.importAll);
   const resetAll = useStore((s) => s.resetAll);
   const name = useStore((s) => s.profile.name);
@@ -344,22 +347,29 @@ export default function Settings() {
 
         <ExchangeCard />
 
-        <Card title="Données & affichage">
+        <Card title={t('Données & affichage')}>
           <div className="space-y-4">
+            <Field label={t('Langue')}>
+              <Select value={settings.locale} onChange={(e) => set({ locale: e.target.value as 'auto' | 'fr' | 'en' })}>
+                <option value="auto">{t('Automatique (appareil)')}</option>
+                <option value="fr">{t('Français')}</option>
+                <option value="en">English</option>
+              </Select>
+            </Field>
             <Field label="Webhook (optionnel)" hint="URL HTTPS qui recevra un POST JSON à chaque alerte déclenchée par l'app (alerte de prix, signal, palier). Tes autres outils peuvent s'y brancher. Jamais de secret envoyé.">
               <Input value={settings.webhookUrl} onChange={(e) => set({ webhookUrl: e.target.value.trim() })} placeholder="https://…" autoComplete="off" spellCheck={false} />
             </Field>
-            <Field label="Devise d’affichage">
+            <Field label={t('Devise') + ' d’affichage'}>
               <Select value={settings.currency} onChange={(e) => set({ currency: e.target.value as 'EUR' | 'USD' })}>
                 <option value="EUR">Euro (€)</option>
                 <option value="USD">Dollar ($)</option>
               </Select>
             </Field>
-            <Field label="Thème">
+            <Field label={t('Thème')}>
               <Select value={settings.theme} onChange={(e) => set({ theme: e.target.value as ThemeMode })}>
-                <option value="system">Automatique (système)</option>
-                <option value="dark">Sombre</option>
-                <option value="light">Clair</option>
+                <option value="system">{t('Système')}</option>
+                <option value="dark">{t('Sombre')}</option>
+                <option value="light">{t('Clair')}</option>
               </Select>
             </Field>
             <Field label="Clé CoinGecko « Demo » (facultatif, gratuite)" hint={<>Sans clé, CoinGecko limite fortement le nombre de requêtes. <button type="button" className="text-accent underline" onClick={() => openExternal('https://www.coingecko.com/fr/api/pricing')}>Obtenir une clé Demo gratuite</button>.</>}>
@@ -381,6 +391,7 @@ export default function Settings() {
               <>
                 <Toggle checked={settings.closeToTray} onChange={(v) => set({ closeToTray: v })} label="Rester actif en arrière-plan" hint="Fermer la fenêtre garde Boussole dans la zone de notification : les alertes continuent d’arriver. « Quitter » dans le menu de son icône l’arrête vraiment." />
                 <Toggle checked={settings.autoStart} onChange={(v) => set({ autoStart: v })} label="Démarrer avec Windows" hint="Boussole démarre réduit dans la zone de notification." />
+                <WidgetToggle />
               </>
             )}
           </div>

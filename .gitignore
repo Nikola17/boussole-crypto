@@ -20,6 +20,13 @@ android/build/
 android/.gradle/
 android/app/src/main/assets/public/
 
+# iOS : pods, builds et assets copiés (générés par « npx cap sync ios » sur Mac)
+ios/App/Pods/
+ios/App/build/
+ios/App/App/public/
+ios/App/App.xcodeproj/xcuserdata/
+ios/App/App.xcassets/AppIcon.appiconset/*.png
+
 # Éditeurs / système
 .vscode/
 .idea/

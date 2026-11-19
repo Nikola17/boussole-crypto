@@ -1,7 +1,7 @@
 {
   "name": "boussole-crypto",
   "productName": "Boussole Crypto",
-  "version": "1.34.1",
+  "version": "1.35.0",
   "description": "Boussole — copilote d'investissement crypto : signaux achat/vente, pépites, DCA, trading, wallet, airdrops et analyse IA quotidienne.",
   "author": "Nico",
   "license": "MIT",
@@ -20,7 +20,9 @@
     "build:apk": "node scripts/build-apk.mjs",
     "build:runner": "esbuild src/runner/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=runner/boussole-runner.mjs",
     "release": "node scripts/release.mjs",
-    "bench": "esbuild scripts/bench/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=.cache/bench/bench.mjs --log-level=warning && node .cache/bench/bench.mjs"
+    "bench": "esbuild scripts/bench/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=.cache/bench/bench.mjs --log-level=warning && node .cache/bench/bench.mjs",
+    "build:ios": "vite build && cap sync ios",
+    "open:ios": "cap open ios"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.1.0",
@@ -47,6 +49,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.3",
+    "@capacitor/ios": "^8.5.3",
     "@scure/bip39": "2.4.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.6.6",

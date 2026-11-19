@@ -29,5 +29,7 @@
   "signalAlertsEnabled": true,
   "timeZone": "Europe/Paris",
   "stateDir": "",
-  "device": "hermes-vps"
+  "device": "hermes-vps",
+  "_dashboard": "dossier servi en lecture seule par nginx (scripts/vps/setup-dashboard.sh) : le runner y écrit status.json (données assainies, aucun secret). Vide = désactivé.",
+  "dashboardDir": ""
 }

@@ -12,6 +12,8 @@ export type AiProvider = 'compat' | 'anthropic' | 'mistral';
 export interface Settings {
   currency: Currency;
   theme: ThemeMode;
+  /** Langue de l'interface : 'auto' = langue de l'appareil (FR si navigateur FR, EN sinon). */
+  locale: 'auto' | 'fr' | 'en';
   aiProvider: AiProvider;
   anthropicKey: string;
   aiModel: AiModel;

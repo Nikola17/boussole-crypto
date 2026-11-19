@@ -50,6 +50,8 @@ export interface RunnerConfig {
   quietEnd: number;
   /** Répertoire de l'état local du runner (aucun secret dedans). */
   stateDir: string;
+  /** Dossier servi par le dashboard web (nginx) : y écrit status.json (données assainies, aucun secret). Vide = désactivé. */
+  dashboardDir: string;
   /** Nom du serveur, écrit dans le fichier de sync avec les consommations d'alertes. */
   device: string;
 }
@@ -145,6 +147,7 @@ export function validateConfig(raw: unknown, opts: { allowMissingChatId?: boolea
       quietStart,
       quietEnd,
       stateDir: str(r.stateDir),
+      dashboardDir: str(r.dashboardDir),
       device: str(r.device) || 'vps-boussole',
     },
     problems: [],
@@ -165,5 +168,6 @@ export function applyEnv(raw: Record<string, unknown>, env: Record<string, strin
   set('coingeckoKey', 'COINGECKO_KEY');
   set('mistralApiKey', 'MISTRAL_API_KEY');
   set('stateDir', 'BOUSSOLE_STATE_DIR');
+  set('dashboardDir', 'BOUSSOLE_DASHBOARD_DIR');
   return out;
 }

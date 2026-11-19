@@ -17,6 +17,8 @@ import type { CoinPrice } from './market';
 import { isHotNews, newsKey, type NewsItem, type RatedNews, type WatchedCoin } from './news';
 import { eventKey, refsOf, relevantEvents, smartBriefLines, smartMessage, type SmartEvent } from '../lib/smartmoney';
 import { nextMacroEvents } from '../lib/macro';
+import { upcomingUnlocks } from '../lib/unlocks';
+import { buildDashboardStatus, type DashboardStatus } from './dashboard';
 import type { SmartWallet } from '../types';
 import type { AutopilotRun } from './autopilot';
 import { advanceSignals, signalMessage } from './signals';
@@ -71,6 +73,8 @@ export interface CycleDeps {
   /** Prix des tokens (DexScreener) par adresse en minuscules : notation des wallets suivis. */
   tokenPrices?: (chain: string, mints: string[]) => Promise<Map<string, number>>;
   signals?: (coins: { coinId: string; symbol: string }[]) => Promise<Record<string, { symbol: string; keys: string[] }>>;
+  /** Dashboard web (optionnel) : reçoit le statut public ASSAINI à écrire dans le dossier servi par nginx. Jamais appelé en mode « à blanc ». */
+  status?: (s: DashboardStatus) => void;
 }
 
 export interface CycleOptions {
@@ -180,6 +184,19 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
   for (const t of hitRungs(watch, priceMap)) {
     const key = rungKey(t.coinId, t.multiple);
     if (shouldSend(state, key)) queue.push({ key, text: rungMessage(t, cur) });
+  }
+
+  // 1 bis. Déblocages de tokens suivis : alerte J-1 (demain) puis J-0 (le jour J), une fois chacun.
+  //         Veille critique : envoyés même en mode vacances.
+  for (const u of upcomingUnlocks(watch.unlocks, dayKey, 1)) {
+    const badge = u.daysUntil === 0 ? 'J-0' : 'J-1';
+    const key = `unlock:${u.id}:${badge}`;
+    if (shouldSend(state, key)) {
+      const qty = u.amount != null ? ` (${u.amount})` : '';
+      const pct = u.pctSupply != null ? ` — ${u.pctSupply} % de l’offre totale` : '';
+      queue.push({ key, text: `${badge === 'J-0' ? 'Aujourd’hui' : 'Demain'} : déblocage ${u.symbol.toUpperCase()}${qty}${pct}${u.note ? ` — ${u.note}` : ''}.
+Prépare ta décision : vendre, garder, ou attendre — et à quel palier.` });
+    }
   }
 
   // 1 bis. Température du marché (mêmes indicateurs que l'application) : un changement de zone prévient sur Telegram,
@@ -459,6 +476,19 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
   }
 
   state = recordStatus(state, result.error == null, result.error, nowMs);
+
+  // Dashboard web : statut public assaini (aucun secret), écrit seulement si configuré et hors « à blanc ».
+  if (!opts.dry && deps.status) {
+    try {
+      deps.status(buildDashboardStatus({
+        now, device: cfg.device, result, state, fng,
+        temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
+        btcPrice: priceRows.bitcoin ?? null,
+        unlocks: watch.unlocks,
+        syncSavedAt: bundle.savedAt ?? null, syncDevice: bundle.device ?? null,
+      }));
+    } catch { /* le dashboard ne doit jamais casser la surveillance */ }
+  }
   return { state, result };
 }
 

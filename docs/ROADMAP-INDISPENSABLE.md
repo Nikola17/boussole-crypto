@@ -12,10 +12,14 @@
 
 ## Reste à faire
 
-- Lot F : i18n anglais, page GitHub Pages, iOS (build Mac), widget Windows.
-- Lot G : circuit breakers anti-panique, brief IA actionnable ligne par ligne, simulations « et si ».
-- Côté serveur (VPS) : alerte Telegram J-1 sur les déblocages saisis, dashboard web en lecture seule (nginx + HTTPS).
 - Import CSV des autres plateformes (Binance, Kraken, Coinbase) sur le modèle Crypto.com.
+- Voir `docs/PLAN-BINANCE-DEFI.md` pour les idées Binance/DeFi priorisées.
+
+## ✅ Livré aussi (v1.34.0 → v1.35.0)
+
+- **Lot F** (v1.35.0) : i18n (FR par défaut, anglais auto hors France, sélecteur dans Réglages — shell, navigation, Cockpit, réglages ; le reste retombe sur le FR), **widget Windows** (fenêtre compacte toujours-au-dessus : BTC, Fear & Greed, portefeuille, alertes armées, échéance du jour — depuis les réglages ou le menu de la zone de notification), page GitHub Pages (v1.34.0), **projet iOS Capacitor versionné** (build sur Mac, voir `docs/BUILD-IOS.md`).
+- **Lot G** (v1.35.0) : circuit breakers anti-panique (v1.34.0), **simulations « et si ? »** (onglet du portefeuille : ce que tes ventes t'ont coûté vs garder, ce que tes achats ont gagné, avec les prix d'aujourd'hui), **brief VPS actionnable ligne par ligne** (section « À faire aujourd'hui » numérotée : échéances, paliers, événements macro).
+- **Côté serveur (VPS, v1.35.0)** : **alerte Telegram J-1 puis J-0** sur les déblocages de tokens suivis (veille critique, même en vacances), **dashboard web en lecture seule** (`scripts/vps/` : nginx + HTTPS + basic auth, `status.json` assaini écrit par le runner — aucun secret, testé).
 
 ## Diagnostic : ce que le projet fait déjà très bien
 

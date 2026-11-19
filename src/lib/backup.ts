@@ -30,7 +30,7 @@ const PLAIN_OBJECTS: BackupKey[] = ['settings', 'profile', 'exitDone', 'exitStep
  * Réglages repris d'une sauvegarde. Jamais : clés API, adresse du serveur d'IA, fournisseur d'IA (un fichier piégé pourrait
  * sinon envoyer ta clé et ton portefeuille ailleurs), ni les réglages propres à un appareil (zone de notification, démarrage).
  */
-const IMPORTABLE_SETTINGS: (keyof Settings)[] = ['currency', 'theme', 'taxRatePct', 'scanSize', 'briefingAuto', 'aiWebSearch', 'aiModel', 'compatModel', 'mistralModel'];
+const IMPORTABLE_SETTINGS: (keyof Settings)[] = ['currency', 'theme', 'locale', 'taxRatePct', 'scanSize', 'briefingAuto', 'aiWebSearch', 'aiModel', 'compatModel', 'mistralModel'];
 
 export function importableSettings(s: unknown): Partial<Settings> {
   if (typeof s !== 'object' || s === null) return {};
@@ -39,6 +39,7 @@ export function importableSettings(s: unknown): Partial<Settings> {
   for (const k of IMPORTABLE_SETTINGS) if (k in src) out[k] = src[k];
   if (out.currency !== 'EUR' && out.currency !== 'USD') delete out.currency;
   if (out.theme !== 'system' && out.theme !== 'dark' && out.theme !== 'light') delete out.theme;
+  if (out.locale !== 'auto' && out.locale !== 'fr' && out.locale !== 'en') delete out.locale;
   if (typeof out.taxRatePct !== 'number' || !Number.isFinite(out.taxRatePct) || out.taxRatePct < 0 || out.taxRatePct > 100) delete out.taxRatePct;
   if (out.scanSize !== 50 && out.scanSize !== 100) delete out.scanSize;
   for (const k of ['briefingAuto', 'aiWebSearch'] as const) if (typeof out[k] !== 'boolean') delete out[k];

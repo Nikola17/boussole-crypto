@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../store/useStore';
+import { useT, useLocale } from '../hooks/useT';
 import { useAltSeason, useCycle, useFearGreed, useGlobal, useMarkets, useScan } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { useFocusCoins, useGuidance } from '../hooks/useGuidance';
@@ -28,13 +29,14 @@ import { DriftCard } from '../components/DriftCard';
 import { UnlocksCard } from '../components/UnlocksCard';
 import { DerivativesCard } from '../components/DerivativesCard';
 
-function greeting(name: string) {
+function greeting(name: string, locale: 'fr' | 'en') {
   const h = new Date().getHours();
-  const g = h < 6 ? 'Bonne nuit' : h < 18 ? 'Bonjour' : 'Bonsoir';
+  const g = locale === 'en' ? (h < 6 ? 'Good night' : h < 18 ? 'Hello' : 'Good evening') : h < 6 ? 'Bonne nuit' : h < 18 ? 'Bonjour' : 'Bonsoir';
   return name ? `${g} ${name}` : g;
 }
 
 export default function Dashboard() {
+  const t = useT();
   const name = useStore((s) => s.profile.name);
   const currency = useStore((s) => s.settings.currency);
   const qc = useQueryClient();
@@ -83,8 +85,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
-        title={greeting(name)}
-        subtitle={new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+        title={greeting(name, useLocale())}
+        subtitle={new Date().toLocaleDateString(useLocale() === 'en' ? 'en-US' : 'fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
         actions={<Button size="sm" variant="ghost" icon={<RefreshCw className="size-3.5" />} onClick={() => void qc.invalidateQueries()}>Actualiser</Button>}
       />
 
@@ -99,8 +101,8 @@ export default function Dashboard() {
       {markets.error && <ErrorNote error={markets.error} onRetry={() => markets.refetch()} />}
 
       <div className="grid gap-4 lg:grid-cols-5">
-        {/* Température du marché — chiffre héros */}
-        <Card className="lg:col-span-3" title={<span className="inline-flex items-center gap-2"><Gauge className="size-4 text-accent" />Température du marché <InfoTip>Indice Boussole de 0 à 100 combinant le Fear &amp; Greed, le multiple de Mayer, le prix vs moyenne 200 semaines, le RSI hebdo, le Pi Cycle, le taux de financement, le MVRV et la part des stablecoins. Froid = opportunités, chaud = prudence.</InfoTip></span>}>
+        {/* Market temperature — chiffre héros */}
+        <Card className="lg:col-span-3" title={<span className="inline-flex items-center gap-2"><Gauge className="size-4 text-accent" />{t('Température du marché')} <InfoTip>Indice Boussole de 0 à 100 combinant le Fear &amp; Greed, le multiple de Mayer, le prix vs moyenne 200 semaines, le RSI hebdo, le Pi Cycle, le taux de financement, le MVRV et la part des stablecoins. Froid = opportunités, chaud = prudence.</InfoTip></span>}>
           {cycle.isLoading && <Spinner label="Calcul du cycle (historique Bitcoin)…" />}
           {cycle.data && (
             <div>
@@ -138,7 +140,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Que faire aujourd'hui : toujours calculé par tes règles ; l'avis de l'IA vient après, séparément. */}
-        <Card className="lg:col-span-2" title="Que faire aujourd’hui ?" subtitle="Selon tes règles, ton DCA et le cycle du marché">
+        <Card className="lg:col-span-2" title={t('Que faire aujourd’hui ?')} subtitle={t('Selon tes règles, ton DCA et le cycle du marché')}>
           <ul className="space-y-2.5">
             {guidance.map((g) => (
               <li key={g.key}>
@@ -179,20 +181,20 @@ export default function Dashboard() {
 
       {/* Indicateurs clés */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <Stat label="Mon portefeuille" value={fmtMoney(pf.totals.value, currency, 0)} delta={<Delta value={pf.totals.change24hPct} />} hint="24 h" />
-        <Stat label="Plus-value latente" value={fmtMoney(pf.totals.unrealized, currency, 0)} delta={<Delta value={pf.totals.unrealizedPct} />} hint="vs investi" />
+        <Stat label={t('Mon portefeuille')} value={fmtMoney(pf.totals.value, currency, 0)} delta={<Delta value={pf.totals.change24hPct} />} hint="24 h" />
+        <Stat label={t('Plus-value latente')} value={fmtMoney(pf.totals.unrealized, currency, 0)} delta={<Delta value={pf.totals.unrealizedPct} />} hint="vs investi" />
         <Stat label="Bitcoin" value={btc ? fmtPrice(btc.current_price * rate, currency) : '—'} delta={<Delta value={btc?.price_change_percentage_24h} />} hint="24 h" trend={btc?.sparkline_in_7d ? <Sparkline values={btc.sparkline_in_7d.price} width={110} /> : undefined} />
-        <Stat label="Fear & Greed" value={fngNow ? `${fngNow.value} · ${fngLabel(fngNow.value)}` : '—'} hint={fngWeek ? `il y a 7 j : ${fngWeek.value}` : undefined} trend={fng.data ? <Sparkline values={fng.data.slice(-30).map((f) => f.value)} width={110} tone="neutral" /> : undefined} />
-        <Stat label="Dominance Bitcoin" value={global.data ? `${fmtNum(global.data.data.market_cap_percentage.btc, 1)} %` : '—'} hint={global.data ? `Capi totale ${fmtCompact(global.data.data.total_market_cap.usd * rate, currency)}` : undefined} />
-        <Stat label="Saison des altcoins" value={alt != null ? `${alt}/100` : '—'} hint={alt == null ? undefined : alt >= 75 ? 'Altseason' : alt <= 25 ? 'Saison Bitcoin' : 'Mixte'} />
+        <Stat label={t('Fear & Greed')} value={fngNow ? `${fngNow.value} · ${fngLabel(fngNow.value)}` : '—'} hint={fngWeek ? `il y a 7 j : ${fngWeek.value}` : undefined} trend={fng.data ? <Sparkline values={fng.data.slice(-30).map((f) => f.value)} width={110} tone="neutral" /> : undefined} />
+        <Stat label={t('Dominance Bitcoin')} value={global.data ? `${fmtNum(global.data.data.market_cap_percentage.btc, 1)} %` : '—'} hint={global.data ? `Capi totale ${fmtCompact(global.data.data.total_market_cap.usd * rate, currency)}` : undefined} />
+        <Stat label={t('Saison des altcoins')} value={alt != null ? `${alt}/100` : '—'} hint={alt == null ? undefined : alt >= 75 ? 'Altseason' : alt <= 25 ? 'Saison Bitcoin' : 'Mixte'} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
         {/* Brief IA */}
-        <Card className="lg:col-span-3" title={<span className="inline-flex items-center gap-2"><Sparkles className="size-4 text-accent" />Brief IA du jour</span>} actions={briefing.todays ? <Link to="/ia" className="text-xs font-medium text-accent hover:underline">Tout lire</Link> : undefined}>
+        <Card className="lg:col-span-3" title={<span className="inline-flex items-center gap-2"><Sparkles className="size-4 text-accent" />{t('Brief IA du jour')}</span>} actions={briefing.todays ? <Link to="/ia" className="text-xs font-medium text-accent hover:underline">{t('Tout lire')}</Link> : undefined}>
           {!briefing.cfg && <NeedKey />}
           {briefing.cfg && briefing.running && <AiProgress progress={briefing.progress} onCancel={briefing.cancel} />}
-          {briefing.cfg && !briefing.running && briefing.error && <Banner tone="warn" title="Le brief n’a pas pu être généré">{briefing.error}</Banner>}
+          {briefing.cfg && !briefing.running && briefing.error && <Banner tone="warn" title={t('Le brief n’a pas pu être généré')}>{briefing.error}</Banner>}
           {briefing.cfg && !briefing.running && briefing.todays && (
             <div className="max-h-[420px] overflow-y-auto pr-1">
               <Markdown>{briefing.todays.markdown.split('## 💼')[0]}</Markdown>
@@ -214,7 +216,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Signaux de mes cryptos */}
-        <Card className="lg:col-span-2" title={<span className="inline-flex items-center gap-2"><TrendingUp className="size-4 text-accent" />Signaux de mes cryptos</span>} subtitle="Watchlist, positions et plans DCA" actions={<Link to="/marche" className="text-xs font-medium text-accent hover:underline">Tous les signaux</Link>}>
+        <Card className="lg:col-span-2" title={<span className="inline-flex items-center gap-2"><TrendingUp className="size-4 text-accent" />{t('Signaux de mes cryptos')}</span>} subtitle={t('Watchlist, positions et plans DCA')} actions={<Link to="/marche" className="text-xs font-medium text-accent hover:underline">{t('Tous les signaux')}</Link>}>
           {scan.isLoading && <Spinner label="Analyse technique en cours…" />}
           {scan.error && !scan.data && <ErrorNote error={scan.error} onRetry={() => void scan.refetch()} />}
           <ul className="divide-y divide-line">
