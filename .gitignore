@@ -25,3 +25,5 @@ android/app/src/main/assets/public/
 .idea/
 .DS_Store
 Thumbs.db
+boussole-backup-pre-public.bundle
+replacements.txt
