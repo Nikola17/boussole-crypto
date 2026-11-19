@@ -58,7 +58,8 @@ function isAllowedNavigation(url) {
   if (url.startsWith('file://')) {
     try {
       const p = path.normalize(decodeURIComponent(new URL(url).pathname).replace(/^\//, ''));
-      return p.startsWith(APP_ROOT);
+      // Préfixe strict : un dossier frère du type « app.asar-quelquechose » ne doit pas passer.
+      return p === APP_ROOT || p.startsWith(APP_ROOT + path.sep);
     } catch { return false; }
   }
   if (DEV_URL && url.startsWith(DEV_URL)) return true;
@@ -167,6 +168,21 @@ function createWindow() {
 
 app.on('second-instance', showWindow);
 app.on('before-quit', () => { quitting = true; });
+
+// Défense en profondeur : quelle que soit la webContents créée (fenêtre principale ou autre),
+// aucune fenêtre interne n'est autorisée et toute destination externe part dans le navigateur.
+app.on('web-contents-created', (_e, contents) => {
+  contents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  contents.on('will-navigate', (event, url) => {
+    if (!isAllowedNavigation(url)) {
+      event.preventDefault();
+      if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    }
+  });
+});
 
 app.whenReady().then(() => {
   app.setAppUserModelId(APP_ID); // nécessaire pour les notifications Windows
