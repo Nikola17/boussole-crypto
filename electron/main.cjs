@@ -241,22 +241,28 @@ app.whenReady().then(() => {
     if (!okUrl) return { ok: false, error: 'source inattendue' };
     const win = BrowserWindow.getAllWindows()[0];
     try {
-      const res = await net.fetch(url);
-      if (!res.ok) throw new Error('telechargement refuse (HTTP ' + res.status + ')');
+      const res = await net.fetch(url, { redirect: 'follow' });
+      if (!res.ok) throw new Error('telechargement refuse (HTTP ' + res.status + ' sur ' + new URL(res.url || url).hostname + ')');
+      if (!res.body) throw new Error('réponse vide du serveur');
       const total = Number(res.headers.get('content-length')) || 0;
       const dest = path.join(os.tmpdir(), 'Boussole-Setup-' + Date.now() + '.exe');
       const out = fs.createWriteStream(dest);
       const reader = res.body.getReader();
       let received = 0;
+      const head = [];
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        out.write(Buffer.from(value));
-        received += value.byteLength;
+        const b = Buffer.from(value);
+        if (received < 2) head.push(...b.subarray(0, 2 - received));
+        out.write(b);
+        received += b.byteLength;
         if (total > 0 && win && !win.isDestroyed()) win.webContents.send('update:progress', Math.round((received / total) * 100));
       }
       await new Promise((resolve, reject) => { out.end((e) => (e ? reject(e) : resolve())); });
       if (received < 1000000) { fs.rmSync(dest, { force: true }); throw new Error('installeur incomplet (' + received + ' octets)'); }
+      if (total > 0 && received !== total) { fs.rmSync(dest, { force: true }); throw new Error('téléchargement tronqué (' + received + ' / ' + total + ' octets)'); }
+      if (head.length < 2 || head[0] !== 0x4d || head[1] !== 0x5a) { fs.rmSync(dest, { force: true }); throw new Error('le fichier téléchargé n’est pas un exécutable Windows (en-tête invalide)'); }
       win?.webContents.send('update:progress', 100);
       spawn(dest, [], { detached: true, stdio: 'ignore' }).unref();
       setTimeout(() => app.quit(), 400); // l'installeur prend le relais, on libere les fichiers

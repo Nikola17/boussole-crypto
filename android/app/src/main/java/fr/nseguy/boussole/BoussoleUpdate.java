@@ -42,11 +42,26 @@ public class BoussoleUpdate extends Plugin {
         getBridge().execute(() -> {
             File apk = null;
             try {
-                HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-                conn.setInstanceFollowRedirects(true);
-                conn.setConnectTimeout(15000);
-                conn.setReadTimeout(60000);
-                int status = conn.getResponseCode();
+                // Boucle de redirections manuelle : HttpURLConnection ne suit pas toujours les
+                // redirects cross-host (github.com → release-assets.githubusercontent.com).
+                String current = url;
+                HttpURLConnection conn = null;
+                int status = 0;
+                for (int hop = 0; hop < 6; hop++) {
+                    conn = (HttpURLConnection) new URL(current).openConnection();
+                    conn.setInstanceFollowRedirects(false); // suivi manuel, cross-host compris
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(60000);
+                    status = conn.getResponseCode();
+                    if (status >= 300 && status < 400) {
+                        String loc = conn.getHeaderField("Location");
+                        conn.disconnect();
+                        if (loc == null || !loc.startsWith("https://")) throw new Exception("redirection invalide");
+                        current = loc;
+                        continue;
+                    }
+                    break;
+                }
                 if (status < 200 || status >= 300) throw new Exception("téléchargement refusé (HTTP " + status + ")");
                 apk = new File(ctx.getCacheDir(), "boussole-update.apk");
                 try (InputStream in = conn.getInputStream(); OutputStream out = new FileOutputStream(apk)) {

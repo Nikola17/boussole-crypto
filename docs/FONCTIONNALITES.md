@@ -293,6 +293,14 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v1.34.0 — Correctifs + lots F/G : mise à jour réparée, autopilote trader élargi, circuit breaker anti-panique, site public
+
+- **Mise à jour depuis l'app réparée/durcie** : Android suit manuellement les redirections cross-host (github.com → release-assets.githubusercontent.com) que `HttpURLConnection` ne suivait pas ; Windows vérifie la taille exacte (content-length), l'en-tête PE « MZ », et renvoie l'erreur exacte (HTTP + hôte) dans la bannière. Testé : l'URL de release répond 200 après redirection et stream correctement.
+- **Autopilote Trader élargi (v3)** : l'univers des autopilotes passe de top 20 à **top 100** (comme l'univers du banc d'essai), côté app ET côté serveur (les deux calculent les mêmes jours). Vérifié en rejouant 15 jours avec les vraies données : entrées sur cassure 20 j + volume validée (achat) et sorties au stop — là où top 20 ne donnait strictement rien. Les autopilotes v2 existants sont archivés automatiquement (empreinte changée).
+- **Circuit breaker anti-panique (lot G)** : en Fear & Greed < 25, une vente hors plan de sortie est bloquée 24 h dans le formulaire (attente synchronisée, comme l'anti-FOMO des achats) ; bannière « mode krach » sur le Cockpit. Les paliers prévus au plan de sortie restent gérables normalement.
+- **Lot F — site public** : GitHub Pages activé depuis `/docs` → [nikola17.github.io/boussole-crypto](https://nikola17.github.io/boussole-crypto/) (page d'accueil, fonctionnalités, avertissement, lien releases). iOS et i18n anglais restent en liste (iOS exige un Mac pour le build).
+- 730 tests, typecheck 0 erreur.
+
 ### v1.33.0 — Lot E « Sans friction » : webhook sortant + rapport mensuel exportable
 
 - **Webhook HTTPS optionnel** (Réglages → Données & affichage) : à chaque alerte déclenchée par l'app (prix, signal v2, palier de vente, alerte intelligente), un POST JSON part vers ton URL (événement, titre, détail, données associées). Uniquement `https://`, délai borné à 8 s, aucune erreur ne bloque l'app, aucun secret n'est envoyé. Tes autres outils (scripts perso, domotique, etc.) peuvent s'y brancher.

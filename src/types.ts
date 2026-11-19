@@ -144,8 +144,12 @@ export interface ImpulseWait {
   coinId: string;
   symbol: string;
   name: string;
+  /** 'buy' (défaut) : anti-FOMO sur un achat qui a trop monté. 'sell' : circuit breaker anti-panique en krach. */
+  side?: 'buy' | 'sell';
   /** La variation 7 jours constatée au moment de l'attente (en %) — pour ne rien inventer plus tard. */
   change7dPct?: number;
+  /** Fear & Greed constaté pour une attente de vente (circuit breaker). */
+  fngAt?: number;
   createdAt: string;
   /** ISO 8601 : avant cette date, l'achat reste bloqué. */
   unlockAt: string;

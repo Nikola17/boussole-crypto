@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { impulseVerdict, isTinyLine, lagsBitcoin, outsideDcaCheck, trimStatus } from './rules';
+import { impulseVerdict, isTinyLine, lagsBitcoin, outsideDcaCheck, panicVerdict, trimStatus } from './rules';
 import { rebalance, rebalanceAction } from './portfolio';
 import { exitLadder, pendingRungs, DEFAULT_LADDER } from './exit';
 import { ARCHETYPES } from './profile';
@@ -162,5 +162,23 @@ describe('délai de réflexion 24 h (anti-FOMO)', () => {
     expect(v).toMatchObject({ blocked: true, started: true, hoursLeft: 5 });
     const done = impulseVerdict(88, { unlockAt: new Date(NOW - 60_000).toISOString() }, NOW);
     expect(done).toMatchObject({ blocked: false, started: true, hoursLeft: 0 });
+  });
+});
+
+describe('circuit breaker anti-panique (ventes en krach)', () => {
+  const NOW = Date.parse('2026-11-20T15:00:00Z');
+  it('F&G >= 25 ou inconnu : aucun blocage', () => {
+    expect(panicVerdict(30, undefined, NOW).blocked).toBe(false);
+    expect(panicVerdict(null, undefined, NOW).blocked).toBe(false); // donnée indisponible : ouvert
+  });
+  it('F&G < 25 sans attente : vente bloquée, attente à poser', () => {
+    const v = panicVerdict(18, undefined, NOW);
+    expect(v).toMatchObject({ blocked: true, started: false, fng: 18 });
+    expect(v.hoursLeft).toBe(24);
+  });
+  it('attente en cours décompte ; expirée, la vente est débloquée', () => {
+    const unlockAt = new Date(NOW + 3 * 3600_000).toISOString();
+    expect(panicVerdict(10, { unlockAt }, NOW)).toMatchObject({ blocked: true, started: true, hoursLeft: 3 });
+    expect(panicVerdict(10, { unlockAt: new Date(NOW - 1000).toISOString() }, NOW)).toMatchObject({ blocked: false, started: true });
   });
 });

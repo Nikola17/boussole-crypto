@@ -5,7 +5,7 @@
 import type { CgMarket } from '../api/coingecko';
 import { getAllPrices, getDailyHistory } from '../api/binance';
 import { parseInstruments } from '../api/cryptocom';
-import { autoBaseUniverse } from '../lib/autoBasket';
+import { topBaseUniverse, AUTOPILOT_UNIVERSE_TOP } from '../lib/autoBasket';
 import { hourlyBetween, pairOf } from '../lib/lab/pairs';
 import { temperatureSeries } from '../lib/lab/replayTemp';
 import type { AutopilotSources } from '../lib/lab/autopilot';
@@ -56,7 +56,7 @@ export async function runnerAutopilotSources(coingeckoKey: string | null, rules:
     daily: async (coinId) => { const s = symbolOf(coinId); return s ? daily(s) : []; },
     hourly: async (coinId, fromMs, toMs) => { const s = symbolOf(coinId); return s ? hourlyBetween(s, fromMs, toMs) : []; },
     temperatureAt: (day) => temps.get(day) ?? null,
-    universe: async () => autoBaseUniverse(top).map((u) => ({ coinId: u.id, symbol: u.symbol, name: u.name, rank: u.rank, available: available ? available.includes(u.symbol.toUpperCase()) : null })),
+    universe: async () => topBaseUniverse(top.map((m) => ({ id: m.id, symbol: m.symbol, name: m.name, image: m.image, rank: m.market_cap_rank })), AUTOPILOT_UNIVERSE_TOP).map((u) => ({ coinId: u.id, symbol: u.symbol, name: u.name, rank: u.rank, available: available ? available.includes(u.symbol.toUpperCase()) : null })),
     live: async () => {
       const smallCaps = await cached<CgMarket[] | null>('smallcaps', 24 * H, async () => {
         const pages = await Promise.allSettled([2, 3, 4, 5].map((p) => markets(coingeckoKey, p)));

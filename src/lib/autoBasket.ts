@@ -20,6 +20,8 @@ export const AUTO_BASKET_VERSION = 1;
 
 /** Taille de l'univers « base » : les N premières capitalisations, stablecoins et jetons « wrapped » exclus. */
 export const AUTO_BASE_TOP = 20;
+/** Univers des autopilotes du Labo : top 100 (comme l'univers du banc d'essai, ~100 cryptos). */
+export const AUTOPILOT_UNIVERSE_TOP = 100;
 /** Nombre maximal de cryptos par côté (base, découverte) et par échéance. */
 export const AUTO_MAX_LINES = 3;
 /** Sous ce score investisseur (« Alléger », « Prendre des profits »), une crypto du top 20 n'est pas achetée. */

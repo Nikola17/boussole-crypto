@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { useCycle, useEurUsdHistory, useFx, useMarkets } from '../hooks/useMarket';
+import { useCycle, useEurUsdHistory, useFearGreed, useFx, useMarkets } from '../hooks/useMarket';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { FREQUENCY_LABEL, STRATEGY_HELP, STRATEGY_LABEL, type DcaStrategy, type Frequency } from '../lib/dca';
 import { fmtMoney, fmtNum, isoDay, uid } from '../lib/format';
 import { isStable } from '../lib/portfolio';
 import { eurPerUsdOn, FALLBACK_EUR_PER_USD } from '../lib/fx';
-import { outsideDcaCheck, impulseVerdict, FOMO_WAIT_MS } from '../lib/rules';
+import { outsideDcaCheck, impulseVerdict, panicVerdict, FOMO_WAIT_MS } from '../lib/rules';
 import type { CoinRef, DcaPlan, PriceAlert, TradeEntry, Transaction, TxType } from '../types';
 import type { Currency } from '../lib/format';
 import { CoinPicker } from './CoinPicker';
@@ -142,14 +142,24 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
   }, [impulseGate]);
   const impulse = impulseGate ? impulseVerdict(change7d, existingWait, Date.now()) : null;
 
+  // Circuit breaker anti-panique : en peur extrême (Fear & Greed < 25), une vente hors plan de sortie attend 24 h.
+  const fngQ = useFearGreed(2);
+  const fngNow = fngQ.data?.length ? fngQ.data[fngQ.data.length - 1].value : null;
+  const panicGate = !!coin && !initial && type === 'sell' && !isStable(coin.symbol, coin.coinId) && date === isoDay();
+  const panicWait = panicGate ? impulseWaits.find((w) => w.coinId === coin?.coinId && (w.side ?? 'buy') === 'sell') : undefined;
+  const panic = panicGate ? panicVerdict(fngNow, panicWait, Date.now()) : null;
+
   const valid = coin && quantity !== '' && quantity > 0 && (type === 'transfer' ? !!account && !!toAccount && account !== toAccount : price !== '' && price >= 0);
 
   function startWait() {
     if (!coin) return;
+    const sell = !!panic?.blocked;
     upsertImpulseWait({
       id: uid(),
       coinId: coin.coinId, symbol: coin.symbol, name: coin.name,
+      side: sell ? 'sell' : 'buy',
       change7dPct: change7d ?? undefined,
+      fngAt: sell ? (fngNow ?? undefined) : undefined,
       createdAt: new Date().toISOString(),
       unlockAt: new Date(Date.now() + FOMO_WAIT_MS).toISOString(),
     });
@@ -157,7 +167,7 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
 
   function save() {
     if (!valid || !coin) return;
-    if (impulse?.blocked) return; // la règle garde la main même face à un clic pressé
+    if (impulse?.blocked || panic?.blocked) return; // la règle garde la main même face à un clic pressé
     const tx: Transaction = {
       id: initial?.id ?? uid(),
       ...coin,
@@ -184,10 +194,10 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={initial ? 'Modifier la transaction' : 'Nouvelle transaction'} footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button>{impulse?.blocked && !impulse.started ? (
+    <Modal open={open} onClose={onClose} title={initial ? 'Modifier la transaction' : 'Nouvelle transaction'} footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button>{((impulse?.blocked && !impulse.started) || (panic?.blocked && !panic.started)) ? (
       <Button variant="secondary" disabled={!coin} onClick={startWait}>Poser le délai de 24 h</Button>
     ) : (
-      <Button variant="primary" disabled={!valid || !!impulse?.blocked} onClick={save}>Enregistrer</Button>
+      <Button variant="primary" disabled={!valid || !!impulse?.blocked || !!panic?.blocked} onClick={save}>Enregistrer</Button>
     )}</>}>
       <div className="space-y-3">
         <Field label="Crypto"><CoinPicker value={coin} onChange={setCoin} /></Field>
@@ -259,6 +269,21 @@ export function TransactionModal({ open, onClose, initial, presetCoin, presetTyp
         {impulse && !impulse.blocked && impulse.started && (
           <Banner tone="info" title="24 h de réflexion écoulées">
             Tu peux enregistrer maintenant. Si tu ne le fais pas, c’est que la règle a fait son travail.
+          </Banner>
+        )}
+        {panic && panic.blocked && !panic.started && (
+          <Banner tone="warn" title={`Circuit breaker anti-panique : Fear & Greed à ${panic.fng} (peur extrême)`}>
+            Ta règle bloque 24 h cette vente hors plan de sortie : dans un krach, vendre au plus bas est l’erreur classique. Pose le délai, reviens demain à la même heure. Les paliers prévus par ton plan de sortie restent gérables depuis l’écran « Plan de sortie ».
+          </Banner>
+        )}
+        {panic && panic.blocked && panic.started && (
+          <Banner tone="warn" title={`Vente bloquée — déblocage dans environ ${panic.hoursLeft} h`}>
+            Le délai expire {new Date(panic.unlockAt ?? '').toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}.
+          </Banner>
+        )}
+        {panic && !panic.blocked && panic.started && (
+          <Banner tone="info" title="24 h écoulées en pleine peur : la décision t’appartient, à froid">
+            Fear &amp; Greed était à {panic.fng}. Relis ta thèse et ton plan de sortie avant d’enregistrer.
           </Banner>
         )}
       </div>

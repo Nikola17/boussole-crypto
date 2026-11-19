@@ -90,6 +90,12 @@ export default function Dashboard() {
 
       <BackupReminder />
 
+      {fngNow && fngNow.value < 25 && (
+        <Banner tone="warn" title={`Peur extrême (Fear & Greed ${fngNow.value}/100) — circuit breaker actif`}>
+          Aucune vente hors plan de sortie n’est acceptée à chaud aujourd’hui (délai de 24 h). C’est le moment où ton DCA fait le travail : suis ton ordre du jour, ne touche à rien d’autre.
+        </Banner>
+      )}
+
       {markets.error && <ErrorNote error={markets.error} onRetry={() => markets.refetch()} />}
 
       <div className="grid gap-4 lg:grid-cols-5">

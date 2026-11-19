@@ -65,3 +65,31 @@ export function impulseVerdict(change7dPct: number | null | undefined, wait: { u
   return { blocked: false, started: true, unlockAt: wait.unlockAt, hoursLeft: 0 };
 }
 
+// ------------------------------------------------------------------ circuit breaker anti-panique (ventes)
+
+/** Fear & Greed sous ce seuil = peur extrême : aucune vente hors plan de sortie n'est laissée passer à chaud. */
+export const PANIC_FNG_MAX = 25;
+
+export interface PanicVerdict {
+  blocked: boolean;
+  started: boolean;
+  unlockAt: string | null;
+  hoursLeft: number;
+  /** Fear & Greed constaté (null si indisponible — la règle ne bloque alors rien). */
+  fng: number | null;
+}
+
+/**
+ * Circuit breaker anti-panique : en peur extrême (Fear & Greed < 25), une vente non prévue par le plan de
+ * sortie est bloquée 24 h — c'est précisément dans un krach que vendre au plus bas est une erreur.
+ * Les paliers prévus par le plan de sortie restent gérables depuis l'écran « Plan de sortie ».
+ */
+export function panicVerdict(fng: number | null | undefined, wait: { unlockAt: string } | null | undefined, nowMs: number): PanicVerdict {
+  const panic = fng != null && Number.isFinite(fng) && fng < PANIC_FNG_MAX;
+  if (!panic) return { blocked: false, started: false, unlockAt: null, hoursLeft: 0, fng: fng ?? null };
+  if (!wait || !Number.isFinite(Date.parse(wait.unlockAt))) return { blocked: true, started: false, unlockAt: null, hoursLeft: Math.ceil(FOMO_WAIT_MS / 3600_000), fng };
+  const left = Date.parse(wait.unlockAt) - nowMs;
+  if (left > 0) return { blocked: true, started: true, unlockAt: wait.unlockAt, hoursLeft: Math.max(1, Math.ceil(left / 3600_000)), fng };
+  return { blocked: false, started: true, unlockAt: wait.unlockAt, hoursLeft: 0, fng };
+}
+

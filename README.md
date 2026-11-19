@@ -59,4 +59,4 @@ Chaque écran explique ses indicateurs — rien n'est une boîte noire. Le portr
 
 > ⚠️ **Avertissement** — Boussole est un outil d'aide à la décision et d'éducation, pas un conseil en investissement. Aucun indicateur, aucune IA ne prédit le marché. Les cryptoactifs peuvent perdre l'essentiel de leur valeur : n'investis que ce que tu peux te permettre de perdre.
 
-**Autres pages** : [Toutes les versions](https://github.com/Nikola17/boussole-crypto/releases) · [Historique des fonctionnalités](docs/FONCTIONNALITES.md) · [Charte du logo](branding/README.md) · [Licence MIT](LICENSE)
+**Autres pages** : [Site](https://nikola17.github.io/boussole-crypto/) · [Toutes les versions](https://github.com/Nikola17/boussole-crypto/releases) · [Historique des fonctionnalités](docs/FONCTIONNALITES.md) · [Charte du logo](branding/README.md) · [Licence MIT](LICENSE)

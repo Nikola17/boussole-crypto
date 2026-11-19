@@ -10,7 +10,7 @@ import { getMarkets, type CgMarket } from '../api/coingecko';
 import { getFearGreed } from '../api/feargreed';
 import { loadDailyHistory } from '../api/history';
 import { hourlyBetween, pairOf } from '../lib/lab/pairs';
-import { autoBaseUniverse } from '../lib/autoBasket';
+import { topBaseUniverse, AUTOPILOT_UNIVERSE_TOP } from '../lib/autoBasket';
 import { rulesOf } from '../lib/profile';
 import { temperatureSeries } from '../lib/lab/replayTemp';
 import { needsArchive, tickAutopilot, type AutopilotSources } from '../lib/lab/autopilot';
@@ -32,7 +32,7 @@ export async function appSources(markets: CgMarket[], cdcSymbols: string[] | nul
     daily: async (coinId) => { const s = symbolOf(coinId); return s ? loadDailyHistory(s) : []; },
     hourly: async (coinId, fromMs, toMs) => { const s = symbolOf(coinId); return s ? hourlyBetween(s, fromMs, toMs) : []; },
     temperatureAt: (day) => temps.get(day) ?? null,
-    universe: async () => autoBaseUniverse(markets).map((u) => ({ coinId: u.id, symbol: u.symbol, name: u.name, rank: u.rank, available: cdcSymbols ? cdcSymbols.includes(u.symbol.toUpperCase()) : null })),
+    universe: async () => topBaseUniverse(markets.map((m) => ({ id: m.id, symbol: m.symbol, name: m.name, image: m.image, rank: m.market_cap_rank })), AUTOPILOT_UNIVERSE_TOP).map((u) => ({ coinId: u.id, symbol: u.symbol, name: u.name, rank: u.rank, available: cdcSymbols ? cdcSymbols.includes(u.symbol.toUpperCase()) : null })),
     live: async () => {
       if (smallCaps === undefined) {
         const pages = await Promise.allSettled([2, 3, 4, 5].map((page) => getMarkets({ page, perPage: 250 })));
