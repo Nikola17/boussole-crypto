@@ -102,8 +102,23 @@ export interface Profile {
 }
 
 /** Journal à chaud : ce que j'ai fait et pourquoi, pris juste après une alerte — la mémoire du vécu, pas la théorie. */
-export interface HotNote {
+/** Un déblocage de tokens suivi manuellement (J-7 / J-1) : aucun agrégateur gratuit fiable, saisi à la main. */
+export interface TokenUnlock {
   // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
+  updatedAt?: UpdatedAt;
+  id: string;
+  symbol: string;
+  coinId?: string;
+  /** AAAA-MM-JJ : date du déblocage. */
+  date: string;
+  /** Quantité débloquée (optionnel). */
+  amount?: number;
+  /** Part de l'offre totale (%) si connue. */
+  pctSupply?: number;
+  note?: string;
+}
+
+export interface HotNote {  // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
   updatedAt?: UpdatedAt;
   id: string;
   /** L'alerte qui a déclenché la note, si la note en part d'une. */

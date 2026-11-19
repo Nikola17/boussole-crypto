@@ -5,7 +5,7 @@ import type { ExitSteps } from '../lib/exitSteps';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, HotNote, ImpulseWait, PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PickSnapshot, PortfolioSnapshot, SmartMove, PriceAlert, Profile, ProfileChange, Settings, SmartWallet, SyncDeletion,
-  TradeEntry, Transaction, WalletAddress, WatchedToken,
+  TokenUnlock, TradeEntry, Transaction, WalletAddress, WatchedToken,
 } from '../types';
 import { defaultProfile, rulesOf } from '../lib/profile';
 import { DEFAULT_ENVELOPE } from '../lib/envelope';
@@ -56,6 +56,8 @@ export interface AppState {
   hotNotes: HotNote[];
   /** Attentes anti-FOMO : achats sur une crypto qui a trop monté en 7 jours, bloqués 24 h. */
   impulseWaits: ImpulseWait[];
+  /** Déblocages de tokens suivis manuellement (alertes J-7 / J-1). */
+  unlocks: TokenUnlock[];
   profileHistory: ProfileChange[];
   /** Cryptos que tu as confirmé voir dans l'application Crypto.com. */
   cdcSeen: string[];
@@ -75,6 +77,8 @@ export interface AppState {
   removeHotNote: (id: string) => void;
   upsertImpulseWait: (w: ImpulseWait) => void;
   removeImpulseWait: (id: string) => void;
+  upsertUnlock: (u: TokenUnlock) => void;
+  removeUnlock: (id: string) => void;
   upsertTransaction: (tx: Transaction) => void;
   removeTransaction: (id: string) => void;
   /** Ajoute plusieurs transactions en une seule écriture (regroupement, échanges…). */
@@ -219,6 +223,7 @@ const initialData = () => ({
   smartWallets: [] as SmartWallet[],
   hotNotes: [] as HotNote[],
   impulseWaits: [] as ImpulseWait[],
+  unlocks: [] as TokenUnlock[],
   profileHistory: [] as ProfileChange[],
   transactions: [] as Transaction[],
   wallets: [] as WalletAddress[],
@@ -283,6 +288,8 @@ export const useStore = create<AppState>()(
       removeHotNote: (id) => set((s) => ({ hotNotes: s.hotNotes.filter((x) => x.id !== id), ...dropped(s, `hotNotes/${id}`) })),
       upsertImpulseWait: (w) => set((s) => ({ impulseWaits: upsert(s.impulseWaits, touch(w)) })),
       removeImpulseWait: (id) => set((s) => ({ impulseWaits: s.impulseWaits.filter((x) => x.id !== id), ...dropped(s, `impulseWaits/${id}`) })),
+      upsertUnlock: (u) => set((s) => ({ unlocks: upsert(s.unlocks, touch(u)) })),
+      removeUnlock: (id) => set((s) => ({ unlocks: s.unlocks.filter((x) => x.id !== id), ...dropped(s, `unlocks/${id}`) })),
       upsertTransaction: (tx) => set((s) => ({ transactions: upsert(s.transactions, touch(tx)) })),
       removeTransaction: (id) => set((s) => ({ transactions: s.transactions.filter((x) => x.id !== id), ...dropped(s, `transactions/${id}`) })),
       addTransactions: (txs) => set((s) => ({ transactions: [...txs.map(touch), ...s.transactions] })),

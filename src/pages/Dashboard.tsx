@@ -25,6 +25,7 @@ import { AutopilotCard } from '../components/AutopilotCard';
 import { DisciplineCard } from '../components/DisciplineCard';
 
 import { DriftCard } from '../components/DriftCard';
+import { UnlocksCard } from '../components/UnlocksCard';
 
 function greeting(name: string) {
   const h = new Date().getHours();
@@ -234,6 +235,7 @@ export default function Dashboard() {
         <AutopilotCard />
         <DisciplineCard />
         <DriftCard />
+        <UnlocksCard />
       </div>
     </div>
   );

@@ -26,6 +26,7 @@ import { ConsolidateCard } from '../components/ConsolidateCard';
 import { ExitPlanCard } from '../components/ExitPlanCard';
 import { BenchmarkCard } from '../components/BenchmarkCard';
 import { RiskCard } from '../components/RiskCard';
+import { SecurityCard } from '../components/SecurityCard';
 import { isExtendedKey, isExtendedPrivateKey, SCRIPT_LABEL, type BtcScript, type BtcScriptChoice } from '../lib/xpub';
 import type { Bucket, Transaction, WalletAddress } from '../types';
 
@@ -153,6 +154,8 @@ function Positions() {
       <BenchmarkCard />
 
       <RiskCard />
+
+      <SecurityCard />
 
       <ConsolidateCard />
 

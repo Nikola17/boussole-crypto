@@ -293,6 +293,12 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v1.31.0 — Lot C « Sécurité proactive » : approvals à révoquer + déblocages de tokens
+
+- **Scanner d'approvals EVM sans clé API** (Wallet → « Autorisations de tes wallets ») : transactions sortantes lues sur Blockscout (v2), filtrées sur le sélecteur `approve` (0x095ea7b3) pour retrouver (token, spender), puis allowance courante lue en `eth_call` sur le RPC public. Sont signalées « À révoquer » : les autorisations actives, illimitées (≥ 2^255) ou > 1 M d'unités, vers un contrat **hors liste des routeurs connus** (Uniswap, 1inch, 0x, Permit2, Paraswap). Limite documentée : ~150 dernières transactions sortantes. Boussole ne signe jamais de révocation — lien vers revoke.cash, la signature vient de ton wallet.
+- **Déblocages de tokens suivis manuellement** (Cockpit) : aucun agrégateur gratuit fiable (Tokenomist = clé payante, DefiLlama unlocks = endpoint retiré en 2026), donc saisie manuelle synchronisée entre appareils, avec badges J-7 / J-1 dans les 30 jours. L'alerte Telegram J-1 côté serveur reste une idée de suite.
+- 714 tests, typecheck 0 erreur.
+
 ### v1.30.0 — Lot D « Fiscalité FR » : export 2086 et moins-values
 
 - **Export CSV de chaque année fiscale** (bouton sur la carte « Mes années fiscales », Wallet) : cessions détaillées (date, actif, prix de cession, fraction imputée A×C/V, plus/moins-value, valeur du portefeuille) + ligne TOTAL, en CSV point-virgule prêt à être repris dans le formulaire 2086, avec BOM UTF-8 pour Excel.
