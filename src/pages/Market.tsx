@@ -1,3 +1,4 @@
+import { TrendingCard } from '../components/TrendingCard';
 import { Search, Star } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { clsx } from 'clsx';
@@ -212,6 +213,7 @@ export default function Market() {
           </div>
         </div>
       </Card>
+      <TrendingCard />
     </div>
   );
 }

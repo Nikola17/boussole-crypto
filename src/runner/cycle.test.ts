@@ -630,6 +630,54 @@ describe('alertes de signal dans le cycle', () => {
     expect(vac.sent.filter((t) => t.startsWith('Signal'))).toHaveLength(0);
   });
 
+  it('launchpool suivi : alertes J-7, J-1, J-0 selon le jour, une fois chacune', async () => {
+    const ev = { id: 'l1', name: 'Launchpool — TIA', date: '2026-11-27', updatedAt: '2026-11-01T00:00:00Z' };
+    const d = (dayNum: number, h: number) => new Date(2026, 10, dayNum, h, 0);
+    const { deps, sent } = makeDeps({ transactions: [], launchEvents: [ev] }, { prices: FLAT });
+    const r0 = await runCycle(CFG, emptyState(), dry(), deps, d(20, 9)); // 20 nov → J-7
+    expect(sent.filter((t) => t.includes('Launchpool — TIA'))).toHaveLength(1);
+    expect(sent.find((t) => t.includes('Launchpool'))).toContain('Dans 7 jours');
+    const r1 = await runCycle(CFG, r0.state, dry(), deps, d(20, 15));
+    expect(sent.filter((t) => t.includes('Launchpool'))).toHaveLength(1); // pas de doublon le même jour
+    await runCycle(CFG, r1.state, dry(), deps, d(26, 9)); // 26 nov → J-1
+    expect(sent.filter((t) => t.includes('Launchpool'))).toHaveLength(2);
+    expect(sent.filter((t) => t.includes('Launchpool'))[1]).toContain('Demain');
+    await runCycle(CFG, r1.state, dry(), deps, d(27, 9)); // 27 nov → J-0
+    expect(sent.filter((t) => t.includes('Launchpool'))).toHaveLength(3);
+    expect(sent.filter((t) => t.includes('Launchpool'))[2]).toContain('Aujourd’hui');
+  });
+
+  it('copy trading watchlist : alerte quand le trader suivi dévisse (drawdown), pas quand il va bien', async () => {
+    const d = (dayNum: number, h: number) => new Date(2026, 10, dayNum, h, 0);
+    const trader = { id: 'c1', name: 'Trader X', portfolioId: 'p123', updatedAt: '2026-11-01T00:00:00Z' };
+    const mk = (stats: Record<string, { roi30dPct: number; maxDrawdown30dPct: number } | null>) => {
+      const m = makeDeps({ transactions: [], copyTraders: [trader] }, { prices: FLAT });
+      m.deps.copyStats = async () => stats;
+      return m;
+    };
+    const ok = mk({ c1: { roi30dPct: 12, maxDrawdown30dPct: -8 } });
+    const r1 = await runCycle(CFG, emptyState(), dry(), ok.deps, d(20, 9));
+    expect(ok.sent.filter((t) => t.includes('Trader X'))).toHaveLength(0);
+    const bad = mk({ c1: { roi30dPct: -24, maxDrawdown30dPct: -33 } });
+    const r2 = await runCycle(CFG, r1.state, dry(), bad.deps, d(20, 10));
+    expect(bad.sent.filter((t) => t.includes('Trader X'))).toHaveLength(1);
+    expect(bad.sent.find((t) => t.includes('Trader X'))).toContain('ne copie personne automatiquement');
+    await runCycle(CFG, r2.state, dry(), bad.deps, d(20, 15)); // même jour : pas de doublon
+    expect(bad.sent.filter((t) => t.includes('Trader X'))).toHaveLength(1);
+  });
+
+  it('funding extrême sur une grosse ligne : alerte 1×/jour/symbole', async () => {
+    const d = (dayNum: number, h: number) => new Date(2026, 10, dayNum, h, 0);
+    const m = makeDeps({ transactions: [txSol] }, { prices: FLAT });
+    m.deps.fundingOf = async (sym) => (sym === 'SOLUSDT' ? 0.0009 : null);
+    const r1 = await runCycle(CFG, emptyState(), dry(), m.deps, d(20, 9));
+    expect(m.sent.filter((t) => t.includes('Funding extrême SOLUSDT'))).toHaveLength(1);
+    await runCycle(CFG, r1.state, dry(), m.deps, d(20, 15));
+    expect(m.sent.filter((t) => t.includes('Funding extrême'))).toHaveLength(1);
+    await runCycle(CFG, r1.state, dry(), m.deps, d(21, 9)); // lendemain : on peut再alerter
+    expect(m.sent.filter((t) => t.includes('Funding extrême'))).toHaveLength(2);
+  });
+
   it('déblocage de token suivi : alerte J-1 puis J-0, une fois chacune, même en mode vacances', async () => {
     const unlock = { id: 'u1', symbol: 'arb', date: '2026-11-21', amount: 1000, pctSupply: 0.4, updatedAt: '2026-11-01T00:00:00Z' };
     const d = (dayNum: number, h: number) => new Date(2026, 10, dayNum, h, 0); // 20 nov → J-1, 21 nov → J-0

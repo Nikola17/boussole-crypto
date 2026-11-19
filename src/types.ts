@@ -111,6 +111,29 @@ export interface Profile {
 
 /** Journal à chaud : ce que j'ai fait et pourquoi, pris juste après une alerte — la mémoire du vécu, pas la théorie. */
 /** Un déblocage de tokens suivi manuellement (J-7 / J-1) : aucun agrégateur gratuit fiable, saisi à la main. */
+/** Événement de lancement Binance (Launchpool / Launchpad / Megadrop) saisi manuellement : alertes J-7/J-1/J-0. */
+export interface LaunchEvent {
+  updatedAt?: UpdatedAt;
+  id: string;
+  /** Nom de l'événement (ex : « Launchpool — TOKEN »). */
+  name: string;
+  /** AAAA-MM-JJ : date de début. */
+  date: string;
+  /** AAAA-MM-JJ : date de fin (optionnel). */
+  endDate?: string;
+  note?: string;
+}
+
+/** Trader de copy trading suivi en watchlist (statistiques publiques uniquement, jamais de copie automatique). */
+export interface CopyTrader {
+  updatedAt?: UpdatedAt;
+  id: string;
+  name: string;
+  /** Identifiant public du portefeuille sur Binance (si connu) : permet de lire ses stats publiques. */
+  portfolioId?: string;
+  note?: string;
+}
+
 export interface TokenUnlock {
   // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
   updatedAt?: UpdatedAt;

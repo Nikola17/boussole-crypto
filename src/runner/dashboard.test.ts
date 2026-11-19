@@ -13,6 +13,7 @@ const base = {
     { id: 'u1', symbol: 'arb', date: '2026-11-21', pctSupply: 0.4 },
     { id: 'u2', symbol: 'op', date: '2026-12-05' },
   ],
+  launchEvents: [{ id: 'l1', name: 'Launchpool — TIA', date: '2026-11-27' }],
   syncSavedAt: '2026-11-20T08:55:00Z',
   syncDevice: 'pc-nico',
 };
@@ -27,13 +28,14 @@ describe('dashboard : statut public assaini', () => {
       { symbol: 'op', date: '2026-12-05', daysUntil: 15 },
     ]);
     expect(s.lastBrief).toEqual({ matin: '2026-11-20' });
+    expect(s.eventsNext).toEqual([{ name: 'Launchpool — TIA', date: '2026-11-27', daysUntil: 7 }]);
   });
 
   it('ne contient aucun secret, même si on lui en passait un par erreur', () => {
     const dirty = JSON.stringify(buildDashboardStatus({ ...base, syncSavedAt: 'tok 123 secret', syncDevice: 'x' } as never));
     // le builder ne retient que les champs prévus : on vérifie les clés présentes
     const keys = Object.keys(buildDashboardStatus(base)).sort();
-    expect(keys).toEqual(['at', 'btc', 'device', 'error', 'fng', 'lastBrief', 'ok', 'sync', 'temperature', 'unlocksNext', 'watching', 'zoneLabel'].sort());
+    expect(keys).toEqual(['at', 'btc', 'device', 'error', 'eventsNext', 'fng', 'lastBrief', 'ok', 'sync', 'temperature', 'unlocksNext', 'watching', 'zoneLabel'].sort());
     for (const forbidden of ['token', 'passphrase', 'chatId', 'webhook', 'telegramToken', 'syncToken']) {
       expect(dirty.toLowerCase()).not.toContain(forbidden);
     }

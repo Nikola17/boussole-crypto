@@ -44,7 +44,24 @@ export async function fetchBtcDaily(): Promise<Candle[] | null> {
 }
 
 /** Taux de financement du perpétuel BTC (Binance futures, public) : carburant de la température. */
+/** Taux de financement (par 8 h) d'un perp USDT (ex : BTCUSDT) — null si illisible. */
+export async function fetchFunding(symbolUsdt: string): Promise<number | null> {
+  try {
+    const res = await fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${encodeURIComponent(symbolUsdt)}`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    const r = (await res.json()) as { lastFundingRate?: string };
+    const v = Number(r.lastFundingRate);
+    return Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchBtcFunding(): Promise<number | null> {
+  return fetchFunding('BTCUSDT');
+}
+
+export async function fetchBtcFundingLegacy(): Promise<number | null> {
   try {
     const res = await fetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT', { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return null;

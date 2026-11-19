@@ -293,6 +293,14 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v1.38.0 — Surveillance avancée : lancements, copy trading, radar, funding
+
+- **Calendrier Launchpool/Launchpad** (Plus) : événements suivis, synchronisés, avec **alertes Telegram J-7/J-1/J-0** envoyées par le VPS (app fermée comprise) ; visibles aussi sur le dashboard web.
+- **Watchlist copy trading** (Plus) : traders suivis avec leurs stats publiques (ROI 30 j, drawdown max) et drapeau de risque ; **alerte Telegram 1×/jour** si un suivi dévisse. Leaderboard public Binance affiché pour repérer. Boussole ne copie jamais automatiquement.
+- **Radar « attention du moment »** (Signaux) : tendances CoinGecko avec badge « nouveau » et rappel anti-arnaque sur les tokens < 7 jours.
+- **Alertes funding extrême** (VPS) : sur les perps de tes 5 plus grosses lignes, alerte 1×/jour/symbole quand |funding| ≥ 0,05 %/8 h (≈ 54 %/an) — signal de foule/leverage excessif.
+- 775 tests, typecheck 0 erreur.
+
 ### v1.37.0 — Labo réaliste : backtest de bot grid + frais VIP Binance dans le paper
 
 - **Backtest de bot grid** (Labo → Banc d'essai) : grille [bas, haut] × N lignes testée sur l'historique réel BTC/ETH (bougies journalières Binance publiques) — trades, P&L, comparaison buy & hold, indicateur « sorti de la grille ».

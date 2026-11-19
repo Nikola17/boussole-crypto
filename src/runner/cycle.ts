@@ -17,7 +17,9 @@ import type { CoinPrice } from './market';
 import { isHotNews, newsKey, type NewsItem, type RatedNews, type WatchedCoin } from './news';
 import { eventKey, refsOf, relevantEvents, smartBriefLines, smartMessage, type SmartEvent } from '../lib/smartmoney';
 import { nextMacroEvents } from '../lib/macro';
-import { upcomingUnlocks } from '../lib/unlocks';
+import { upcomingDated, upcomingUnlocks } from '../lib/unlocks';
+import { copyAlertText, copyRiskFlag, type TraderStats } from '../lib/copyWatch';
+import { fundingAlertText, fundingVerdict } from '../lib/funding';
 import { buildDashboardStatus, type DashboardStatus } from './dashboard';
 import type { SmartWallet } from '../types';
 import type { AutopilotRun } from './autopilot';
@@ -75,6 +77,10 @@ export interface CycleDeps {
   signals?: (coins: { coinId: string; symbol: string }[]) => Promise<Record<string, { symbol: string; keys: string[] }>>;
   /** Dashboard web (optionnel) : reçoit le statut public ASSAINI à écrire dans le dossier servi par nginx. Jamais appelé en mode « à blanc ». */
   status?: (s: DashboardStatus) => void;
+  /** Stats publiques des traders de la watchlist copy trading (clé = id du trader). */
+  copyStats?: (traders: { id: string; portfolioId?: string }[]) => Promise<Record<string, TraderStats | null>>;
+  /** Taux de financement (par 8 h) d'un perp USDT (ex : BTCUSDT). */
+  fundingOf?: (symbolUsdt: string) => Promise<number | null>;
 }
 
 export interface CycleOptions {
@@ -196,6 +202,45 @@ export async function runCycle(cfg: RunnerConfig, st: RunnerState, opts: CycleOp
       const pct = u.pctSupply != null ? ` — ${u.pctSupply} % de l’offre totale` : '';
       queue.push({ key, text: `${badge === 'J-0' ? 'Aujourd’hui' : 'Demain'} : déblocage ${u.symbol.toUpperCase()}${qty}${pct}${u.note ? ` — ${u.note}` : ''}.
 Prépare ta décision : vendre, garder, ou attendre — et à quel palier.` });
+    }
+  }
+
+  // 1 bis bis. Événements Launchpool/Launchpad suivis : alertes J-7, J-1 puis J-0, une fois chacune.
+  if (!onVacation) {
+    for (const ev of upcomingDated(watch.launchEvents, dayKey, 7)) {
+      if (![0, 1, 7].includes(ev.daysUntil)) continue;
+      const badge = ev.daysUntil === 0 ? 'J-0' : ev.daysUntil === 1 ? 'J-1' : 'J-7';
+      const key = `launch:${ev.id}:${badge}`;
+      if (shouldSend(state, key)) {
+        const fin = ev.endDate ? ` → fin le ${ev.endDate}` : '';
+        queue.push({ key, text: `${badge === 'J-0' ? 'Aujourd’hui' : badge === 'J-1' ? 'Demain' : 'Dans 7 jours'} : ${ev.name} (débute ${ev.date}${fin})${ev.note ? ` — ${ev.note}` : ''}. Vérifie les conditions (lock de BNB…) sur binance.com/earn.` });
+      }
+    }
+  }
+
+  // 1 bis ter. Watchlist copy trading : stats publiques des traders suivis ; alerte quand le risque monte (1×/jour/trader).
+  if (!onVacation && watch.copyTraders.length && deps.copyStats) {
+    const stats = await deps.copyStats(watch.copyTraders).catch(() => ({}) as Record<string, TraderStats | null>);
+    for (const t of watch.copyTraders) {
+      const st = stats[t.id] ?? (t.portfolioId ? stats[t.portfolioId] ?? null : null);
+      if (!st || copyRiskFlag(st) === 'ok') continue;
+      const key = `copy:${t.id}:${dayKey}`;
+      if (shouldSend(state, key)) queue.push({ key, text: copyAlertText(t.name, st) });
+    }
+  }
+
+  // 1 bis quat. Funding extrême sur les perps de tes 5 plus grosses lignes (1 alerte/jour/symbole).
+  if (!onVacation && deps.fundingOf) {
+    const top = [...buildPositions(watch.transactions).values()]
+      .filter((p) => p.quantity > 0 && !isStable(p.symbol, p.coinId))
+      .sort((a, b) => ((priceMap.get(b.coinId) ?? 0) * b.quantity) - ((priceMap.get(a.coinId) ?? 0) * a.quantity))
+      .slice(0, 5);
+    for (const p of top) {
+      const sym = `${p.symbol.toUpperCase()}USDT`;
+      const rate = await deps.fundingOf(sym).catch(() => null);
+      if (rate == null || fundingVerdict(rate) === 'normal') continue;
+      const key = `funding:${sym}:${dayKey}`;
+      if (shouldSend(state, key)) queue.push({ key, text: fundingAlertText(sym, rate) });
     }
   }
 
@@ -484,7 +529,7 @@ Prépare ta décision : vendre, garder, ou attendre — et à quel palier.` });
         now, device: cfg.device, result, state, fng,
         temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
         btcPrice: priceRows.bitcoin ?? null,
-        unlocks: watch.unlocks,
+        unlocks: watch.unlocks, launchEvents: watch.launchEvents,
         syncSavedAt: bundle.savedAt ?? null, syncDevice: bundle.device ?? null,
       }));
     } catch { /* le dashboard ne doit jamais casser la surveillance */ }

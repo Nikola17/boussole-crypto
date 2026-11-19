@@ -1,5 +1,8 @@
 # Plan — Binance & DeFi dans Boussole
 
+> ✅ **Implémenté en v1.36.0 → v1.38.0** : les 10 idées ci-dessous sont livrées (voir `docs/FONCTIONNALITES.md`).
+
+
 Rappel de la philosophie : Boussole est un **outil d'aide à la décision**, jamais un conseil. On ne branche **aucune clé avec droit d'ordre** : lecture seule + simulations + alertes. L'exécution reste chez toi (ou en paper trading).
 
 ## 1. Ce que la capture Binance montre (à couvrir)

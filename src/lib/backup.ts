@@ -18,12 +18,12 @@ export const DATA_VERSION = 5;
 export const BACKUP_KEYS = [
   'settings', 'profile', 'watchlist', 'watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions',
   'trades', 'alerts', 'airdrops', 'reports', 'chat', 'accounts', 'basket', 'basketExecutions', 'exitDone', 'exitSteps', 'coreTrims', 'envelope', 'defiBets', 'cdcSeen', 'paperTrades', 'paperPortfolios', 'paperOrders', 'paperDays', 'portfolioSnapshots', 'smartMoves', 'pickSnapshots', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory',
-  'deletions', 'syncStamp', 'unlocks',
+  'deletions', 'syncStamp', 'unlocks', 'launchEvents', 'copyTraders',
 ] as const;
 export type BackupKey = (typeof BACKUP_KEYS)[number];
 
 const STRING_LISTS: BackupKey[] = ['watchlist', 'cdcSeen'];
-const OBJECT_LISTS: BackupKey[] = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'reports', 'chat', 'accounts', 'basketExecutions', 'defiBets', 'paperTrades', 'paperPortfolios', 'paperOrders', 'paperDays', 'portfolioSnapshots', 'smartMoves', 'pickSnapshots', 'deletions', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory', 'unlocks'];
+const OBJECT_LISTS: BackupKey[] = ['watchedTokens', 'transactions', 'wallets', 'dcaPlans', 'dcaExecutions', 'trades', 'alerts', 'airdrops', 'reports', 'chat', 'accounts', 'basketExecutions', 'defiBets', 'paperTrades', 'paperPortfolios', 'paperOrders', 'paperDays', 'portfolioSnapshots', 'smartMoves', 'pickSnapshots', 'deletions', 'smartWallets', 'hotNotes', 'impulseWaits', 'profileHistory', 'unlocks', 'launchEvents', 'copyTraders'];
 const PLAIN_OBJECTS: BackupKey[] = ['settings', 'profile', 'exitDone', 'exitSteps', 'coreTrims', 'envelope', 'syncStamp'];
 
 /**

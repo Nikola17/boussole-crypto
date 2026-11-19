@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import type { ExitSteps } from '../lib/exitSteps';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type {
+import type { CopyTrader, LaunchEvent, 
   Account, AirdropItem, AiReport, BasketExecution, BasketPlan, DefiBet, DefiEnvelope, ChatMessage, DcaExecution, DcaPlan, HotNote, ImpulseWait, PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PickSnapshot, PortfolioSnapshot, SmartMove, PriceAlert, Profile, ProfileChange, Settings, SmartWallet, SyncDeletion,
   TokenUnlock, TradeEntry, Transaction, WalletAddress, WatchedToken,
 } from '../types';
@@ -58,6 +58,10 @@ export interface AppState {
   impulseWaits: ImpulseWait[];
   /** Déblocages de tokens suivis manuellement (alertes J-7 / J-1). */
   unlocks: TokenUnlock[];
+  /** Événements Launchpool/Launchpad suivis (alertes J-7/J-1/J-0). */
+  launchEvents: LaunchEvent[];
+  /** Traders de copy trading en watchlist (stats publiques). */
+  copyTraders: CopyTrader[];
   profileHistory: ProfileChange[];
   /** Cryptos que tu as confirmé voir dans l'application Crypto.com. */
   cdcSeen: string[];
@@ -78,6 +82,10 @@ export interface AppState {
   upsertImpulseWait: (w: ImpulseWait) => void;
   removeImpulseWait: (id: string) => void;
   upsertUnlock: (u: TokenUnlock) => void;
+  upsertLaunchEvent: (e: LaunchEvent) => void;
+  removeLaunchEvent: (id: string) => void;
+  upsertCopyTrader: (c: CopyTrader) => void;
+  removeCopyTrader: (id: string) => void;
   removeUnlock: (id: string) => void;
   upsertTransaction: (tx: Transaction) => void;
   removeTransaction: (id: string) => void;
@@ -228,6 +236,8 @@ const initialData = () => ({
   hotNotes: [] as HotNote[],
   impulseWaits: [] as ImpulseWait[],
   unlocks: [] as TokenUnlock[],
+  launchEvents: [] as LaunchEvent[],
+  copyTraders: [] as CopyTrader[],
   profileHistory: [] as ProfileChange[],
   transactions: [] as Transaction[],
   wallets: [] as WalletAddress[],
@@ -294,6 +304,10 @@ export const useStore = create<AppState>()(
       removeImpulseWait: (id) => set((s) => ({ impulseWaits: s.impulseWaits.filter((x) => x.id !== id), ...dropped(s, `impulseWaits/${id}`) })),
       upsertUnlock: (u) => set((s) => ({ unlocks: upsert(s.unlocks, touch(u)) })),
       removeUnlock: (id) => set((s) => ({ unlocks: s.unlocks.filter((x) => x.id !== id), ...dropped(s, `unlocks/${id}`) })),
+      upsertLaunchEvent: (e) => set((s) => ({ launchEvents: upsert(s.launchEvents, touch(e)) })),
+      removeLaunchEvent: (id) => set((s) => ({ launchEvents: s.launchEvents.filter((x) => x.id !== id), ...dropped(s, `launchEvents/${id}`) })),
+      upsertCopyTrader: (c) => set((s) => ({ copyTraders: upsert(s.copyTraders, touch(c)) })),
+      removeCopyTrader: (id) => set((s) => ({ copyTraders: s.copyTraders.filter((x) => x.id !== id), ...dropped(s, `copyTraders/${id}`) })),
       upsertTransaction: (tx) => set((s) => ({ transactions: upsert(s.transactions, touch(tx)) })),
       removeTransaction: (id) => set((s) => ({ transactions: s.transactions.filter((x) => x.id !== id), ...dropped(s, `transactions/${id}`) })),
       addTransactions: (txs) => set((s) => ({ transactions: [...txs.map(touch), ...s.transactions] })),

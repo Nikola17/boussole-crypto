@@ -1429,7 +1429,7 @@ function watchOf(bundle) {
   const exitSteps = stamps.exitSteps && typeof stamps.exitSteps === "object" && !Array.isArray(stamps.exitSteps) ? stamps.exitSteps : {};
   const profileRaw = stamps.profile;
   const vacationUntil = profileRaw && typeof profileRaw === "object" && typeof profileRaw.vacationUntil === "string" && /^\d{4}-\d{2}-\d{2}$/.test(profileRaw.vacationUntil) ? profileRaw.vacationUntil : null;
-  return { alerts: list3("alerts"), transactions: list3("transactions"), exitSteps, exitDone, paperTrades: list3("paperTrades"), paperPortfolios: list3("paperPortfolios"), paperOrders: list3("paperOrders"), paperDays: list3("paperDays"), smartWallets: list3("smartWallets"), watchedTokens: list3("watchedTokens"), unlocks: list3("unlocks"), vacationUntil };
+  return { alerts: list3("alerts"), transactions: list3("transactions"), exitSteps, exitDone, paperTrades: list3("paperTrades"), paperPortfolios: list3("paperPortfolios"), paperOrders: list3("paperOrders"), paperDays: list3("paperDays"), smartWallets: list3("smartWallets"), watchedTokens: list3("watchedTokens"), unlocks: list3("unlocks"), launchEvents: list3("launchEvents"), copyTraders: list3("copyTraders"), vacationUntil };
 }
 var alertKey = (id) => `alert:${id}`;
 var rungKey = (coinId, multiple) => `exit:${coinId}:${multiple}`;
@@ -2146,10 +2146,44 @@ function smartBriefLines(events, nowMs = Date.now(), max = 4) {
 }
 
 // src/lib/unlocks.ts
-function upcomingUnlocks(list3, todayIso, horizonDays = 30) {
+function upcomingDated(list3, todayIso, horizonDays = 30) {
   const t = Date.parse(todayIso);
   if (!Number.isFinite(t)) return [];
   return list3.map((u) => ({ ...u, daysUntil: Math.round((Date.parse(u.date) - t) / 864e5) })).filter((u) => Number.isFinite(u.daysUntil) && u.daysUntil >= 0 && u.daysUntil <= horizonDays).sort((a, b) => a.daysUntil - b.daysUntil);
+}
+function upcomingUnlocks(list3, todayIso, horizonDays = 30) {
+  return upcomingDated(list3, todayIso, horizonDays);
+}
+
+// src/lib/copyWatch.ts
+function copyRiskFlag(s) {
+  const dd = s.maxDrawdown30dPct;
+  const roi = s.roi30dPct;
+  if (dd != null && dd <= -30 || roi != null && roi < -20) return "danger";
+  if (dd != null && dd <= -15 || roi != null && roi < 0) return "warn";
+  return "ok";
+}
+function copyAlertText(name, s) {
+  const roi = s.roi30dPct != null ? `${s.roi30dPct >= 0 ? "+" : ""}${s.roi30dPct.toFixed(1)} %` : "\u2014";
+  const dd = s.maxDrawdown30dPct != null ? `${s.maxDrawdown30dPct.toFixed(1)} %` : "\u2014";
+  return `Copy trading \u2014 ${name} : ROI 30 j ${roi}, drawdown max 30 j ${dd}. Stats publiques uniquement : Boussole ne copie personne automatiquement. V\xE9rifie toi-m\xEAme avant toute d\xE9cision.`;
+}
+
+// src/lib/funding.ts
+var FUNDING_EXTREME = 5e-4;
+function fundingVerdict(ratePer8h) {
+  if (ratePer8h == null || !Number.isFinite(ratePer8h)) return "normal";
+  if (ratePer8h >= FUNDING_EXTREME) return "extreme-long";
+  if (ratePer8h <= -FUNDING_EXTREME) return "extreme-short";
+  return "normal";
+}
+function fundingAnnualizedPct(ratePer8h) {
+  return ratePer8h * 3 * 365 * 100;
+}
+function fundingAlertText(symbol, ratePer8h) {
+  const v = fundingVerdict(ratePer8h);
+  const side = v === "extreme-long" ? "trop de positions longues" : "trop de positions courtes";
+  return `Funding extr\xEAme ${symbol} : ${(ratePer8h * 100).toFixed(3)} %/8 h (\u2248 ${fundingAnnualizedPct(ratePer8h).toFixed(0)} %/an) \u2014 ${side}, risque de squeeze. Ne te colle pas \xE0 la foule.`;
 }
 
 // src/runner/dashboard.ts
@@ -2168,6 +2202,7 @@ function buildDashboardStatus(i) {
     temperature: i.temperature,
     btc: i.btcPrice ? { usd: i.btcPrice.usd ?? null, change24h: i.btcPrice.change ?? null } : null,
     unlocksNext: upcomingUnlocks(i.unlocks, dayKey, 30).slice(0, 5).map((u) => ({ symbol: u.symbol, date: u.date, daysUntil: u.daysUntil })),
+    eventsNext: upcomingDated(i.launchEvents, dayKey, 30).slice(0, 5).map((e) => ({ name: e.name, date: e.date, daysUntil: e.daysUntil })),
     lastBrief: i.state.lastBriefSlot ?? {},
     sync: { savedAt: i.syncSavedAt, device: i.syncDevice }
   };
@@ -3508,6 +3543,36 @@ async function runCycle(cfg, st, opts, deps, now = /* @__PURE__ */ new Date()) {
 Pr\xE9pare ta d\xE9cision : vendre, garder, ou attendre \u2014 et \xE0 quel palier.` });
     }
   }
+  if (!onVacation) {
+    for (const ev of upcomingDated(watch.launchEvents, dayKey, 7)) {
+      if (![0, 1, 7].includes(ev.daysUntil)) continue;
+      const badge = ev.daysUntil === 0 ? "J-0" : ev.daysUntil === 1 ? "J-1" : "J-7";
+      const key = `launch:${ev.id}:${badge}`;
+      if (shouldSend(state, key)) {
+        const fin = ev.endDate ? ` \u2192 fin le ${ev.endDate}` : "";
+        queue.push({ key, text: `${badge === "J-0" ? "Aujourd\u2019hui" : badge === "J-1" ? "Demain" : "Dans 7 jours"} : ${ev.name} (d\xE9bute ${ev.date}${fin})${ev.note ? ` \u2014 ${ev.note}` : ""}. V\xE9rifie les conditions (lock de BNB\u2026) sur binance.com/earn.` });
+      }
+    }
+  }
+  if (!onVacation && watch.copyTraders.length && deps.copyStats) {
+    const stats = await deps.copyStats(watch.copyTraders).catch(() => ({}));
+    for (const t of watch.copyTraders) {
+      const st2 = stats[t.id] ?? (t.portfolioId ? stats[t.portfolioId] ?? null : null);
+      if (!st2 || copyRiskFlag(st2) === "ok") continue;
+      const key = `copy:${t.id}:${dayKey}`;
+      if (shouldSend(state, key)) queue.push({ key, text: copyAlertText(t.name, st2) });
+    }
+  }
+  if (!onVacation && deps.fundingOf) {
+    const top = [...buildPositions(watch.transactions).values()].filter((p) => p.quantity > 0 && !isStable(p.symbol, p.coinId)).sort((a, b) => (priceMap.get(b.coinId) ?? 0) * b.quantity - (priceMap.get(a.coinId) ?? 0) * a.quantity).slice(0, 5);
+    for (const p of top) {
+      const sym = `${p.symbol.toUpperCase()}USDT`;
+      const rate = await deps.fundingOf(sym).catch(() => null);
+      if (rate == null || fundingVerdict(rate) === "normal") continue;
+      const key = `funding:${sym}:${dayKey}`;
+      if (shouldSend(state, key)) queue.push({ key, text: fundingAlertText(sym, rate) });
+    }
+  }
   const fng = await deps.fearGreed().catch(() => null);
   const temperature = await marketTemperature(deps, fng);
   if (temperature) {
@@ -3762,6 +3827,7 @@ Ouvre Boussole pour cl\xF4turer le trade dans ton journal.` });
         temperature: temperature ? { value: temperature.temperature, zoneLabel: temperature.zone.label } : null,
         btcPrice: priceRows.bitcoin ?? null,
         unlocks: watch.unlocks,
+        launchEvents: watch.launchEvents,
         syncSavedAt: bundle.savedAt ?? null,
         syncDevice: bundle.device ?? null
       }));
@@ -3815,9 +3881,9 @@ async function fetchBtcDaily() {
     return null;
   }
 }
-async function fetchBtcFunding() {
+async function fetchFunding(symbolUsdt) {
   try {
-    const res = await fetch("https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT", { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(1e4) });
+    const res = await fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${encodeURIComponent(symbolUsdt)}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(1e4) });
     if (!res.ok) return null;
     const r = await res.json();
     const v = Number(r.lastFundingRate);
@@ -3825,6 +3891,9 @@ async function fetchBtcFunding() {
   } catch {
     return null;
   }
+}
+async function fetchBtcFunding() {
+  return fetchFunding("BTCUSDT");
 }
 async function fetchPrices(ids, coingeckoKey) {
   const uniq = [...new Set(ids)].filter(Boolean).slice(0, 90);
@@ -3883,34 +3952,6 @@ async function fetchStablecoinShare(coingeckoKey) {
   } catch {
     return null;
   }
-}
-
-// src/runner/telegram.ts
-async function post(token, method, body) {
-  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const j = await res.json().catch(() => ({}));
-  if (!res.ok || !j.ok) {
-    const why = j.description ? ` : ${j.description}` : "";
-    if (/chat not found/i.test(why)) throw new Error("Telegram : conversation introuvable \u2014 envoie un message \xE0 ton bot, puis relance avec --discover.");
-    throw new Error(`Telegram a refus\xE9 ${method}${why || ` (r\xE9ponse ${res.status})`}.`);
-  }
-  return j.result;
-}
-async function sendMessage(token, chatId, text) {
-  if (text.length > 4096) text = `${text.slice(0, 4090)}
-\u2026`;
-  await post(token, "sendMessage", { chat_id: chatId, text });
-}
-async function recentChats(token) {
-  const r = await post(token, "getUpdates", { timeout: 0, limit: 20 });
-  const seen = /* @__PURE__ */ new Map();
-  for (const u of r ?? []) {
-    const c = u.message?.chat;
-    if (!c || c.type !== "private") continue;
-    const key = String(c.id);
-    seen.set(key, { chatId: key, title: c.first_name ?? c.title ?? "", date: u.message?.date ?? 0 });
-  }
-  return [...seen.values()].sort((a, b) => b.date - a.date);
 }
 
 // src/api/http.ts
@@ -4030,6 +4071,53 @@ async function postJson(url, body, opts = {}) {
     body: JSON.stringify(body)
   });
   return await res.json();
+}
+
+// src/api/copyTrading.ts
+var BAPI = "https://www.binance.com/bapi/copyTrading/v1/public/v1/spot";
+async function getTraderStats(portfolioId) {
+  try {
+    const r = await getJson2(`${BAPI}/trader/detail?portfolioId=${encodeURIComponent(portfolioId)}`, { timeoutMs: 12e3, retries: 0 });
+    const d = r.data;
+    if (!d) return null;
+    const num2 = (v) => v != null && Number.isFinite(Number(v)) ? Number(v) : null;
+    return {
+      name: String(d.nickName ?? portfolioId),
+      roi30dPct: num2(d.roi30d),
+      maxDrawdown30dPct: num2(d.maxDrawdown30d),
+      followers: num2(d.followerCount) ?? void 0
+    };
+  } catch {
+    return null;
+  }
+}
+
+// src/runner/telegram.ts
+async function post(token, method, body) {
+  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j.ok) {
+    const why = j.description ? ` : ${j.description}` : "";
+    if (/chat not found/i.test(why)) throw new Error("Telegram : conversation introuvable \u2014 envoie un message \xE0 ton bot, puis relance avec --discover.");
+    throw new Error(`Telegram a refus\xE9 ${method}${why || ` (r\xE9ponse ${res.status})`}.`);
+  }
+  return j.result;
+}
+async function sendMessage(token, chatId, text) {
+  if (text.length > 4096) text = `${text.slice(0, 4090)}
+\u2026`;
+  await post(token, "sendMessage", { chat_id: chatId, text });
+}
+async function recentChats(token) {
+  const r = await post(token, "getUpdates", { timeout: 0, limit: 20 });
+  const seen = /* @__PURE__ */ new Map();
+  for (const u of r ?? []) {
+    const c = u.message?.chat;
+    if (!c || c.type !== "private") continue;
+    const key = String(c.id);
+    seen.set(key, { chatId: key, title: c.first_name ?? c.title ?? "", date: u.message?.date ?? 0 });
+  }
+  return [...seen.values()].sort((a, b) => b.date - a.date);
 }
 
 // src/api/smartmoney.ts
@@ -6692,7 +6780,21 @@ var depsOf = (cfg) => ({
   },
   signals: async (coins) => computeSignals(coins, await runnerAutopilotSources(cfg.coingeckoKey, rulesOf({ archetype: "Ma strat\xE9gie", rules: {} }))),
   // Dashboard web : si dashboardDir est renseigné, le cycle y écrit status.json (données assainies, aucun secret).
-  status: cfg.dashboardDir ? (st) => writePublicStatus(cfg.dashboardDir, st) : void 0
+  status: cfg.dashboardDir ? (st) => writePublicStatus(cfg.dashboardDir, st) : void 0,
+  // Watchlist copy trading : stats publiques uniquement, lues sans clé API.
+  copyStats: async (traders) => {
+    const out = {};
+    for (const t of traders) {
+      if (!t.portfolioId) {
+        out[t.id] = null;
+        continue;
+      }
+      const st = await getTraderStats(t.portfolioId).catch(() => null);
+      out[t.id] = st ? { roi30dPct: st.roi30dPct, maxDrawdown30dPct: st.maxDrawdown30dPct, followers: st.followers } : null;
+    }
+    return out;
+  },
+  fundingOf: (sym) => fetchFunding(sym)
 });
 async function modeCheck(cfg) {
   const { result } = await runCycle(cfg, loadState(cfg), { dry: true, forceBrief: true, onDry: (text) => log(`[\xE0 blanc] ${text.split("\n").join(" \u2014 ")}`) }, depsOf(cfg));

@@ -22,7 +22,9 @@ import { applyEnv, validateConfig, type RunnerConfig } from './config';
 import { emptyState, parseState, type RunnerState } from './state';
 import { runCycle, type CycleDeps } from './cycle';
 import { writePublicStatus } from './dashboard';
-import { fetchBtcDaily, fetchBtcFunding, fetchFearGreed, fetchMvrv, fetchPrices, fetchStablecoinShare } from './market';
+import type { TraderStats } from '../lib/copyWatch';
+import { fetchBtcDaily, fetchBtcFunding, fetchFearGreed, fetchFunding, fetchMvrv, fetchPrices, fetchStablecoinShare } from './market';
+import { getTraderStats } from '../api/copyTrading';
 import { recentChats, sendMessage } from './telegram';
 import { fetchCoinNews, type NewsItem, type WatchedCoin } from './news';
 import { fetchAllWalletEvents, walletHoldings } from '../api/smartmoney';
@@ -208,6 +210,17 @@ const depsOf = (cfg: RunnerConfig): CycleDeps => ({
   signals: async (coins) => computeSignals(coins, await runnerAutopilotSources(cfg.coingeckoKey, rulesOf({ archetype: 'Ma stratégie', rules: {} as Profile['rules'] }))),
   // Dashboard web : si dashboardDir est renseigné, le cycle y écrit status.json (données assainies, aucun secret).
   status: cfg.dashboardDir ? (st) => writePublicStatus(cfg.dashboardDir, st) : undefined,
+  // Watchlist copy trading : stats publiques uniquement, lues sans clé API.
+  copyStats: async (traders) => {
+    const out: Record<string, TraderStats | null> = {};
+    for (const t of traders) {
+      if (!t.portfolioId) { out[t.id] = null; continue; }
+      const st = await getTraderStats(t.portfolioId).catch(() => null);
+      out[t.id] = st ? { roi30dPct: st.roi30dPct, maxDrawdown30dPct: st.maxDrawdown30dPct, followers: st.followers } : null;
+    }
+    return out;
+  },
+  fundingOf: (sym) => fetchFunding(sym),
 });
 
 // ---------------------------------------------------------------- modes

@@ -5,7 +5,7 @@
 // Les wallets lus sur la blockchain (xpub du Ledger, adresse Phantom…) ne sont pas relus par le runner :
 // ce que le journal ne décrit pas n'est pas vu, et le cœur (BTC, ETH) n'a de toute façon pas de paliers.
 
-import type { TokenUnlock,  PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PriceAlert, SmartWallet, Transaction, WatchedToken } from '../types';
+import type { CopyTrader, LaunchEvent, TokenUnlock,  PaperDayLog, PaperOrder, PaperPortfolio, PaperTrade, PriceAlert, SmartWallet, Transaction, WatchedToken } from '../types';
 import type { ExitSteps } from '../lib/exitSteps';
 import type { SyncBundle } from '../lib/sync/merge';
 import { checkPriceAlerts } from '../lib/alerts';
@@ -29,6 +29,10 @@ export interface WatchData {
   watchedTokens: WatchedToken[];
   /** Déblocages de tokens suivis (J-7/J-1/J-0). */
   unlocks: TokenUnlock[];
+  /** Événements Launchpool/Launchpad suivis (J-7/J-1/J-0). */
+  launchEvents: LaunchEvent[];
+  /** Watchlist copy trading (stats publiques). */
+  copyTraders: CopyTrader[];
   /** Mode vacances du profil : veille critique uniquement jusqu'à cette date (AAAA-MM-JJ, null : aucun). */
   vacationUntil: string | null;
 }
@@ -41,7 +45,7 @@ export function watchOf(bundle: SyncBundle): WatchData {
   const exitSteps = (stamps.exitSteps && typeof stamps.exitSteps === 'object' && !Array.isArray(stamps.exitSteps) ? stamps.exitSteps : {}) as ExitSteps;
   const profileRaw = stamps.profile as { vacationUntil?: unknown } | undefined;
   const vacationUntil = profileRaw && typeof profileRaw === 'object' && typeof profileRaw.vacationUntil === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(profileRaw.vacationUntil) ? profileRaw.vacationUntil : null;
-  return { alerts: list<PriceAlert>('alerts'), transactions: list<Transaction>('transactions'), exitSteps, exitDone, paperTrades: list<PaperTrade>('paperTrades'), paperPortfolios: list<PaperPortfolio>('paperPortfolios'), paperOrders: list<PaperOrder>('paperOrders'), paperDays: list<PaperDayLog>('paperDays'), smartWallets: list<SmartWallet>('smartWallets'), watchedTokens: list<WatchedToken>('watchedTokens'), unlocks: list<TokenUnlock>('unlocks'), vacationUntil };
+  return { alerts: list<PriceAlert>('alerts'), transactions: list<Transaction>('transactions'), exitSteps, exitDone, paperTrades: list<PaperTrade>('paperTrades'), paperPortfolios: list<PaperPortfolio>('paperPortfolios'), paperOrders: list<PaperOrder>('paperOrders'), paperDays: list<PaperDayLog>('paperDays'), smartWallets: list<SmartWallet>('smartWallets'), watchedTokens: list<WatchedToken>('watchedTokens'), unlocks: list<TokenUnlock>('unlocks'), launchEvents: list<LaunchEvent>('launchEvents'), copyTraders: list<CopyTrader>('copyTraders'), vacationUntil };
 }
 
 export const alertKey = (id: string): string => `alert:${id}`;

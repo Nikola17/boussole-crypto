@@ -5,8 +5,8 @@
 
 import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { upcomingUnlocks } from '../lib/unlocks';
-import type { TokenUnlock } from '../types';
+import { upcomingDated, upcomingUnlocks } from '../lib/unlocks';
+import type { LaunchEvent, TokenUnlock } from '../types';
 import type { CycleResult } from './cycle';
 import type { RunnerState } from './state';
 
@@ -24,6 +24,8 @@ export interface DashboardStatus {
   btc: { usd: number | null; change24h: number | null } | null;
   /** Prochains déblocages suivis (J-x), au plus 5. */
   unlocksNext: { symbol: string; date: string; daysUntil: number }[];
+  /** Prochains événements Launchpool/Launchpad suivis (J-x), au plus 5. */
+  eventsNext: { name: string; date: string; daysUntil: number }[];
   /** Dernier brief envoyé par créneau (« matin », « us-open », « us-close ») → jour. */
   lastBrief: Record<string, string>;
   /** Fraîcheur du fichier de synchronisation chiffré. */
@@ -40,6 +42,7 @@ export function buildDashboardStatus(i: {
   temperature: { value: number; zoneLabel: string } | null;
   btcPrice: { usd?: number; change?: number } | null | undefined;
   unlocks: TokenUnlock[];
+  launchEvents: LaunchEvent[];
   syncSavedAt: string | null;
   syncDevice: string | null;
 }): DashboardStatus {
@@ -55,6 +58,7 @@ export function buildDashboardStatus(i: {
     temperature: i.temperature,
     btc: i.btcPrice ? { usd: i.btcPrice.usd ?? null, change24h: i.btcPrice.change ?? null } : null,
     unlocksNext: upcomingUnlocks(i.unlocks, dayKey, 30).slice(0, 5).map((u) => ({ symbol: u.symbol, date: u.date, daysUntil: u.daysUntil })),
+    eventsNext: upcomingDated(i.launchEvents, dayKey, 30).slice(0, 5).map((e) => ({ name: e.name, date: e.date, daysUntil: e.daysUntil })),
     lastBrief: i.state.lastBriefSlot ?? {},
     sync: { savedAt: i.syncSavedAt, device: i.syncDevice },
   };

@@ -7,14 +7,19 @@ export interface UpcomingUnlock extends TokenUnlock {
   daysUntil: number;
 }
 
-/** Déblocages à venir (0 à horizonDays), triés par proximité. */
-export function upcomingUnlocks(list: TokenUnlock[], todayIso: string, horizonDays = 30): UpcomingUnlock[] {
+/** Éléments datés à venir (0 à horizonDays), triés par proximité — commun aux déblocages, lancements, etc. */
+export function upcomingDated<T extends { date: string }>(list: T[], todayIso: string, horizonDays = 30): (T & { daysUntil: number })[] {
   const t = Date.parse(todayIso);
   if (!Number.isFinite(t)) return [];
   return list
     .map((u) => ({ ...u, daysUntil: Math.round((Date.parse(u.date) - t) / 86400000) }))
     .filter((u) => Number.isFinite(u.daysUntil) && u.daysUntil >= 0 && u.daysUntil <= horizonDays)
     .sort((a, b) => a.daysUntil - b.daysUntil);
+}
+
+/** Déblocages à venir (0 à horizonDays), triés par proximité. */
+export function upcomingUnlocks(list: TokenUnlock[], todayIso: string, horizonDays = 30): UpcomingUnlock[] {
+  return upcomingDated(list, todayIso, horizonDays) as UpcomingUnlock[];
 }
 
 /** Badge d'urgence : J-1 (demain ou moins) puis J-7. */
