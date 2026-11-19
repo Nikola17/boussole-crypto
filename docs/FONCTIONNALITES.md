@@ -293,6 +293,13 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v1.32.0 — Lot B « Radar dérivés & réseau Bitcoin » (Cockpit)
+
+- **Carte « Radar dérivés & réseau »** : open interest BTCUSDT (en BTC et ≈ Md $), dernier funding 8 h + annualisé (moyenne des 3 derniers taux), ratio long/short des comptes Binance (1 j), mempool (nb de tx, volume en Mo, frais fastest en sat/vB) — sources Binance fapi et mempool.space, toutes publiques, lectures dégradées en « — » si indisponible.
+- **Interprétation heuristique affichée comme telle** : funding extrême (≥ ±0,01 %/8 h) → risque de liquidations en cascade ou squeeze ; ratio très long/short → levier concentré d’un côté ; mempool congestionné (≥ 50 sat/vB ou ≥ 100 Mo) → transferts plus chers et plus lents ; OI ≥ 60 Md $ → marché levier-heavy. Seuils indicatifs, pas des signaux (les signaux mesurés du Labo restent inchangés).
+- Non retenue : les flux ETF (Farside) sont derrière Cloudflare et illisibles depuis l’app ; les unlocks Tokenomist/DefiLlama nécessitent une clé payante ou ont disparu — d’où le suivi manuel des déblocages (v1.31.0).
+- 720 tests, typecheck 0 erreur.
+
 ### v1.31.0 — Lot C « Sécurité proactive » : approvals à révoquer + déblocages de tokens
 
 - **Scanner d'approvals EVM sans clé API** (Wallet → « Autorisations de tes wallets ») : transactions sortantes lues sur Blockscout (v2), filtrées sur le sélecteur `approve` (0x095ea7b3) pour retrouver (token, spender), puis allowance courante lue en `eth_call` sur le RPC public. Sont signalées « À révoquer » : les autorisations actives, illimitées (≥ 2^255) ou > 1 M d'unités, vers un contrat **hors liste des routeurs connus** (Uniswap, 1inch, 0x, Permit2, Paraswap). Limite documentée : ~150 dernières transactions sortantes. Boussole ne signe jamais de révocation — lien vers revoke.cash, la signature vient de ton wallet.

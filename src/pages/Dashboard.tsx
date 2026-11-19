@@ -26,6 +26,7 @@ import { DisciplineCard } from '../components/DisciplineCard';
 
 import { DriftCard } from '../components/DriftCard';
 import { UnlocksCard } from '../components/UnlocksCard';
+import { DerivativesCard } from '../components/DerivativesCard';
 
 function greeting(name: string) {
   const h = new Date().getHours();
@@ -167,6 +168,8 @@ export default function Dashboard() {
       </div>
 
       <MacroCard />
+
+      <DerivativesCard />
 
       {/* Indicateurs clés */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-6">
