@@ -5,6 +5,7 @@
 
 import type { Settings } from '../types';
 import { isElectron } from './platform';
+import { BoussoleKeychain, legacyPlugin } from './capPlugins';
 
 /** Les valeurs qui ne doivent jamais trainer en clair dans le stockage de l'application. */
 export const SECRET_KEYS = ['anthropicKey', 'compatKey', 'mistralKey', 'coingeckoKey', 'syncToken', 'syncPassphrase', 'binanceApiKey', 'binanceApiSecret'] as const;
@@ -26,8 +27,9 @@ function bridge(): { sealSecret: (v: string) => Promise<string | null>; openSecr
       Plugins?: Record<string, { sealSecret?: (a: { value: string }) => Promise<{ blob: string }>; openSecret?: (a: { blob: string }) => Promise<{ value: string }> } | undefined>;
     };
   }).Capacitor;
-  const kc = cap?.Plugins?.['BoussoleKeychain'];
-  if (cap?.isPluginAvailable?.('BoussoleKeychain') && kc?.sealSecret && kc.openSecret) {
+  // Capacitor ≥ 6 : proxy registerPlugin (window.Capacitor.Plugins n'est plus rempli pour les natifs).
+  const kc = legacyPlugin<{ sealSecret?: (a: { value: string }) => Promise<{ blob: string }>; openSecret?: (a: { blob: string }) => Promise<{ value: string }> }>('BoussoleKeychain') ?? BoussoleKeychain;
+  if (cap?.isPluginAvailable?.('BoussoleKeychain') && kc?.sealSecret && kc?.openSecret) {
     return {
       sealSecret: async (v) => (await kc.sealSecret!({ value: v })).blob,
       openSecret: async (v) => (await kc.openSecret!({ blob: v })).value,

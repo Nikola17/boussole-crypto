@@ -1,6 +1,7 @@
 // Fonctions dépendantes de la plateforme : Windows (Electron), Android (Capacitor) ou navigateur.
 
 import { Capacitor } from '@capacitor/core';
+import { BoussoleLock, BoussoleUpdate, legacyPlugin } from './capPlugins';
 import { Browser } from '@capacitor/browser';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
@@ -21,9 +22,10 @@ type LockBridge = { available?: () => Promise<{ available: boolean }>; authentic
 
 function lockPlugin(): LockBridge | null {
   if (typeof window === 'undefined') return null; // hors navigateur (tests Node) : pas de plugin natif
-  const cap = (window as unknown as { Capacitor?: { isPluginAvailable?: (n: string) => boolean; Plugins?: Record<string, LockBridge | undefined> } }).Capacitor;
-  const lock = cap?.Plugins?.['BoussoleLock'];
-  return cap?.isPluginAvailable?.('BoussoleLock') && lock ? lock : null;
+  // Capacitor ≥ 6 : proxy registerPlugin (window.Capacitor.Plugins n'est plus rempli pour les natifs).
+  const proxy = BoussoleLock as unknown as LockBridge;
+  if (proxy?.available && proxy?.authenticate) return proxy;
+  return legacyPlugin<LockBridge>('BoussoleLock') ?? null;
 }
 
 export async function lockAvailable(): Promise<boolean> {
@@ -47,13 +49,18 @@ export async function unlockApp(): Promise<{ ok: boolean; reason?: string }> {
 /** Pont Android du téléchargement + installation de mise à jour (aucune clé, releases publiques). */
 async function androidInstallUpdate(url: string): Promise<{ ok: boolean; reason?: string }> {
   if (typeof window === 'undefined') return { ok: false, reason: 'indisponible ici' };
-  const cap = (window as unknown as { Capacitor?: { Plugins?: Record<string, { downloadAndInstall?: (a: { url: string }) => Promise<{ ok: boolean; reason?: string }> } | undefined> } }).Capacitor;
-  const upd = cap?.Plugins?.['BoussoleUpdate'];
+  // Capacitor ≥ 6 : proxy registerPlugin ; secours : ancien accès window.Capacitor.Plugins (vieux APK).
+  const legacy = legacyPlugin<{ downloadAndInstall?: (a: { url: string }) => Promise<{ ok: boolean; reason?: string }> }>('BoussoleUpdate');
+  const upd = legacy?.downloadAndInstall ? legacy : BoussoleUpdate;
   if (!upd?.downloadAndInstall) return { ok: false, reason: 'la mise à jour embarquée exige la version installée (APK)' };
   try {
     return await upd.downloadAndInstall({ url });
-  } catch {
-    return { ok: false, reason: 'échec du téléchargement' };
+  } catch (e) {
+    // Le proxy lève « not implemented » hors Android : on retombe sur l'ancien accès si présent.
+    if (legacy?.downloadAndInstall) {
+      try { return await legacy.downloadAndInstall({ url }); } catch { /* ниже */ }
+    }
+    return { ok: false, reason: (e as Error)?.message?.includes('not implemented') ? 'mise à jour embarquée indisponible ici — utilise « La page » pour télécharger l’APK' : 'échec du téléchargement' };
   }
 }
 

@@ -293,6 +293,14 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v1.38.1 — Correctif : mise à jour embarquée Android (et plugins natifs) réparés
+
+- **Cause racine** : depuis Capacitor 6+, `window.Capacitor.Plugins[...]` n'est plus rempli pour les plugins natifs — il faut un proxy `registerPlugin()`. Conséquence : la mise à jour embarquée Android échouait silencieusement (« la mise à jour embarquée exige la version installée »), et au passage le verrou biométrique, le keystore (secrets) et le widget Android étaient invisibles. Tout passe désormais par `registerPlugin` (`src/lib/capPlugins.ts`), avec secours sur l'ancien accès.
+- Le keystore Android re-scelle automatiquement les secrets laissés en clair au démarrage.
+- Chaîne de téléchargement vérifiée de bout en bout : URL release → redirection cross-host suivie manuellement → APK 11 Mo → FileProvider (cache) → installeur système.
+- **À faire une fois** : installe la v1.38.1 à la main depuis la page des releases (bouton « La page » de la bannière) — ensuite les mises à jour embarquées refonctionnent.
+- 775 tests, typecheck 0 erreur.
+
 ### v1.38.0 — Surveillance avancée : lancements, copy trading, radar, funding
 
 - **Calendrier Launchpool/Launchpad** (Plus) : événements suivis, synchronisés, avec **alertes Telegram J-7/J-1/J-0** envoyées par le VPS (app fermée comprise) ; visibles aussi sur le dashboard web.

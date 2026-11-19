@@ -3,6 +3,7 @@
 // Aucune donnée de plus que ce que l'application affiche déjà : rien de privé n'y part.
 
 import { Capacitor } from '@capacitor/core';
+import { BoussoleWidget } from './capPlugins';
 
 export interface WidgetState {
   temperature: number | null;
@@ -25,7 +26,9 @@ export function widgetAvailable(): boolean {
 export async function pushWidgetState(state: WidgetState): Promise<void> {
   if (!widgetAvailable()) return;
   try {
-    const plugin = (Capacitor as unknown as { Plugins?: { BoussoleWidget?: { updateState?: (s: unknown) => Promise<void> } } }).Plugins?.BoussoleWidget;
+    // Capacitor ≥ 6 : proxy registerPlugin ; secours : ancien accès Plugins[...] (vieux APK).
+    const legacy = (Capacitor as unknown as { Plugins?: { BoussoleWidget?: { updateState?: (s: unknown) => Promise<void> } } }).Plugins?.BoussoleWidget;
+    const plugin = legacy ?? BoussoleWidget;
     await plugin?.updateState?.(state);
   } catch {
     // Le widget est un confort : jamais une erreur à l'écran pour lui.
