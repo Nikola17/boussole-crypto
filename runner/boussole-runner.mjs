@@ -4551,6 +4551,7 @@ function autoDiscoveryCandidates(rows, opts) {
 // src/lib/autoBasket.ts
 var AUTO_BASKET_VERSION = 1;
 var AUTO_BASE_TOP = 20;
+var AUTOPILOT_UNIVERSE_TOP = 100;
 var AUTO_MAX_LINES = 3;
 var AUTO_MIN_INVESTOR_SCORE = -15;
 var round2 = (x) => Math.round(x * 100) / 100;
@@ -4970,9 +4971,9 @@ var daysBetween3 = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.par
 var signed2 = (x) => `${x > 0 ? "+" : ""}${x}`;
 var trader = {
   id: "trader",
-  version: 2,
+  version: 3,
   label: "Trader (setups avec stop)",
-  describe: "Entre sur les seuls setups valid\xE9s par le banc d\u2019essai ; stop jug\xE9 \xE0 la cl\xF4ture, objectif \xE0 3 R (le plan le mieux mesur\xE9) ; risque 1 % par trade, 5 positions au plus, pause apr\xE8s \u221220 %.",
+  describe: "Entre sur les seuls setups valid\xE9s par le banc d\u2019essai (cassure 20 j + volume, relance MACD) dans un univers \xE9largi (top 100) ; stop jug\xE9 \xE0 la cl\xF4ture, objectif \xE0 3 R ; risque 1 % par trade, 5 positions au plus, sortie au bout de 30 jours, pause apr\xE8s \u221220 %.",
   defaults: { riskPct: 1, maxPositions: 5, maxPositionPct: 20, targetR: 3, maxHoldDays: 30, cooldownDays: 5, maxChasePct: 3, regime: false, pauseDrawdownPct: 20, onlyAvailable: true, setups: validatedBullSetups() },
   uses: ["signals"],
   replayable: true,
@@ -6433,7 +6434,7 @@ async function runnerAutopilotSources(coingeckoKey, rules) {
       return s ? hourlyBetween(s, fromMs, toMs) : [];
     },
     temperatureAt: (day) => temps.get(day) ?? null,
-    universe: async () => autoBaseUniverse(top).map((u) => ({ coinId: u.id, symbol: u.symbol, name: u.name, rank: u.rank, available: available ? available.includes(u.symbol.toUpperCase()) : null })),
+    universe: async () => topBaseUniverse(top.map((m) => ({ id: m.id, symbol: m.symbol, name: m.name, image: m.image, rank: m.market_cap_rank })), AUTOPILOT_UNIVERSE_TOP).map((u) => ({ coinId: u.id, symbol: u.symbol, name: u.name, rank: u.rank, available: available ? available.includes(u.symbol.toUpperCase()) : null })),
     live: async () => {
       const smallCaps = await cached("smallcaps", 24 * H, async () => {
         const pages = await Promise.allSettled([2, 3, 4, 5].map((p) => markets(coingeckoKey, p)));
