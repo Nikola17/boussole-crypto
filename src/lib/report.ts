@@ -1,8 +1,30 @@
 // Rapport mensuel du portefeuille : à partir des relevés quotidiens (snapshots) et du journal.
 // Fonction pure, testée ; exporté en texte (Markdown) pour archivage ou partage avec un conseil.
 
-import type { BasketExecution, DcaExecution, PortfolioSnapshot, Transaction } from '../types';
+import type { BasketExecution, DefiBet, DcaExecution, PortfolioSnapshot, Transaction } from '../types';
 import { txAmounts } from './portfolio';
+
+/** Section « tout ce qui rapporte » : paris DeFi ouverts et rendement annuel estimé du staking. */
+export interface EarnSection {
+  /** P&L des paris DeFi encore ouverts (mise restante valorisée + déjà ressorti − coût). */
+  defiOpenPnlUsd: number;
+  defiOpenCount: number;
+  /** Rendement annuel estimé sur les lignes détenues (staking/Earn), en USD. */
+  estYieldYearUsd: number | null;
+}
+
+/** P&L des paris DeFi ouverts — pure. */
+export function defiOpenPnl(bets: DefiBet[]): { pnlUsd: number; count: number } {
+  let pnl = 0;
+  let count = 0;
+  for (const b of bets) {
+    if (b.status !== 'open') continue;
+    count++;
+    const value = b.valueUsd ?? b.costUsd;
+    pnl += value + (b.realizedUsd ?? 0) - b.costUsd;
+  }
+  return { pnlUsd: pnl, count };
+}
 
 export interface MonthReport {
   year: number;
@@ -18,6 +40,7 @@ export interface MonthReport {
   feesUsd: number;
   txCount: number;
   dcaCount: number;
+  earn?: EarnSection;
 }
 
 /** Rapport d'un mois donné ; null s'il n'y a aucun relevé complet ce mois-là. */
@@ -28,6 +51,7 @@ export function monthReport(
   txs: Transaction[],
   dcaExecs: DcaExecution[],
   basketExecs: BasketExecution[],
+  earn?: EarnSection,
 ): MonthReport | null {
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
   const snaps = snapshots.filter((s) => s.day.startsWith(prefix) && s.complete).sort((a, b) => a.day.localeCompare(b.day));
@@ -60,6 +84,7 @@ export function monthReport(
     feesUsd,
     txCount: monthTxs.length,
     dcaCount,
+    earn,
   };
 }
 
@@ -90,6 +115,12 @@ export function monthReportText(r: MonthReport, currency: 'EUR' | 'USD', rate: n
     `- Cédé (ventes + retraits) : ${v(r.withdrawnUsd)}`,
     `- Frais payés : ${v(r.feesUsd)}`,
     `- Transactions : ${r.txCount} · échéances DCA/panier exécutées : ${r.dcaCount}`,
+    ...(r.earn ? [
+      ``,
+      `## Tout ce qui rapporte`,
+      `- Paris DeFi ouverts : ${r.earn.defiOpenCount} · P&L : ${v(r.earn.defiOpenPnlUsd)}`,
+      `- Rendement annuel estimé (staking/Earn) : ${r.earn.estYieldYearUsd != null ? v(r.earn.estYieldYearUsd) : '—'}`,
+    ] : []),
     ``,
     `Généré par Boussole le ${new Date().toISOString().slice(0, 10)} — outil d'aide à la décision, pas un conseil.`,
   ];

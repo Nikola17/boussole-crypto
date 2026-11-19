@@ -15,9 +15,10 @@ import { getProjectTopPools } from '../api/yields';
 import { Link, setQuery, useHashPath } from '../router';
 import { Badge, Banner, Card, ErrorNote, PageHeader, Segmented, Spinner } from '../components/ui';
 import { Envelope } from '../components/Envelope';
+import { EarnTools } from '../components/EarnTools';
 import { FALLBACK_EUR_PER_USD } from '../lib/fx';
 
-type Tab = 'rendement' | 'enveloppe' | 'earn';
+type Tab = 'rendement' | 'enveloppe' | 'earn' | 'outils';
 const RISK_LABEL = { 1: 'Classique', 2: 'Modéré', 3: 'Élevé' } as const;
 const RISK_TONE = { 1: 'up', 2: 'warn', 3: 'down' } as const;
 const ASSETS: { coinId: string; label: string }[] = [
@@ -33,8 +34,8 @@ export default function Defi() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader title="Rendement & DeFi" subtitle="Ce que rapporte vraiment le staking à ta taille, et un cadre strict pour les paris sur Solana." />
-      <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[{ value: 'rendement', label: 'Rendement' }, { value: 'enveloppe', label: 'Enveloppe DeFi' }, { value: 'earn', label: 'Earn & plateformes' }]} />
-      {tab === 'rendement' ? <Yields /> : tab === 'enveloppe' ? <Envelope /> : <Earn />}
+      <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[{ value: 'rendement', label: 'Rendement' }, { value: 'enveloppe', label: 'Enveloppe DeFi' }, { value: 'earn', label: 'Earn & plateformes' }, { value: 'outils', label: 'Comparateur & outils' }]} />
+      {tab === 'rendement' ? <Yields /> : tab === 'enveloppe' ? <Envelope /> : tab === 'outils' ? <EarnTools /> : <Earn />}
     </div>
   );
 }
@@ -90,12 +91,7 @@ function Yields() {
 
 /** Onglet « Earn & plateformes » : Simple Earn Binance, pools DeFi (Jupiter, Orca, Raydium, Hyperliquid) et
  *  correspondance entre les fonctions Binance et ce que Boussole fait déjà (ou où le faire). */
-const DEFI_PROJECTS: { slug: string; label: string; url: string }[] = [
-  { slug: 'jupiter', label: 'Jupiter (Solana)', url: 'https://jup.ag' },
-  { slug: 'orca', label: 'Orca (Solana)', url: 'https://www.orca.so' },
-  { slug: 'raydium', label: 'Raydium (Solana)', url: 'https://raydium.io' },
-  { slug: 'hyperliquid', label: 'Hyperliquid (HYPE)', url: 'https://app.hyperliquid.xyz' },
-];
+import { DEFI_PROJECTS } from '../api/yields';
 
 const BINANCE_MAP: { binance: string; boussole: string; to?: string }[] = [
   { binance: 'Spot', boussole: 'Signaux, DCA et portefeuille suivis ici', to: '/marche' },

@@ -293,6 +293,14 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v1.36.0 — Rendement : comparateur multi-sources, simulateur Dual Investment, perte impermanente, rapport enrichi
+
+- **Comparateur de rendements** (DeFi → onglet « Comparateur & outils ») : Binance Simple Earn (API publique) + pools Aave/Lido/Spark/Morpho/Compound/Benqi + Jupiter/Orca/Raydium/Hyperliquid (DefiLlama), triés par APY avec **tier de risque** (audit, TVL, stablecoin, IL, exposition) et gain annuel estimé sur tes lignes détenues.
+- **Simulateur Dual Investment** : montant, strike %, durée, APY, scénario de prix → intérêts, quantité reçue si converti, P&L réel du scénario.
+- **Calculateur de perte impermanente** : ratio de prix → IL % et valeur LP vs HODL.
+- **Rapport mensuel « tout ce qui rapporte »** : P&L des paris DeFi ouverts + rendement annuel estimé du staking/Earn, dans la carte et l'export Markdown.
+- 758 tests, typecheck 0 erreur.
+
 ### v1.35.0 — Lots F & G complets + côté serveur (VPS)
 
 - **Lot F — ouverture au public** : i18n (FR par défaut, **anglais automatique** hors France + sélecteur Langue dans Réglages ; shell, navigation, Cockpit et réglages traduits, le reste retombe sur le FR), **widget Windows** (petite fenêtre toujours-au-dessus : BTC, Fear & Greed, valeur du portefeuille, alertes armées, échéance du jour — bascule depuis Réglages ou le menu de l'icône de la zone de notification), **projet iOS Capacitor versionné** (`npm run build:ios`, build sur Mac — `docs/BUILD-IOS.md`), page GitHub Pages (v1.34.0).

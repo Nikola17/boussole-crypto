@@ -5,7 +5,10 @@ import { Download } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useFx } from '../hooks/useMarket';
-import { availableMonths, monthReport, monthReportText } from '../lib/report';
+import { useYields } from '../hooks/useYields';
+import { usePortfolio } from '../hooks/usePortfolio';
+import { YIELD_OPTIONS, yieldRows } from '../lib/staking';
+import { availableMonths, defiOpenPnl, monthReport, monthReportText, type EarnSection } from '../lib/report';
 import { fmtMoney, fmtNum } from '../lib/format';
 import { saveTextFile } from '../lib/platform';
 import { Button, Card, Field, Select, Stat } from './ui';
@@ -17,14 +20,31 @@ export function MonthlyReportCard() {
   const basketExecs = useStore((s) => s.basketExecutions);
   const currency = useStore((s) => s.settings.currency);
   const fx = useFx();
+  const defiBets = useStore((s) => s.defiBets);
+  const pf = usePortfolio();
+  const { quotes } = useYields();
 
   const months = useMemo(() => availableMonths(snapshots), [snapshots]);
   const [label, setLabel] = useState<string>('');
   const current = months.find((m) => m.label === label) ?? months[0];
 
+  // Section « tout ce qui rapporte » : paris DeFi ouverts + rendement annuel estimé sur les lignes détenues.
+  const earn = useMemo<EarnSection | undefined>(() => {
+    const open = defiOpenPnl(defiBets);
+    const positions: Record<string, number> = {};
+    for (const h of pf.holdings) if (h.coinId) positions[h.coinId] = (positions[h.coinId] ?? 0) + h.valueUsd;
+    const rows = yieldRows(YIELD_OPTIONS, quotes, positions, 0);
+    let est: number | null = 0;
+    for (const a of new Set(YIELD_OPTIONS.map((o) => o.coinId))) {
+      const best = rows.filter((r) => r.option.coinId === a && r.option.risk <= 2 && r.quote?.apy != null && r.positionUsd > 0).sort((x, y) => (y.quote?.apy ?? 0) - (x.quote?.apy ?? 0))[0];
+      if (best?.gainYearUsd != null) est += best.gainYearUsd;
+    }
+    return { defiOpenPnlUsd: open.pnlUsd, defiOpenCount: open.count, estYieldYearUsd: est };
+  }, [defiBets, pf.holdings, quotes]);
+
   const report = useMemo(
-    () => (current ? monthReport(current.year, current.month, snapshots, txs, dcaExecs, basketExecs) : null),
-    [current, snapshots, txs, dcaExecs, basketExecs],
+    () => (current ? monthReport(current.year, current.month, snapshots, txs, dcaExecs, basketExecs, earn) : null),
+    [current, snapshots, txs, dcaExecs, basketExecs, earn],
   );
   const rate = currency === 'EUR' ? fx : 1;
   const val = (usd: number | null) => (usd == null ? null : usd * rate);
@@ -52,6 +72,13 @@ export function MonthlyReportCard() {
           <Stat label="Investi" value={fmtMoney(val(report.investedUsd) ?? 0, currency, 0)} hint={`cédé : ${fmtMoney(val(report.withdrawnUsd) ?? 0, currency, 0)}`} />
           <Stat label="Frais" value={fmtMoney(val(report.feesUsd) ?? 0, currency, 2)} hint={`${report.txCount} tx · ${report.dcaCount} échéances DCA`} />
         </div>
+      )}
+      {report?.earn && (report.earn.defiOpenCount > 0 || report.earn.estYieldYearUsd != null) && (
+        <p className="mt-3 text-sm text-ink-2">
+          🪙 Tout ce qui rapporte — paris DeFi ouverts : <b className="text-ink">{report.earn.defiOpenCount}</b> · P&amp;L :{' '}
+          <span className={`tnum font-medium ${report.earn.defiOpenPnlUsd >= 0 ? 'text-up' : 'text-down'}`}>{fmtMoney(val(report.earn.defiOpenPnlUsd) ?? 0, currency, 2)}</span>
+          {' '}· rendement annuel estimé (staking/Earn) : <b className="tnum text-ink">{report.earn.estYieldYearUsd != null ? fmtMoney(val(report.earn.estYieldYearUsd) ?? 0, currency, 0) : '—'}</b>
+        </p>
       )}
     </Card>
   );
