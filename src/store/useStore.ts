@@ -153,6 +153,7 @@ export const defaultSettings: Settings = {
   briefingAuto: false,
   coingeckoKey: '',
   notifications: true,
+  webhookUrl: '',
   closeToTray: true,
   autoStart: false,
   appLock: false,

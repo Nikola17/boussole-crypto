@@ -28,6 +28,8 @@ export interface Settings {
   briefingAuto: boolean;
   coingeckoKey: string;
   notifications: boolean;
+  /** Webhook HTTPS optionnel : reçoit un POST JSON à chaque alerte déclenchée par l'app. */
+  webhookUrl: string;
   /** Windows : fermer la fenêtre garde Boussole actif dans la zone de notification (alertes). */
   closeToTray: boolean;
   /** Windows : démarrer avec la session. */

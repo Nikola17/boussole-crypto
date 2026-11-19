@@ -293,6 +293,12 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v1.33.0 — Lot E « Sans friction » : webhook sortant + rapport mensuel exportable
+
+- **Webhook HTTPS optionnel** (Réglages → Données & affichage) : à chaque alerte déclenchée par l'app (prix, signal v2, palier de vente, alerte intelligente), un POST JSON part vers ton URL (événement, titre, détail, données associées). Uniquement `https://`, délai borné à 8 s, aucune erreur ne bloque l'app, aucun secret n'est envoyé. Tes autres outils (scripts perso, domotique, etc.) peuvent s'y brancher.
+- **Rapport mensuel** (Plus) : pour chaque mois ayant des relevés quotidiens complets — valeur début/fin, variation %, investi, cédé, frais payés, nombre de transactions et d'échéances DCA exécutées — avec export Markdown (`boussole-rapport-AAAA-MM.md`) pour archivage ou partage.
+- 727 tests, typecheck 0 erreur.
+
 ### v1.32.0 — Lot B « Radar dérivés & réseau Bitcoin » (Cockpit)
 
 - **Carte « Radar dérivés & réseau »** : open interest BTCUSDT (en BTC et ≈ Md $), dernier funding 8 h + annualisé (moyenne des 3 derniers taux), ratio long/short des comptes Binance (1 j), mempool (nb de tx, volume en Mo, frais fastest en sat/vB) — sources Binance fapi et mempool.space, toutes publiques, lectures dégradées en « — » si indisponible.

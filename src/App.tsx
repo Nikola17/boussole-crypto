@@ -13,6 +13,7 @@ import { useFx, useMarkets, usePrices } from './hooks/useMarket';
 import { useToday } from './hooks/useClock';
 import { aiReady } from './ai/run';
 import { alertCoinsToFetch, checkPriceAlerts } from './lib/alerts';
+import { buildWebhookPayload, fireWebhook } from './lib/webhook';
 import { useBriefing } from './hooks/useBriefing';
 import { cancelDcaReminders, ensureNotificationPermission, installUpdate, isNative, lockAvailable, notify, openExternal, scheduleDcaReminders, syncDesktop, unlockApp } from './lib/platform';
 import { useSmartAlerts } from './hooks/useSmartAlerts';
@@ -71,6 +72,7 @@ function AppEffects() {
   const theme = useStore((s) => s.settings.theme);
   const cgKey = useStore((s) => s.settings.coingeckoKey);
   const notifications = useStore((s) => s.settings.notifications);
+  const webhookUrl = useStore((s) => s.settings.webhookUrl);
   const currency = useStore((s) => s.settings.currency);
   const cgKeySetting = useStore((s) => s.settings.coingeckoKey);
   const alerts = useStore((s) => s.alerts);
@@ -139,9 +141,12 @@ function AppEffects() {
     for (const m of markets.data ?? []) prices.set(m.id, m.current_price);
     for (const { alert: a, price: p } of checkPriceAlerts(alerts, prices)) {
       upsertAlert({ ...a, triggeredAt: new Date().toISOString(), active: false });
-      if (notifications) void notify(`Alerte ${a.symbol.toUpperCase()}`, `${a.name} est passé ${a.condition === 'above' ? 'au-dessus' : 'en dessous'} de ${fmtPrice(a.priceUsd * rate, currency)} (cours : ${fmtPrice(p * rate, currency)}).`);
+      const title = `Alerte ${a.symbol.toUpperCase()}`;
+      const body = `${a.name} est passé ${a.condition === 'above' ? 'au-dessus' : 'en dessous'} de ${fmtPrice(a.priceUsd * rate, currency)} (cours : ${fmtPrice(p * rate, currency)}).`;
+      if (notifications) void notify(title, body);
+      if (webhookUrl) void fireWebhook(webhookUrl, buildWebhookPayload('price_alert', title, body, { symbol: a.symbol, coinId: a.coinId, condition: a.condition, triggerUsd: a.priceUsd, priceUsd: p }));
     }
-  }, [markets.data, extraAlertPrices.data, alerts, upsertAlert, notifications, currency, rate]);
+  }, [markets.data, extraAlertPrices.data, alerts, upsertAlert, notifications, currency, rate, webhookUrl]);
 
   // Android : l'état à surveiller (alertes de prix, paliers de vente) est confié au script d'arrière-plan.
   // Notifications désactivées : le script ne surveille plus rien et les rappels déjà programmés sont annulés (avant, ils continuaient).

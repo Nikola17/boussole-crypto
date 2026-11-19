@@ -8,6 +8,7 @@ import { useNow } from './useClock';
 import { useBasketDue } from './useBasket';
 import { useExitPlan } from './useExitPlan';
 import { notify } from '../lib/platform';
+import { buildWebhookPayload, fireWebhook } from '../lib/webhook';
 import { claimNotification, EXIT_TTL_MS, weekKey } from '../lib/notified';
 import { fmtMoney, isoDay } from '../lib/format';
 import { nextMacroEvents } from '../lib/macro';
@@ -25,7 +26,10 @@ export function useSmartAlerts() {
   useEffect(() => {
     if (!notifications) return;
     const fire = (key: string, ttl: number, title: string, body: string) => {
-      if (claimNotification(key, ttl)) void notify(title, body);
+      if (!claimNotification(key, ttl)) return;
+      void notify(title, body);
+      const wh = useStore.getState().settings.webhookUrl;
+      if (wh) void fireWebhook(wh, buildWebhookPayload('smart_alert', title, body));
     };
     // Un palier atteint n'est notifié qu'une fois : il reste ensuite visible dans l'app (et rappelé par le brief Telegram).
     for (const { coin, rung } of exit.pending) {

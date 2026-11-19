@@ -9,6 +9,7 @@ import { useFocusCoins } from './useGuidance';
 import { useNow } from './useClock';
 import { fetchRaw } from '../lib/sync/github';
 import { notify } from '../lib/platform';
+import { buildWebhookPayload, fireWebhook } from '../lib/webhook';
 import { claimNotification } from '../lib/notified';
 import { isoDay } from '../lib/format';
 import { localSignalStep, runnerSilent, type StoredSignals } from '../lib/signalAlerts';
@@ -56,6 +57,8 @@ export function useSignalAlerts() {
       if (!claimNotification(e.key, 30 * DAY)) continue;
       const [title, body] = signalMessage(e, reliabilityPhrase(reliabilityOf(e.signal))).split('\n');
       void notify(title, body ?? '');
+      const wh = useStore.getState().settings.webhookUrl;
+      if (wh) void fireWebhook(wh, buildWebhookPayload('signal_alert', title, body ?? '', { signal: e.signal, symbol: e.symbol }));
     }
   }, [notifications, scan.data, focus, syncReady, hb.isLoading, hb.data, tick, vacationUntil]);
 }

@@ -4,6 +4,7 @@
 import { ChevronRight, Coins, Gift, GraduationCap, Settings, Users } from 'lucide-react';
 import { Link } from '../router';
 import { PageHeader } from '../components/ui';
+import { MonthlyReportCard } from '../components/MonthlyReportCard';
 
 const ITEMS = [
   { to: '/defi', label: 'Rendement & DeFi', hint: 'Staking, prêts, pools : ce que rapporte ton portefeuille, et à quel risque', icon: Coins },
@@ -31,6 +32,7 @@ export default function More() {
           </li>
         ))}
       </ul>
+      <MonthlyReportCard />
     </div>
   );
 }

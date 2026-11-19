@@ -346,6 +346,9 @@ export default function Settings() {
 
         <Card title="Données & affichage">
           <div className="space-y-4">
+            <Field label="Webhook (optionnel)" hint="URL HTTPS qui recevra un POST JSON à chaque alerte déclenchée par l'app (alerte de prix, signal, palier). Tes autres outils peuvent s'y brancher. Jamais de secret envoyé.">
+              <Input value={settings.webhookUrl} onChange={(e) => set({ webhookUrl: e.target.value.trim() })} placeholder="https://…" autoComplete="off" spellCheck={false} />
+            </Field>
             <Field label="Devise d’affichage">
               <Select value={settings.currency} onChange={(e) => set({ currency: e.target.value as 'EUR' | 'USD' })}>
                 <option value="EUR">Euro (€)</option>
