@@ -45,6 +45,10 @@ export interface Settings {
   binanceApiKey: string;
   /** Secret de la clé API Binance (signe les requêtes) : idem. */
   binanceApiSecret: string;
+  /** Niveau VIP Binance (0-9) : calibre les frais taker du paper trading « plateforme ». */
+  binanceVip: number;
+  /** Paiement des frais en BNB (−25 %) : idem. */
+  bnbFeeDiscount: boolean;
   // Synchronisation PC ↔ téléphone : réglages propres à CET appareil, jamais synchronisés ni exportés.
   syncEnabled: boolean;
   /** Dépôt GitHub privé du transport (ex : Nikola17/boussole-sync). */

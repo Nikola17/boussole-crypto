@@ -1,6 +1,7 @@
 // Portefeuilles papier : la liste, la création, et le détail d'un portefeuille manuel (positions, ordres en
 // attente, historique, statistiques, ticket d'ordre). Les autopilotes ont leur propre détail (AutopilotDetail).
 
+import { binanceCostModel } from '../../lib/binanceFees';
 import { useMemo, useState } from 'react';
 import { FlaskConical, Plus, Trash2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
@@ -53,6 +54,8 @@ function ManualCard({ p, onOpen }: { p: PaperPortfolio; onOpen: () => void }) {
 
 function NewPortfolioModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (id: string) => void }) {
   const upsert = useStore((s) => s.upsertPaperPortfolio);
+  const vip = useStore((st) => st.settings.binanceVip);
+  const bnb = useStore((st) => st.settings.bnbFeeDiscount);
   const [name, setName] = useState('Mon test');
   const [capital, setCapital] = useState<number | ''>(1000);
   const [preset, setPreset] = useState<'exchange' | 'app' | 'custom'>('exchange');
@@ -60,7 +63,7 @@ function NewPortfolioModal({ open, onClose, onCreated }: { open: boolean; onClos
   const [spread, setSpread] = useState<number | ''>(0.05);
   const valid = name.trim() && Number(capital) > 0;
   function create() {
-    const costs = preset === 'custom' ? { preset, feePct: Number(fee) || 0, spreadPct: Number(spread) || 0 } : { preset, ...COST_PRESETS[preset] };
+    const costs = preset === 'custom' ? { preset, feePct: Number(fee) || 0, spreadPct: Number(spread) || 0 } : preset === 'exchange' ? { preset, ...binanceCostModel(vip, bnb) } : { preset, ...COST_PRESETS[preset] };
     const id = uid();
     upsert({ id, name: name.trim(), kind: 'manual', startingUsd: Number(capital), createdAt: new Date().toISOString(), costs });
     onCreated(id);

@@ -11,6 +11,7 @@ import { NOUS_BASE_URL } from '../ai/openai';
 import { listMistralModels, MISTRAL_SUGGESTED } from '../ai/mistral';
 import { useCompatModels } from '../hooks/useAiModels';
 import { testBinanceKey, type BinanceKeyTest } from '../api/binanceAccount';
+import { binanceTakerPct } from '../lib/binanceFees';
 import { backupFolderLabel, ensureNotificationPermission, isElectron, isNative, lockAvailable, openBackupFolder, openExternal, platformLabel, saveTextFile } from '../lib/platform';
 import { useAiContext } from '../ai/context';
 import { checkPassphrase } from '../lib/sync/crypto';
@@ -91,6 +92,7 @@ function MistralFields({ show, onToggleShow }: { show: boolean; onToggleShow: ()
 /** Plateformes en lecture seule (Binance) : clé API restreinte « Enable Reading », soldes intégrés au portefeuille. */
 function ExchangeCard() {
   const set = useStore((s) => s.setSettings);
+  const settings = useStore((s) => s.settings);
   const key = useStore((s) => s.settings.binanceApiKey);
   const secret = useStore((s) => s.settings.binanceApiSecret);
   const accounts = useStore((s) => s.accounts);
@@ -139,6 +141,17 @@ function ExchangeCard() {
             <Button variant="ghost" icon={show ? <EyeOff className="size-4" /> : <Eye className="size-4" />} aria-label={show ? 'Masquer' : 'Afficher'} onClick={() => setShow((v) => !v)} />
           </div>
         </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Niveau VIP Binance" hint="Calibre les frais du paper trading « plateforme d'échange » (taux taker). Trouvable sur binance.com → Profil → VIP.">
+            <Select value={settings.binanceVip} onChange={(e) => set({ binanceVip: Number(e.target.value) })}>
+              {Array.from({ length: 10 }, (_, i) => <option key={i} value={i}>VIP {i}</option>)}
+            </Select>
+          </Field>
+          <div className="flex items-end pb-1">
+            <Toggle checked={settings.bnbFeeDiscount} onChange={(v) => set({ bnbFeeDiscount: v })} label="Payer les frais en BNB (−25 %)" />
+          </div>
+        </div>
+        <p className="text-xs text-muted">Frais taker appliqués dans le Labo : {fmtNum(binanceTakerPct(settings.binanceVip, settings.bnbFeeDiscount), 3)} % par côté.</p>
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={() => void test()} disabled={testing || !key || !secret}>{testing ? 'Test en cours…' : 'Tester la connexion'}</Button>
           {!exAccounts.length && <Button size="sm" variant="primary" onClick={link} disabled={!key || !secret}>Lier à un compte « Binance » du portefeuille</Button>}

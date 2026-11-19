@@ -293,6 +293,12 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v1.37.0 — Labo réaliste : backtest de bot grid + frais VIP Binance dans le paper
+
+- **Backtest de bot grid** (Labo → Banc d'essai) : grille [bas, haut] × N lignes testée sur l'historique réel BTC/ETH (bougies journalières Binance publiques) — trades, P&L, comparaison buy & hold, indicateur « sorti de la grille ».
+- **Frais réalistes** : réglage « niveau VIP Binance » + « frais en BNB −25 % » (Réglages → Plateformes) ; le preset « plateforme d'échange » du paper trading (portefeuilles manuels ET autopilotes) applique désormais le taux taker de ton VIP.
+- 766 tests, typecheck 0 erreur.
+
 ### v1.36.0 — Rendement : comparateur multi-sources, simulateur Dual Investment, perte impermanente, rapport enrichi
 
 - **Comparateur de rendements** (DeFi → onglet « Comparateur & outils ») : Binance Simple Earn (API publique) + pools Aave/Lido/Spark/Morpho/Compound/Benqi + Jupiter/Orca/Raydium/Hyperliquid (DefiLlama), triés par APY avec **tier de risque** (audit, TVL, stablecoin, IL, exposition) et gain annuel estimé sur tes lignes détenues.

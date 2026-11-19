@@ -163,6 +163,8 @@ export const defaultSettings: Settings = {
   scanSize: 50,
   binanceApiKey: '',
   binanceApiSecret: '',
+  binanceVip: 0,
+  bnbFeeDiscount: false,
   syncEnabled: false,
   syncRepo: '',
   syncToken: '',

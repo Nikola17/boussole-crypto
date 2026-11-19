@@ -9,6 +9,7 @@ import { GhostCard } from './Paper';
 import { PortfoliosTab } from './labo/Portfolios';
 import { AutopilotCards, AutopilotDetail, LeaderboardTab } from './labo/Autopilots';
 import { BenchTab } from './labo/BenchTab';
+import { GridBacktestCard } from '../components/GridBacktestCard';
 
 type Tab = 'papier' | 'classement' | 'fantomes' | 'banc';
 
@@ -33,7 +34,7 @@ export default function Labo({ initialTab }: { initialTab?: Tab }) {
       {tab === 'papier' && <PortfoliosTab autoCards={(open) => <AutopilotCards open={open} />} renderAuto={(p, back) => <AutopilotDetail p={p} onBack={back} />} />}
       {tab === 'classement' && <LeaderboardTab />}
       {tab === 'fantomes' && <Ghosts />}
-      {tab === 'banc' && <BenchTab />}
+      {tab === 'banc' && <div className="space-y-4"><BenchTab /><GridBacktestCard /></div>}
     </div>
   );
 }

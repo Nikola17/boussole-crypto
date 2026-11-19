@@ -1,5 +1,6 @@
 // Autopilotes : création, détail (courbe, ordres, verdict de confiance), classement, règles de confiance.
 
+import { binanceCostModel } from '../../lib/binanceFees';
 import { useMemo, useState } from 'react';
 import { Bot, Plus, Trash2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
@@ -222,13 +223,15 @@ function AutopilotWizard({ open, onClose, onCreated }: { open: boolean; onClose:
   const [daysOfWeek, setDays] = useState<number[]>([2, 5]);
   const [preset, setPreset] = useState<'exchange' | 'app'>('exchange');
   const [hour, setHour] = useState<number | ''>(8);
+  const vip = useStore((st) => st.settings.binanceVip);
+  const bnb = useStore((st) => st.settings.bnbFeeDiscount);
   const s = STRATEGIES[sid];
   const deposits = s?.kind === 'deposits';
   const full = active >= MAX_ACTIVE_AUTOPILOTS;
   function create() {
     if (!s || full) return;
     const params = deposits ? { ...s.defaults, amountUsd: Number(amount) || 25, daysOfWeek } : { ...s.defaults };
-    const p = newAutopilot({ strategyId: sid, name: s.label, startingUsd: deposits ? 0 : Number(capital) || 1000, params, costs: { preset, ...COST_PRESETS[preset] }, executionHour: Number(hour) || 8 }, Date.now());
+    const p = newAutopilot({ strategyId: sid, name: s.label, startingUsd: deposits ? 0 : Number(capital) || 1000, params, costs: preset === 'exchange' ? { preset, ...binanceCostModel(vip, bnb) } : { preset, ...COST_PRESETS[preset] }, executionHour: Number(hour) || 8 }, Date.now());
     upsert(p);
     onCreated(p.id);
     onClose();
