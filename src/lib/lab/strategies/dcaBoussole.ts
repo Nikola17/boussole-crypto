@@ -3,7 +3,7 @@
 // Non rejouable (classement, pépites et disponibilité n'ont pas d'historique) : au banc d'essai, la base seule.
 
 import { analyze } from '../../signals';
-import { buildAutoBasketPlan, type BaseMode } from '../../autoBasket';
+import { AUTO_BASE_TOP, buildAutoBasketPlan, type BaseMode } from '../../autoBasket';
 import { median } from '../stats';
 import { ARCHETYPES } from '../../profile';
 import type { CgMarket } from '../../../api/coingecko';
@@ -25,6 +25,7 @@ export const dcaBoussole: Strategy<DcaBoussoleParams> = {
   defaults: { amountUsd: 25, daysOfWeek: [2, 5], basePct: 70, maxBaseLines: 3, maxDiscoveryLines: 3, discoverySource: 'both', minOrderUsd: 5, baseMode: 'top3', anchorPct: 70 },
   uses: ['signals', 'cycle', 'autoBasket'],
   replayable: false,
+  universeTop: AUTO_BASE_TOP,
   kind: 'deposits',
   deposit: (ctx, p) => (ctx.scheduled(p.daysOfWeek) ? p.amountUsd : 0),
   decide: (ctx, p) => {

@@ -84,7 +84,10 @@ function TrustPanel({ v, appPerf, perf }: { v: TrustVerdict | null; appPerf: num
 }
 
 function orderLine(f: PaperDayLog['fills'][number]): string {
-  return `${f.side === 'buy' ? 'ACHAT' : 'VENTE'} ${f.symbol.toUpperCase()} : ${fmtNum(f.quantity * f.priceUsd)} USDC à ≈ ${fmtPrice(f.marketUsd, 'USD')} — ${f.reason}${f.stop != null ? ` · stop ${fmtPrice(f.stop, 'USD')}` : ''}${f.target != null ? ` · objectif ${fmtPrice(f.target, 'USD')}` : ''}`;
+  const verb = f.side === 'buy' ? (f.kind === 'limit' ? 'ACHAT LIMITE' : 'ACHAT') : 'VENTE';
+  const tp = f.tpLegs?.length ? ` · TP ${f.tpLegs.map((l) => `${l.rMultiple}R`).join('/')}` : '';
+  const tr = f.trailing ? ` · trailing ${f.trailing.value}${f.trailing.mode === 'pct' ? ' %' : '× ATR'}` : '';
+  return `${verb} ${f.symbol.toUpperCase()} : ${fmtNum(f.quantity * f.priceUsd)} USDC à ≈ ${fmtPrice(f.marketUsd, 'USD')} — ${f.reason}${f.stop != null ? ` · stop ${fmtPrice(f.stop, 'USD')}` : ''}${f.target != null ? ` · objectif ${fmtPrice(f.target, 'USD')}` : ''}${tp}${tr}`;
 }
 
 export function AutopilotDetail({ p, onBack }: { p: PaperPortfolio; onBack: () => void }) {
@@ -144,7 +147,9 @@ export function AutopilotDetail({ p, onBack }: { p: PaperPortfolio; onBack: () =
         <Button size="sm" variant="ghost" onClick={() => { upsert({ ...p, archived: true }); onBack(); }}>Archiver</Button>
         <Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={() => setAsk(true)}>Supprimer</Button>
       </div>
-      <p className="text-sm text-ink-2">{v.strategy?.describe} Règles {p.rules} · exécution chaque jour à {p.executionHour ?? 8} h ({p.timeZone ?? 'Europe/Paris'}) · en direct depuis le {fmtDate(p.liveSince ?? p.createdAt)}.</p>
+      <p className="text-sm text-ink-2">
+        {v.strategy?.describe} Règles {p.rules} · exécution {p.executionHours?.length && p.executionHours.length > 1 ? `à ${p.executionHours.map((h) => `${h} h`).join(', ')}` : `chaque jour à ${p.executionHour ?? 8} h`} ({p.timeZone ?? 'Europe/Paris'}) · en direct depuis le {fmtDate(p.liveSince ?? p.createdAt)}.
+      </p>
       {p.archived && <Banner tone="warn">Portefeuille archivé : il ne reçoit plus d’ordres.</Banner>}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Valeur" value={last ? `${fmtNum(last.valueUsd)} USDC` : '—'} hint={`cash ${fmtNum(v.state.cashUsd)} USDC`} />
@@ -178,7 +183,10 @@ export function AutopilotDetail({ p, onBack }: { p: PaperPortfolio; onBack: () =
           <ul className="divide-y divide-line text-sm">
             {Object.values(v.state.positions).map((x) => {
               const px = prices.get(x.coinId);
-              return <li key={x.coinId} className="flex justify-between py-1.5"><span className="text-ink">{x.symbol.toUpperCase()} · {fmtNum(x.quantity, 6)}{x.stop != null ? ` · stop ${fmtPrice(x.stop, 'USD')}` : ''}</span><span className="tnum text-ink-2">{px != null ? `${fmtPrice(x.quantity * px, 'USD')} (${pct(((x.quantity * px) / x.costUsd - 1) * 100)})` : 'prix inconnu'}</span></li>;
+              const tpDone = x.tpLegs?.filter((l) => l.done).length ?? 0;
+              const tpTxt = x.tpLegs?.length ? ` · TP ${tpDone}/${x.tpLegs.length}` : '';
+              const trTxt = x.trailing ? ` · trailing ${x.trailing.value}${x.trailing.mode === 'pct' ? ' %' : '× ATR'}` : '';
+              return <li key={x.coinId} className="flex justify-between py-1.5"><span className="text-ink">{x.symbol.toUpperCase()} · {fmtNum(x.quantity, 6)}{x.stop != null ? ` · stop ${fmtPrice(x.stop, 'USD')}` : ''}{tpTxt}{trTxt}</span><span className="tnum text-ink-2">{px != null ? `${fmtPrice(x.quantity * px, 'USD')} (${pct(((x.quantity * px) / x.costUsd - 1) * 100)})` : 'prix inconnu'}</span></li>;
             })}
           </ul>
         </Card>
@@ -231,21 +239,22 @@ function AutopilotWizard({ open, onClose, onCreated }: { open: boolean; onClose:
   function create() {
     if (!s || full) return;
     const params = deposits ? { ...s.defaults, amountUsd: Number(amount) || 25, daysOfWeek } : { ...s.defaults };
-    const p = newAutopilot({ strategyId: sid, name: s.label, startingUsd: deposits ? 0 : Number(capital) || 1000, params, costs: preset === 'exchange' ? { preset, ...binanceCostModel(vip, bnb) } : { preset, ...COST_PRESETS[preset] }, executionHour: Number(hour) || 8 }, Date.now());
+    const p = newAutopilot({ strategyId: sid, name: s.label, startingUsd: deposits ? 0 : Number(capital) || 1000, params, costs: preset === 'exchange' ? { preset, ...binanceCostModel(vip, bnb) } : { preset, ...COST_PRESETS[preset] }, executionHour: Number(hour) || 8, executionHours: s.executionHours }, Date.now());
     upsert(p);
     onCreated(p.id);
     onClose();
   }
+  const cadenceBadge = (x: typeof s) => x.executionHours && x.executionHours.length > 1 ? `${x.executionHours.length}×/jour` : x.kind === 'deposits' ? 'DCA' : 'Quotidien';
   return (
-    <Modal open={open} onClose={onClose} title="Nouvel autopilote" wide footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button><Button variant="primary" disabled={full} onClick={create}>Démarrer demain à {Number(hour) || 8} h</Button></>}>
+    <Modal open={open} onClose={onClose} title="Nouvel autopilote" wide footer={<><Button variant="ghost" onClick={onClose}>Annuler</Button><Button variant="primary" disabled={full} onClick={create}>Démarrer demain à {s?.executionHours?.length ? `${s.executionHours[0]} h` : `${Number(hour) || 8} h`}</Button></>}>
       <div className="space-y-3">
         {full && <Banner tone="warn">{MAX_ACTIVE_AUTOPILOTS} autopilotes actifs au plus : archive-en un d’abord.</Banner>}
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid max-h-80 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
           {Object.values(STRATEGIES).map((x) => (
             <button key={x.id} type="button" onClick={() => setSid(x.id)} className={`rounded-lg border p-3 text-left text-sm ${sid === x.id ? 'border-accent bg-accent/10' : 'border-line'}`}>
-              <div className="font-medium text-ink">{x.label}</div>
+              <div className="flex items-center justify-between gap-2"><span className="font-medium text-ink">{x.label}</span><Badge tone={x.executionHours && x.executionHours.length > 1 ? 'accent' : 'neutral'}>{cadenceBadge(x)}</Badge></div>
               <div className="mt-1 text-xs text-ink-2">{x.describe}</div>
-              <div className="mt-1 text-xs text-muted">{benchLine(x.id) ?? (x.replayable ? 'Pas encore mesurée sur l’historique.' : 'Non rejouable sur l’historique : sa sélection dépend de données du jour.')}</div>
+              <div className="mt-1 text-xs text-muted">{benchLine(x.id) ?? (x.replayable ? 'Prête pour le direct papier (rejouable sur 1 an).' : 'Non rejouable sur l’historique : sa sélection dépend de données du jour.')}</div>
             </button>
           ))}
         </div>
@@ -262,7 +271,11 @@ function AutopilotWizard({ open, onClose, onCreated }: { open: boolean; onClose:
         ) : (
           <div className="grid grid-cols-2 gap-3">
             <Field label="Capital de départ (USDC)"><NumberInput value={capital} onChange={setCapital} /></Field>
-            <Field label="Heure d’exécution (heure de Paris)"><NumberInput value={hour} onChange={setHour} /></Field>
+            {s?.executionHours?.length ? (
+              <Field label="Créneaux d’exécution (Paris)"><div className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2">{s.executionHours.map((h) => `${h} h`).join(' · ')}</div></Field>
+            ) : (
+              <Field label="Heure d’exécution (heure de Paris)"><NumberInput value={hour} onChange={setHour} /></Field>
+            )}
           </div>
         )}
         <Field label="Frais simulés"><Segmented value={preset} onChange={setPreset} options={[{ value: 'exchange', label: 'Plateforme d’échange' }, { value: 'app', label: 'Application' }]} /></Field>

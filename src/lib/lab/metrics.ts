@@ -141,3 +141,102 @@ export function referenceHoldBtc(capitalUsd: number, from: string, to: string, b
   }
   return out;
 }
+
+/** Rendements quotidiens TWR (insensibles aux dépôts/retraits). */
+export function dailyReturns(series: DayPoint[]): number[] {
+  const out: number[] = [];
+  for (let t = 1; t < series.length; t++) {
+    const base = series[t - 1].valueUsd + series[t].flowUsd;
+    if (base > 0) out.push(series[t].valueUsd / base - 1);
+  }
+  return out;
+}
+
+/** Ratio de Sharpe annualisé (365 j crypto), taux sans risque annuel `rfAnnual` (ex. 0 ou 0.04). */
+export function sharpeRatio(series: DayPoint[], rfAnnual = 0): number | null {
+  const rets = dailyReturns(series);
+  if (rets.length < 5) return null;
+  const rfDay = rfAnnual / 365;
+  const excess = rets.map((r) => r - rfDay);
+  const mean = excess.reduce((s, r) => s + r, 0) / excess.length;
+  const variance = excess.reduce((s, r) => s + (r - mean) ** 2, 0) / (excess.length - 1);
+  const sd = Math.sqrt(variance);
+  return sd > 1e-12 ? (mean / sd) * Math.sqrt(365) : null;
+}
+
+/** Ratio de Sortino annualisé : ne pénalise que la volatilité baissière (sous le taux sans risque). */
+export function sortinoRatio(series: DayPoint[], rfAnnual = 0): number | null {
+  const rets = dailyReturns(series);
+  if (rets.length < 5) return null;
+  const rfDay = rfAnnual / 365;
+  const excess = rets.map((r) => r - rfDay);
+  const mean = excess.reduce((s, r) => s + r, 0) / excess.length;
+  const downSq = excess.reduce((s, r) => s + (r < 0 ? r * r : 0), 0) / excess.length;
+  const downDev = Math.sqrt(downSq);
+  return downDev > 1e-12 ? (mean / downDev) * Math.sqrt(365) : null;
+}
+
+/** Ratio de Calmar : rendement annualisé divisé par la pire baisse absolue. */
+export function calmarRatio(series: DayPoint[]): number | null {
+  if (series.length < 5) return null;
+  const mdd = Math.abs(maxDrawdownPct(series));
+  if (!(mdd > 1e-6)) return null;
+  const annPct = annualize(twr(series), series.length) * 100;
+  return annPct / mdd;
+}
+
+/** Ulcer Index : racine de la moyenne des carrés des drawdowns quotidiens (en %). Mesure profondeur et durée des pertes. */
+export function ulcerIndex(series: DayPoint[]): number | null {
+  if (series.length < 5) return null;
+  const idx = twrIndex(series);
+  let peak = -Infinity;
+  let sumSq = 0;
+  for (const v of idx) {
+    peak = Math.max(peak, v);
+    const ddPct = peak > 0 ? Math.min(0, (v / peak - 1) * 100) : 0;
+    sumSq += ddPct * ddPct;
+  }
+  return Math.sqrt(sumSq / idx.length);
+}
+
+/** Part du temps où le portefeuille est effectivement investi (> 5 % hors cash), en %. */
+export function exposurePct(series: DayPoint[]): number | null {
+  if (!series.length) return null;
+  let investedDays = 0;
+  for (const p of series) {
+    if (p.valueUsd > 0 && (p.valueUsd - p.cashUsd) / p.valueUsd > 0.05) investedDays++;
+  }
+  return (investedDays / series.length) * 100;
+}
+
+/** Alpha annualisé (%) et Beta de la stratégie face à une série de référence (ex. Bitcoin). */
+export function alphaBetaVsRef(series: DayPoint[], ref: DayPoint[]): { alphaAnnPct: number; beta: number } | null {
+  const byDay = new Map(ref.map((p, idx) => [p.day, idx]));
+  const ra: number[] = [];
+  const rb: number[] = [];
+  for (let i = 1; i < series.length; i++) {
+    const cur = series[i];
+    const prev = series[i - 1];
+    const j = byDay.get(cur.day);
+    const jPrev = byDay.get(prev.day);
+    if (j == null || jPrev == null || jPrev >= j) continue;
+    const baseA = prev.valueUsd + cur.flowUsd;
+    const baseB = ref[jPrev].valueUsd + ref[j].flowUsd;
+    if (baseA > 0 && baseB > 0) {
+      ra.push(cur.valueUsd / baseA - 1);
+      rb.push(ref[j].valueUsd / baseB - 1);
+    }
+  }
+  if (ra.length < 10) return null;
+  const ma = ra.reduce((s, x) => s + x, 0) / ra.length;
+  const mb = rb.reduce((s, x) => s + x, 0) / rb.length;
+  let cov = 0, varB = 0;
+  for (let i = 0; i < ra.length; i++) {
+    cov += (ra[i] - ma) * (rb[i] - mb);
+    varB += (rb[i] - mb) ** 2;
+  }
+  if (!(varB > 1e-12)) return null;
+  const beta = cov / varB;
+  const alphaAnnPct = (ma - beta * mb) * 365 * 100;
+  return { alphaAnnPct, beta };
+}

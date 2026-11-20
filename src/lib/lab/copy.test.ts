@@ -37,6 +37,9 @@ describe('copie en réel', () => {
     expect(r.paperPct).toBeCloseTo((320 / 300 - 1) * 100, 5);
     expect(r.realPct).toBeCloseTo((320 / 301 - 1) * 100, 5);
     expect(r.lines.filter((l) => l.realUsd == null)).toHaveLength(2);
+    expect(r.attribution.copiedPct).toBeCloseTo(60, 4);
+    expect(r.attribution.missedOrders).toBe(2);
+    expect(r.attribution.avgDelayH).toBeCloseTo(2, 4);
   });
   it('une transaction corrigée après coup met le rapport à jour', () => {
     const before = copyReport(LOGS, [tx('bitcoin', '2026-11-01', 101, 1)], [], LAST);

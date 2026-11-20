@@ -30,6 +30,8 @@ export interface DashboardStatus {
   lastBrief: Record<string, string>;
   /** Fraîcheur du fichier de synchronisation chiffré. */
   sync: { savedAt: string | null; device: string | null };
+  /** Résumé public assaini des autopilotes papier actifs (aucun secret). */
+  autopilots?: string[];
 }
 
 /** Construit le statut public à partir de données déjà assainies — fonction pure, testée. */
@@ -45,6 +47,7 @@ export function buildDashboardStatus(i: {
   launchEvents: LaunchEvent[];
   syncSavedAt: string | null;
   syncDevice: string | null;
+  autopilots?: string[];
 }): DashboardStatus {
   const dayKey = i.now.toISOString().slice(0, 10);
   return {
@@ -61,6 +64,7 @@ export function buildDashboardStatus(i: {
     eventsNext: upcomingDated(i.launchEvents, dayKey, 30).slice(0, 5).map((e) => ({ name: e.name, date: e.date, daysUntil: e.daysUntil })),
     lastBrief: i.state.lastBriefSlot ?? {},
     sync: { savedAt: i.syncSavedAt, device: i.syncDevice },
+    ...(i.autopilots?.length ? { autopilots: i.autopilots } : {}),
   };
 }
 

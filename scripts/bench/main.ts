@@ -19,10 +19,12 @@ import { simulate } from '../../src/lib/lab/sim';
 import { annualize, closedTrades, maxDrawdownPct, referenceDcaBtc, referenceHoldBtc, rollingWindows, tradeStatsOf, twr } from '../../src/lib/lab/metrics';
 import { STRATEGIES, rulesFingerprint } from '../../src/lib/lab/strategies';
 import { COSTS, type ParamValue } from '../../src/lib/lab/types';
-import { BASE_MODES, BASE_MODE_LABEL, DEFAULT_ANCHOR_PCT, type BaseMode } from '../../src/lib/autoBasket';
+import { AUTOPILOT_UNIVERSE_TOP, BASE_MODES, BASE_MODE_LABEL, DEFAULT_ANCHOR_PCT, type BaseMode } from '../../src/lib/autoBasket';
 import { TEMP_TABLES, type TempTable } from '../../src/lib/dca';
 import { chooseBaseMode, chooseTempTable, type VariantResult } from '../../src/lib/lab/dcaVariants';
 import { SIGNALS_VERSION } from '../../src/lib/signals';
+import { formatWfoMarkdown, runWalkForward } from './wfo';
+import { runMonteCarlo } from '../../src/lib/lab/montecarlo';
 
 const FROM = '2019-01-01';
 const today = new Date().toISOString().slice(0, 10);
@@ -89,7 +91,7 @@ async function cmdStrategies(ids: string[]): Promise<void> {
     log(`Simulation : ${id}…`);
     bench.entries[id] = runStrategy(id, d);
   }
-  const info: RunInfo = { day: today, dataThrough: d.dataThrough, assets: d.assets.length, from: FROM, top: 20, observations: 0, notes: d.notes };
+  const info: RunInfo = { day: today, dataThrough: d.dataThrough, assets: d.assets.length, from: FROM, top: AUTOPILOT_UNIVERSE_TOP, observations: 0, notes: d.notes };
   const labels = Object.fromEntries(Object.values(STRATEGIES).map((s) => [s.id, s.label]));
   const report = strategiesReport(bench, info, labels);
   if (ids.length === Object.keys(STRATEGIES).length) {
@@ -194,12 +196,35 @@ async function main(): Promise<void> {
   if (cmd === 'strategies') return cmdStrategies(Object.keys(STRATEGIES));
   if (cmd === 'dca-variants') return cmdDcaVariants();
   if (cmd === 'candidates') return cmdCandidates(args.includes('--control'), args.find((a) => a.startsWith('--keys='))?.slice('--keys='.length).split(',') ?? null, args.find((a) => a.startsWith('--period='))?.slice('--period='.length), { from: args.find((a) => a.startsWith('--from='))?.slice(7), to: args.find((a) => a.startsWith('--to='))?.slice(5) });
+  if (cmd === 'wfo') {
+    const id = args[0];
+    if (!id || !STRATEGIES[id]) throw new Error(`Usage : wfo <strategie> parmi ${Object.keys(STRATEGIES).join(', ')}`);
+    const d = await loadData();
+    const r = runWalkForward(STRATEGIES[id], { assets: d.assets, temperature: d.temperature, btcId: 'BTC' }, FROM, d.dataThrough);
+    const md = formatWfoMarkdown(r);
+    const file = join('docs', 'bench', `${today}-wfo-${id}.md`);
+    writeFileSync(file, md);
+    process.stdout.write(md);
+    log(`Écrit : ${file}`);
+    return;
+  }
+  if (cmd === 'montecarlo') {
+    const id = args[0];
+    if (!id || !STRATEGIES[id]) throw new Error(`Usage : montecarlo <strategie> parmi ${Object.keys(STRATEGIES).join(', ')}`);
+    const d = await loadData();
+    const s = STRATEGIES[id];
+    const sim = simulate(s, s.defaults, { assets: d.assets, temperature: d.temperature, btcId: 'BTC' }, { startCashUsd: s.kind === 'trades' ? 1000 : 0, costs: COSTS.exchange, fill: 'nextOpen', from: FROM, to: d.dataThrough, minOrderUsd: 5 });
+    const mc = runMonteCarlo(closedTrades(sim.fills), { seed: `mc:${id}` });
+    if (!mc) throw new Error(`Pas assez de trades clos pour ${id}.`);
+    process.stdout.write(`${JSON.stringify(mc, null, 2)}\n`);
+    return;
+  }
   if (cmd === 'compare') {
     const unknown = args.filter((a) => !STRATEGIES[a]);
     if (args.length !== 2 || unknown.length) throw new Error(`Usage : compare <a> <b> parmi ${Object.keys(STRATEGIES).join(', ')}`);
     return cmdStrategies(args);
   }
-  throw new Error('Commandes : signals, strategies, compare <a> <b>, candidates [--control], dca-variants');
+  throw new Error('Commandes : signals, strategies, compare <a> <b>, candidates [--control], dca-variants, wfo <id>, montecarlo <id>');
 }
 
 main().catch((e) => { log(`Erreur : ${e instanceof Error ? e.message : String(e)}`); process.exit(1); });

@@ -7,7 +7,18 @@ import { priceUsdOf } from '../fees';
 import type { TrustVerdict } from './trust';
 
 export interface CopyLine { day: string; symbol: string; paperUsd: number; realUsd: number | null; slipPct: number | null; delayH: number | null }
-export interface CopyReport { orders: number; copied: number; avgSlipPct: number | null; realPct: number | null; paperPct: number | null; lines: CopyLine[] }
+export interface CopyAttribution {
+  /** Part des ordres papier effectivement copiés (%). */
+  copiedPct: number;
+  missedOrders: number;
+  /** Écart moyen lié au prix d'exécution (slippage + retard), en %. */
+  slippageDragPct: number | null;
+  /** Délai moyen entre l'exécution papier et ton ordre réel, en heures. */
+  avgDelayH: number | null;
+  /** Surcoût moyen de frais (réel − papier) en % du montant copié. */
+  feeDragPct: number | null;
+}
+export interface CopyReport { orders: number; copied: number; avgSlipPct: number | null; realPct: number | null; paperPct: number | null; lines: CopyLine[]; attribution: CopyAttribution }
 
 interface RealExec { priceUsd: number; quantity: number; feeUsd: number; atMs: number | null; exitUsd: number | null }
 
@@ -38,6 +49,7 @@ export function copyReport(logs: PaperDayLog[], txs: Transaction[], trades: Trad
   const lines: CopyLine[] = [];
   let orders = 0;
   let paperCost = 0, paperValue = 0, realCost = 0, realValue = 0;
+  let paperFees = 0, realFees = 0, copiedNotional = 0;
   for (const log of [...logs].sort((a, b) => a.day.localeCompare(b.day))) {
     for (const f of log.fills) {
       orders++;
@@ -51,31 +63,45 @@ export function copyReport(logs: PaperDayLog[], txs: Transaction[], trades: Trad
       used.add(k);
       const slip = f.side === 'buy' ? (f.priceUsd / r.priceUsd - 1) * 100 : (r.priceUsd / f.priceUsd - 1) * 100;
       const delay = r.atMs != null && Number.isFinite(r.atMs) ? Math.round(((r.atMs - Date.parse(f.at)) / 3600_000) * 10) / 10 : null;
-      lines.push({ day: log.day, symbol: f.symbol, paperUsd, realUsd: r.quantity * r.priceUsd, slipPct: slip, delayH: delay });
+      const realNotional = r.quantity * r.priceUsd;
+      lines.push({ day: log.day, symbol: f.symbol, paperUsd, realUsd: realNotional, slipPct: slip, delayH: delay });
+      paperFees += paperUsd > 0 ? (f.feeUsd / paperUsd) * realNotional : 0;
+      realFees += r.feeUsd;
+      copiedNotional += realNotional;
       if (f.side === 'buy') {
         const last = lastPrice(f.coinId);
         paperCost += paperUsd + f.feeUsd;
         paperValue += f.quantity * (last ?? f.priceUsd);
-        realCost += r.quantity * r.priceUsd + r.feeUsd;
+        realCost += realNotional + r.feeUsd;
         realValue += r.quantity * (r.exitUsd ?? last ?? r.priceUsd);
       }
     }
   }
   const copiedLines = lines.filter((l) => l.slipPct != null);
+  const delays = copiedLines.map((l) => l.delayH).filter((d): d is number => d != null);
+  const avgSlipPct = copiedLines.length ? copiedLines.reduce((s, l) => s + (l.slipPct ?? 0), 0) / copiedLines.length : null;
+  const attribution: CopyAttribution = {
+    copiedPct: orders > 0 ? (copiedLines.length / orders) * 100 : 0,
+    missedOrders: Math.max(0, orders - copiedLines.length),
+    slippageDragPct: avgSlipPct,
+    avgDelayH: delays.length ? delays.reduce((s, d) => s + d, 0) / delays.length : null,
+    feeDragPct: copiedNotional > 0 ? ((paperFees - realFees) / copiedNotional) * 100 : null,
+  };
   return {
     orders,
     copied: copiedLines.length,
-    avgSlipPct: copiedLines.length ? copiedLines.reduce((s, l) => s + (l.slipPct ?? 0), 0) / copiedLines.length : null,
+    avgSlipPct,
     realPct: realCost > 0 ? (realValue / realCost - 1) * 100 : null,
     paperPct: paperCost > 0 ? (paperValue / paperCost - 1) * 100 : null,
     lines,
+    attribution,
   };
 }
 
 const pct1 = (x: number) => `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x).toFixed(1).replace('.', ',')} %`;
 
 /** Texte du rapport (fiche 11.3). */
-export function copyText(r: CopyReport): string {
+export function copyText(r: Pick<CopyReport, 'orders' | 'copied' | 'avgSlipPct' | 'realPct' | 'paperPct'> & { lines?: CopyLine[] }): string {
   const head = `Copie en réel : ${r.copied} ordre${r.copied > 1 ? 's' : ''} sur ${r.orders}.${r.avgSlipPct != null ? ` Écart moyen à l’exécution : ${pct1(r.avgSlipPct)}.` : ''}`;
   if (r.realPct == null || r.paperPct == null) return head;
   return `${head}\nRésultat réel ${pct1(r.realPct)} ; papier, sur les mêmes ordres, ${pct1(r.paperPct)}.`;

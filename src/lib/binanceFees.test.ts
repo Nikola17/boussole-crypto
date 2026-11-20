@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { binanceCostModel, binanceTakerPct, clampVip, VIP_TAKER_PCT } from './binanceFees';
+import { binanceCostModel, binanceMakerCostModel, binanceMakerPct, binanceTakerPct, clampVip, VIP_TAKER_PCT } from './binanceFees';
 import { gridBacktest } from './lab/grid';
 
 describe('frais Binance VIP', () => {
   it('VIP 0 taker = 0,10 %, BNB −25 % → 0,075 %', () => {
     expect(binanceTakerPct(0, false)).toBeCloseTo(0.1);
     expect(binanceTakerPct(0, true)).toBeCloseTo(0.075);
+  });
+  it('VIP 0 maker = 0,10 %, VIP 5 maker = 0,03 % (0,0225 % avec BNB)', () => {
+    expect(binanceMakerPct(0, false)).toBeCloseTo(0.1);
+    expect(binanceMakerPct(0, true)).toBeCloseTo(0.075);
+    expect(binanceMakerPct(5, false)).toBeCloseTo(0.03);
+    expect(binanceMakerPct(5, true)).toBeCloseTo(0.0225);
   });
   it('VIP 9 = 0,03 %', () => {
     expect(binanceTakerPct(9, false)).toBeCloseTo(0.03);
@@ -15,8 +21,9 @@ describe('frais Binance VIP', () => {
     expect(clampVip(42)).toBe(VIP_TAKER_PCT.length - 1);
     expect(clampVip(NaN)).toBe(0);
   });
-  it('le modèle de coûts garde l’écart de 0,05 %', () => {
+  it('le modèle de coûts garde l’écart de 0,05 % (taker) et 0 % (maker)', () => {
     expect(binanceCostModel(2, true)).toEqual({ feePct: binanceTakerPct(2, true), spreadPct: 0.05 });
+    expect(binanceMakerCostModel(2, true)).toEqual({ feePct: binanceMakerPct(2, true), spreadPct: 0 });
   });
 });
 
@@ -50,5 +57,17 @@ describe('backtest de bot grid', () => {
   it('entrées invalides → résultat neutre', () => {
     expect(gridBacktest([], { amountUsd: 1000, lower: 1, upper: 2, grids: 5 }).trades).toBe(0);
     expect(gridBacktest([100, 110], { amountUsd: 0, lower: 1, upper: 2, grids: 5 }).pnlPct).toBe(0);
+  });
+
+  it('frais et spread déduits : réduisent strictement le P&L et exposent feesUsd', () => {
+    const prices = [100, 110, 100, 110, 100, 110, 100];
+    const free = gridBacktest(prices, { amountUsd: 1000, lower: 90, upper: 120, grids: 3 });
+    const maker = gridBacktest(prices, { amountUsd: 1000, lower: 90, upper: 120, grids: 3, feePct: 0.075, spreadPct: 0 });
+    const heavy = gridBacktest(prices, { amountUsd: 1000, lower: 90, upper: 120, grids: 3, feePct: 2, spreadPct: 0.5 });
+    expect(free.feesUsd).toBe(0);
+    expect(maker.feesUsd).toBeGreaterThan(0);
+    expect(maker.pnlPct).toBeLessThan(free.pnlPct);
+    expect(heavy.feesUsd).toBeGreaterThan(maker.feesUsd);
+    expect(heavy.pnlPct).toBeLessThan(maker.pnlPct);
   });
 });

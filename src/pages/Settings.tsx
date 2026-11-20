@@ -389,9 +389,11 @@ export default function Settings() {
               <Input value={settings.coingeckoKey} onChange={(e) => set({ coingeckoKey: e.target.value.trim() })} placeholder="CG-…" autoComplete="off" spellCheck={false} />
             </Field>
             <Field label="Taille du scan de signaux">
-              <Select value={settings.scanSize} onChange={(e) => set({ scanSize: Number(e.target.value) as 50 | 100 })}>
+              <Select value={settings.scanSize} onChange={(e) => set({ scanSize: Number(e.target.value) as 50 | 100 | 250 | 500 })}>
                 <option value={50}>Top 50 (plus rapide)</option>
                 <option value={100}>Top 100</option>
+                <option value={250}>Top 250</option>
+                <option value={500}>Top 500 (plus complet)</option>
               </Select>
             </Field>
             <Field label="Taux d’imposition des plus-values (%)" hint="Flat tax 2026 : 31,4 % (12,8 % IR + 18,6 % prélèvements sociaux).">

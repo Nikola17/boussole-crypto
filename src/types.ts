@@ -40,7 +40,7 @@ export interface Settings {
   appLock: boolean;
   disclaimerAccepted: boolean;
   taxRatePct: number;
-  scanSize: 50 | 100;
+  scanSize: 50 | 100 | 250 | 500;
   /** Clé API Binance en LECTURE SEULE (solde spot) : chiffrée par le système, jamais synchronisée ni exportée. */
   binanceApiKey: string;
   /** Secret de la clé API Binance (signe les requêtes) : idem. */
@@ -428,9 +428,13 @@ export interface PaperPortfolio {
   /** Début de la partie simulée, si demandée. */
   backfillFrom?: string;
   executionHour?: number;
+  /** Créneaux horaires locaux multiples (ex. [8, 12, 16, 20] pour une stratégie 4H). */
+  executionHours?: number[];
   timeZone?: string;
   /** Dernier jour d'exécution traité. */
   cursorDay?: string;
+  /** Dernier créneau horaire traité (ex. « 2026-11-20@16 ») pour les stratégies multi-créneaux. */
+  cursorSlot?: string;
   /** Jusqu'où les ordres en attente ont été contrôlés (ISO). */
   settledTo?: string;
   universe?: { coinId: string; symbol: string; name: string; rank: number | null; available?: boolean | null }[];
@@ -463,7 +467,7 @@ export interface PaperOrder {
 export interface PaperFill {
   coinId: string; symbol: string; name: string;
   side: 'buy' | 'sell';
-  kind: 'market' | 'stop' | 'target' | 'delist';
+  kind: 'market' | 'stop' | 'target' | 'limit' | 'delist';
   quantity: number;
   marketUsd: number;
   priceUsd: number;
@@ -475,6 +479,12 @@ export interface PaperFill {
   target?: number;
   /** Stop jugé à la clôture par la stratégie (pas d'ordre stop en séance). */
   stopOnClose?: boolean;
+  /** Paliers de prise de profit partielle attachés à cet achat. */
+  tpLegs?: { rMultiple: number; fraction: number; moveStopToBe?: boolean; done?: boolean }[];
+  /** Stop suiveur dynamique attaché à cet achat. */
+  trailing?: { mode: 'atr' | 'pct'; value: number; activateAfterR?: number; atr?: number };
+  entryPriceUsd?: number;
+  initialRiskPerUnit?: number;
 }
 
 /** Relevé quotidien de la valeur du vrai portefeuille (identifiant = jour). */

@@ -8,6 +8,7 @@ import { searchCoins } from '../api/coingecko';
 import {
   buildCryptoComTransactions, CLASS_LABEL, parseCryptoComCsv, resolveSymbols, type ImportClass, type ParsedCryptoCom,
 } from '../lib/importers/cryptocom';
+import { buildExchangeTransactions, detectExchangeCsv, parseExchangeCsv, type ParsedExchangeCsv } from '../lib/importers/exchanges';
 import { fmtDate, fmtQty } from '../lib/format';
 import { dayBeforeFirst, matchManualEntries, missingStock } from '../lib/stock';
 import type { CoinRef, Transaction } from '../types';
@@ -27,6 +28,7 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState('');
   const [parsed, setParsed] = useState<ParsedCryptoCom | null>(null);
+  const [parsedExchange, setParsedExchange] = useState<ParsedExchangeCsv | null>(null);
   const [account, setAccount] = useState(NEW_ACCOUNT);
   const [classes, setClasses] = useState<Record<string, ImportClass>>({});
   const [depositFrom, setDepositFrom] = useState('external');
@@ -40,7 +42,7 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
 
   useEffect(() => {
     if (open) return;
-    setParsed(null); setFileName(''); setResult(null); setManual({}); setFound({}); setClasses({}); setOpening({}); setReplaceManual(true);
+    setParsed(null); setParsedExchange(null); setFileName(''); setResult(null); setManual({}); setFound({}); setClasses({}); setOpening({}); setReplaceManual(true);
   }, [open]);
 
   async function onFile(f: File | undefined) {
@@ -49,7 +51,17 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
     setResult(null);
     setManual({});
     setFound({});
-    const p = parseCryptoComCsv(await f.text());
+    setParsed(null);
+    setParsedExchange(null);
+    const text = await f.text();
+    const other = detectExchangeCsv(text);
+    if (other) {
+      const pe = parseExchangeCsv(text);
+      setParsedExchange(pe);
+      if (pe.ok) setAccount(accounts.find((a) => new RegExp(other, 'i').test(a.name))?.id ?? NEW_ACCOUNT);
+      return;
+    }
+    const p = parseCryptoComCsv(text);
     setParsed(p);
     if (!p.ok) return;
     setClasses(Object.fromEntries(p.kinds.map((k) => [k.kind, k.defaultClass])));
@@ -58,7 +70,8 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
     setDepositFrom('external');
   }
 
-  const base = useMemo(() => (parsed?.ok ? resolveSymbols(parsed.symbols, markets.data ?? []) : null), [parsed, markets.data]);
+  const activeSymbols = parsed?.ok ? parsed.symbols : parsedExchange?.ok ? parsedExchange.symbols : [];
+  const base = useMemo(() => (activeSymbols.length ? resolveSymbols(activeSymbols, markets.data ?? []) : null), [activeSymbols, markets.data]);
 
   // Cryptos hors du top 250 : recherche CoinGecko du ticker exact (seuls les tickers sont envoyés).
   useEffect(() => {
@@ -82,10 +95,11 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
   const symbols = useMemo(() => ({ ...(base?.resolved ?? {}), ...found, ...manual }), [base, found, manual]);
   const used = useMemo(() => new Set((parsed?.kinds ?? []).filter((k) => classes[k.kind] === 'deposit' || classes[k.kind] === 'withdraw').map((k) => classes[k.kind])), [parsed, classes]);
 
-  const preview = useMemo(
-    () => (parsed?.ok ? buildCryptoComTransactions(parsed, { accountId: account === NEW_ACCOUNT ? 'new' : account, classByKind: classes, symbols, depositFrom, withdrawTo, fxEurPerUsd: fx }) : null),
-    [parsed, account, classes, symbols, depositFrom, withdrawTo, fx],
-  );
+  const preview = useMemo(() => {
+    if (parsed?.ok) return buildCryptoComTransactions(parsed, { accountId: account === NEW_ACCOUNT ? 'new' : account, classByKind: classes, symbols, depositFrom, withdrawTo, fxEurPerUsd: fx });
+    if (parsedExchange?.ok) return { txs: buildExchangeTransactions(parsedExchange, { accountId: account === NEW_ACCOUNT ? 'new' : account, symbols, fxEurPerUsd: fx }), skipped: parsedExchange.skipped ? [{ reason: 'lignes ignorées ou non prises en charge', count: parsedExchange.skipped }] : [] };
+    return null;
+  }, [parsed, parsedExchange, account, classes, symbols, depositFrom, withdrawTo, fx]);
   const known = useMemo(() => new Set(existing.map((t) => t.id)), [existing]);
   const dupes = preview ? preview.txs.filter((t) => known.has(t.id)).length : 0;
   const fresh = useMemo(() => (preview ? preview.txs.filter((t) => !known.has(t.id)) : []), [preview, known]);
@@ -100,13 +114,16 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
   const openingRow = (coinId: string, missing: number) => opening[coinId] ?? { on: true, qty: Math.ceil(missing * 1e8) / 1e8, price: '' as number | '' };
 
   function doImport() {
-    if (!parsed?.ok) return;
+    if (!parsed?.ok && !parsedExchange?.ok) return;
     let id = account;
+    const exchangeLabel = parsedExchange?.exchange ? parsedExchange.exchange[0].toUpperCase() + parsedExchange.exchange.slice(1) : 'Crypto.com';
     if (account === NEW_ACCOUNT) {
       id = newId();
-      upsertAccount({ id, name: 'Crypto.com', kind: 'exchange', walletIds: [], createdAt: new Date().toISOString() });
+      upsertAccount({ id, name: exchangeLabel, kind: 'exchange', walletIds: [], createdAt: new Date().toISOString() });
     }
-    const out = buildCryptoComTransactions(parsed, { accountId: id, classByKind: classes, symbols, depositFrom, withdrawTo, fxEurPerUsd: fx });
+    const out = parsed?.ok
+      ? buildCryptoComTransactions(parsed, { accountId: id, classByKind: classes, symbols, depositFrom, withdrawTo, fxEurPerUsd: fx })
+      : { txs: buildExchangeTransactions(parsedExchange!, { accountId: id, symbols, fxEurPerUsd: fx }) };
     // Soldes d'ouverture : un dépôt la veille du premier mouvement de la crypto, à ton prix d'achat (0 si tu ne le connais pas).
     const extra: Transaction[] = [];
     for (const m of stock) {
@@ -123,17 +140,18 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
   }
 
   const otherAccounts = accounts.filter((a) => a.id !== account);
+  const anyOk = !!(parsed?.ok || parsedExchange?.ok);
   const footer = result ? (
     <Button variant="primary" onClick={onClose}>Fermer</Button>
   ) : (
     <>
       <Button variant="ghost" onClick={onClose}>Annuler</Button>
-      {parsed?.ok && <Button variant="primary" disabled={!preview || preview.txs.length === dupes} onClick={doImport}>{preview && preview.txs.length - dupes > 0 ? `Importer ${preview.txs.length - dupes} transactions` : 'Rien de nouveau à importer'}</Button>}
+      {anyOk && <Button variant="primary" disabled={!preview || preview.txs.length === dupes} onClick={doImport}>{preview && preview.txs.length - dupes > 0 ? `Importer ${preview.txs.length - dupes} transactions` : 'Rien de nouveau à importer'}</Button>}
     </>
   );
 
   return (
-    <Modal open={open} onClose={onClose} wide title="Importer l’historique Crypto.com (CSV)" footer={footer}>
+    <Modal open={open} onClose={onClose} wide title="Importer un historique CSV (Crypto.com, Binance, Kraken, Coinbase)" footer={footer}>
       {result ? (
         <Banner tone="success" title={`${result.added} transaction${result.added > 1 ? 's' : ''} ajoutée${result.added > 1 ? 's' : ''}`}>
           {result.skipped > 0 ? `${result.skipped} déjà présente${result.skipped > 1 ? 's' : ''} (ignorée${result.skipped > 1 ? 's' : ''}, aucun doublon). ` : ''}
@@ -141,26 +159,27 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
           {result.extra > 0 ? `${result.extra} solde${result.extra > 1 ? 's' : ''} d’ouverture ajouté${result.extra > 1 ? 's' : ''}. ` : ''}
           Ouvre l’onglet « Comptes » pour rapprocher ton journal de la blockchain, puis « Transactions » pour contrôler les lignes importées.
         </Banner>
-      ) : !parsed || !parsed.ok ? (
+      ) : !anyOk ? (
         <div className="space-y-3">
-          <p className="text-sm text-ink-2">Dans l’application Crypto.com : <b className="text-ink">Comptes → Historique → Exporter</b>, format CSV. Le fichier est lu ici, sur cet appareil ; seuls les noms des cryptos peuvent être recherchés en ligne.</p>
+          <p className="text-sm text-ink-2">Formats détectés automatiquement : <b className="text-ink">Crypto.com</b>, <b className="text-ink">Binance</b> (historique Spot), <b className="text-ink">Kraken</b> (Ledger) et <b className="text-ink">Coinbase</b> (Transactions). Le fichier reste sur ton appareil.</p>
           <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void onFile(e.target.files?.[0])} />
           <Button variant="primary" icon={<FileUp className="size-4" />} onClick={() => fileRef.current?.click()}>Choisir le fichier CSV</Button>
           {fileName && <p className="text-xs text-muted">{fileName}</p>}
-          {parsed && !parsed.ok && <Banner tone="warn" title="Fichier non reconnu">{parsed.error}</Banner>}
+          {((parsed && !parsed.ok) || (parsedExchange && !parsedExchange.ok)) && <Banner tone="warn" title="Fichier non reconnu">{parsed?.error ?? parsedExchange?.error}</Banner>}
         </div>
       ) : (
         <div className="space-y-4">
           <div className="rounded-lg bg-surface-2 p-3 text-sm text-ink-2">
-            <b className="text-ink">{fileName}</b> · {parsed.rows.length} lignes{parsed.range ? ` · du ${fmtDate(parsed.range.from)} au ${fmtDate(parsed.range.to)}` : ''} · {parsed.symbols.length} cryptos
-            {parsed.invalidRows > 0 && <span className="text-down"> · {parsed.invalidRows} ligne{parsed.invalidRows > 1 ? 's' : ''} illisible{parsed.invalidRows > 1 ? 's' : ''}</span>}
+            <b className="text-ink">{fileName}</b>{parsedExchange?.exchange ? ` · format ${parsedExchange.exchange.toUpperCase()} détecté` : ''} · {parsed ? parsed.rows.length : parsedExchange?.rows.length ?? 0} lignes{parsed?.range ? ` · du ${fmtDate(parsed.range.from)} au ${fmtDate(parsed.range.to)}` : ''} · {activeSymbols.length} cryptos
+            {parsed && parsed.invalidRows > 0 && <span className="text-down"> · {parsed.invalidRows} ligne{parsed.invalidRows > 1 ? 's' : ''} illisible{parsed.invalidRows > 1 ? 's' : ''}</span>}
           </div>
           <Field label="Compte qui reçoit ces opérations">
             <Select value={account} onChange={(e) => setAccount(e.target.value)}>
               {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              <option value={NEW_ACCOUNT}>Nouveau compte « Crypto.com »</option>
+              <option value={NEW_ACCOUNT}>Nouveau compte « {parsedExchange?.exchange ? parsedExchange.exchange[0].toUpperCase() + parsedExchange.exchange.slice(1) : 'Crypto.com'} »</option>
             </Select>
           </Field>
+          {parsed?.ok && (
           <div>
             <p className="mb-1 text-xs font-medium text-ink-2">Natures d’opération trouvées</p>
             {parsed.kinds.some((k) => !k.known) && <Banner tone="warn" title="Natures inconnues">Boussole ne devine rien : choisis ce que fait chacune des natures marquées « inconnue » (« Ignorer » est sans danger).</Banner>}
@@ -182,6 +201,7 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
               ))}
             </ul>
           </div>
+          )}
           {(used.has('deposit') || used.has('withdraw')) && (
             <div className="grid gap-3 sm:grid-cols-2">
               {used.has('deposit') && (

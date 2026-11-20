@@ -30,21 +30,47 @@ export function autoState(portfolio: PaperPortfolio, logs: PaperDayLog[], closeO
       if (f.side === 'buy') {
         const amount = f.quantity * f.priceUsd + f.feeUsd;
         cash -= amount;
+        const totalQty = Math.round(((p?.quantity ?? 0) + f.quantity) * 1e8) / 1e8;
+        const totalCost = (p?.costUsd ?? 0) + amount;
+        const entryPriceUsd = f.entryPriceUsd ?? p?.entryPriceUsd ?? (totalQty > 0 ? totalCost / totalQty : f.priceUsd);
+        const initialRiskPerUnit = f.initialRiskPerUnit ?? p?.initialRiskPerUnit ?? (f.stop != null && entryPriceUsd > f.stop ? entryPriceUsd - f.stop : undefined);
         positions[f.coinId] = {
           coinId: f.coinId, symbol: f.symbol, name: f.name,
-          quantity: Math.round(((p?.quantity ?? 0) + f.quantity) * 1e8) / 1e8,
-          costUsd: (p?.costUsd ?? 0) + amount,
+          quantity: totalQty,
+          initialQuantity: p ? (p.initialQuantity ?? p.quantity) + f.quantity : f.quantity,
+          costUsd: totalCost,
           openedOn: p?.openedOn ?? l.day,
+          entryPriceUsd,
+          ...(initialRiskPerUnit != null ? { initialRiskPerUnit } : {}),
           ...(f.stop != null ? { stop: f.stop } : p?.stop != null ? { stop: p.stop } : {}),
           ...(f.target != null ? { target: f.target } : p?.target != null ? { target: p.target } : {}),
           ...(f.stopOnClose || p?.stopOnClose ? { stopOnClose: true } : {}),
+          ...(f.tpLegs?.length ? { tpLegs: f.tpLegs.map((x) => ({ ...x })) } : p?.tpLegs ? { tpLegs: p.tpLegs.map((x) => ({ ...x })) } : {}),
+          ...(f.trailing ? { trailing: { ...f.trailing } } : p?.trailing ? { trailing: { ...p.trailing } } : {}),
+          highWaterMark: Math.max(p?.highWaterMark ?? 0, f.priceUsd),
         };
       } else {
         cash += f.quantity * f.priceUsd - f.feeUsd;
         if (!p) continue;
         const left = Math.round((p.quantity - f.quantity) * 1e8) / 1e8;
-        if (left > 0) positions[f.coinId] = { ...p, quantity: left, costUsd: p.costUsd * (left / p.quantity) };
-        else delete positions[f.coinId];
+        if (left > 0) {
+          let nextPos: Position = { ...p, quantity: left, costUsd: p.costUsd * (left / p.quantity) };
+          if (f.tag?.startsWith('tp:') && nextPos.tpLegs?.length) {
+            const idx = Number(f.tag.slice(3)) - 1;
+            if (idx >= 0 && idx < nextPos.tpLegs.length) {
+              const legs = nextPos.tpLegs.map((leg, k) => (k === idx ? { ...leg, done: true } : leg));
+              const hitLeg = legs[idx];
+              const entry = nextPos.entryPriceUsd ?? (p.quantity > 0 ? p.costUsd / p.quantity : 0);
+              const beStop = hitLeg.moveStopToBe && entry > 0 ? entry * (1 + (2 * portfolio.costs.feePct) / 100) : undefined;
+              nextPos = {
+                ...nextPos,
+                tpLegs: legs,
+                ...(beStop != null ? { stop: Math.max(nextPos.stop ?? 0, beStop), stopOnClose: false } : {}),
+              };
+            }
+          }
+          positions[f.coinId] = nextPos;
+        } else delete positions[f.coinId];
       }
     }
     if (closeOf) {

@@ -54,10 +54,22 @@ export function useEurUsdHistory(enabled: boolean) {
 
 // ------------------------------------------------------------------ Marché global
 
+/** Top 500 par capitalisation (2 pages CoinGecko de 250, repli gracieux sur le top 250 si la page 2 échoue). */
 export function useMarkets() {
   return useQuery({
-    queryKey: ['markets', 1],
-    queryFn: () => cg.getMarkets({ page: 1, perPage: 250, sparkline: true }),
+    queryKey: ['markets', 'top500'],
+    queryFn: async () => {
+      const { results, failed, firstError } = await poolStrict([1, 2], 1, (page) => cg.getMarkets({ page, perPage: 250, sparkline: true }));
+      if (failed === 2) throw firstError instanceof Error ? firstError : new Error('Données de marché indisponibles.');
+      const seen = new Set<string>();
+      const out: cg.CgMarket[] = [];
+      for (const row of results.flatMap((p) => p ?? [])) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        out.push(row);
+      }
+      return out;
+    },
     staleTime: 3 * MIN,
     refetchInterval: 4 * MIN,
     placeholderData: keepPreviousData,

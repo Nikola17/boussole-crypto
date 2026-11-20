@@ -24,9 +24,9 @@ const signed = (x: number) => `${x > 0 ? '+' : ''}${x}`;
 
 export const trader: Strategy<TraderParams> = {
   id: 'trader',
-  version: 3,
+  version: 4,
   label: 'Trader (setups avec stop)',
-  describe: 'Entre sur les seuls setups validés par le banc d’essai (cassure 20 j + volume, relance MACD) dans un univers élargi (top 100) ; stop jugé à la clôture, objectif à 3 R ; risque 1 % par trade, 5 positions au plus, sortie au bout de 30 jours, pause après −20 %.',
+  describe: 'Entre sur les seuls setups validés par le banc d’essai (cassure 20 j + volume, relance MACD) dans un univers élargi (top 500) ; stop jugé à la clôture, objectif à 3 R ; risque 1 % par trade, 5 positions au plus, sortie au bout de 30 jours, pause après −20 %.',
   defaults: { riskPct: 1, maxPositions: 5, maxPositionPct: 20, targetR: 3, maxHoldDays: 30, cooldownDays: 5, maxChasePct: 3, regime: false, pauseDrawdownPct: 20, onlyAvailable: true, setups: validatedBullSetups() },
   uses: ['signals'],
   replayable: true,

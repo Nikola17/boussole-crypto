@@ -1225,6 +1225,10 @@ function volumeRatio(candles, period = 20, opts = {}) {
   const a = avg[avg.length - 1];
   return a > 0 ? vols[vols.length - 1] / a : NaN;
 }
+function closedCandles(candles, nowMs) {
+  const last2 = candles[candles.length - 1];
+  return last2 && last2.time + 86400 > nowMs / 1e3 ? candles.slice(0, -1) : candles;
+}
 function toWeekly(daily) {
   const out = [];
   let cur = null;
@@ -1246,6 +1250,102 @@ function toWeekly(daily) {
   }
   if (cur) out.push(cur);
   return out;
+}
+function adx(candles, period = 14) {
+  const n2 = candles.length;
+  const out = new Array(n2).fill(NaN);
+  if (n2 < period * 2 + 1 || period <= 0) return out;
+  const tr = new Array(n2).fill(0);
+  const plusDm = new Array(n2).fill(0);
+  const minusDm = new Array(n2).fill(0);
+  for (let i = 1; i < n2; i++) {
+    const up = candles[i].high - candles[i - 1].high;
+    const down = candles[i - 1].low - candles[i].low;
+    plusDm[i] = up > down && up > 0 ? up : 0;
+    minusDm[i] = down > up && down > 0 ? down : 0;
+    const pc = candles[i - 1].close;
+    tr[i] = Math.max(candles[i].high - candles[i].low, Math.abs(candles[i].high - pc), Math.abs(candles[i].low - pc));
+  }
+  let sTr = 0, sPlus = 0, sMinus = 0;
+  for (let i = 1; i <= period; i++) {
+    sTr += tr[i];
+    sPlus += plusDm[i];
+    sMinus += minusDm[i];
+  }
+  const dx = new Array(n2).fill(NaN);
+  const calcDx = (t, p, m) => {
+    if (t <= 0) return 0;
+    const pdi = p / t * 100;
+    const mdi = m / t * 100;
+    const sum = pdi + mdi;
+    return sum > 0 ? Math.abs(pdi - mdi) / sum * 100 : 0;
+  };
+  dx[period] = calcDx(sTr, sPlus, sMinus);
+  for (let i = period + 1; i < n2; i++) {
+    sTr = sTr - sTr / period + tr[i];
+    sPlus = sPlus - sPlus / period + plusDm[i];
+    sMinus = sMinus - sMinus / period + minusDm[i];
+    dx[i] = calcDx(sTr, sPlus, sMinus);
+  }
+  let adxVal = 0;
+  for (let i = period; i < period * 2; i++) adxVal += dx[i];
+  adxVal /= period;
+  out[period * 2 - 1] = adxVal;
+  for (let i = period * 2; i < n2; i++) {
+    adxVal = (adxVal * (period - 1) + dx[i]) / period;
+    out[i] = adxVal;
+  }
+  return out;
+}
+function ewmaVolatility(closes, lambda = 0.94) {
+  if (closes.length < 10) return NaN;
+  const rets = [];
+  for (let i = 1; i < closes.length; i++) {
+    if (closes[i - 1] > 0 && closes[i] > 0) rets.push(Math.log(closes[i] / closes[i - 1]));
+  }
+  if (rets.length < 5) return NaN;
+  const seedN = Math.min(20, rets.length);
+  let variance = rets.slice(0, seedN).reduce((s, r) => s + r * r, 0) / seedN;
+  for (let i = seedN; i < rets.length; i++) {
+    variance = lambda * variance + (1 - lambda) * rets[i] * rets[i];
+  }
+  return Math.sqrt(variance * 365) * 100;
+}
+function rollingCorrelation(a, b, period = 30) {
+  const n2 = Math.min(a.length, b.length);
+  if (n2 < period + 1) return NaN;
+  const ra = [];
+  const rb = [];
+  for (let k = period; k >= 1; k--) {
+    const ia = a.length - k;
+    const ib = b.length - k;
+    if (a[ia - 1] > 0 && b[ib - 1] > 0) {
+      ra.push(a[ia] / a[ia - 1] - 1);
+      rb.push(b[ib] / b[ib - 1] - 1);
+    }
+  }
+  if (ra.length < Math.max(10, Math.floor(period * 0.7))) return NaN;
+  const ma = ra.reduce((s, x) => s + x, 0) / ra.length;
+  const mb = rb.reduce((s, x) => s + x, 0) / rb.length;
+  let num2 = 0, da = 0, db = 0;
+  for (let i = 0; i < ra.length; i++) {
+    const xa = ra[i] - ma;
+    const xb = rb[i] - mb;
+    num2 += xa * xb;
+    da += xa * xa;
+    db += xb * xb;
+  }
+  const den = Math.sqrt(da * db);
+  return den > 0 ? Math.max(-1, Math.min(1, num2 / den)) : NaN;
+}
+function zScore(values, period = 30) {
+  if (values.length < period || period < 2) return NaN;
+  const slice = values.slice(-period);
+  if (slice.some((v) => !Number.isFinite(v))) return NaN;
+  const mean = slice.reduce((s, v) => s + v, 0) / period;
+  const variance = slice.reduce((s, v) => s + (v - mean) ** 2, 0) / period;
+  const sd = Math.sqrt(variance);
+  return sd > 1e-12 ? (slice[slice.length - 1] - mean) / sd : 0;
 }
 
 // src/lib/thresholds.ts
@@ -2204,7 +2304,8 @@ function buildDashboardStatus(i) {
     unlocksNext: upcomingUnlocks(i.unlocks, dayKey, 30).slice(0, 5).map((u) => ({ symbol: u.symbol, date: u.date, daysUntil: u.daysUntil })),
     eventsNext: upcomingDated(i.launchEvents, dayKey, 30).slice(0, 5).map((e) => ({ name: e.name, date: e.date, daysUntil: e.daysUntil })),
     lastBrief: i.state.lastBriefSlot ?? {},
-    sync: { savedAt: i.syncSavedAt, device: i.syncDevice }
+    sync: { savedAt: i.syncSavedAt, device: i.syncDevice },
+    ...i.autopilots?.length ? { autopilots: i.autopilots } : {}
   };
 }
 function writePublicStatus(dir, status) {
@@ -3311,17 +3412,24 @@ var q8 = (x) => Math.round(x * 1e8) / 1e8;
 function applyIntent(book, intent, marketUsd, costs, opts) {
   const none = (skip) => ({ book, fill: null, skip });
   if (!(marketUsd > 0) || !Number.isFinite(marketUsd)) return none("prix inconnu");
-  if (intent.skipAbove != null && marketUsd > intent.skipAbove) return none("le prix a trop boug\xE9 depuis la cl\xF4ture");
-  if (intent.skipBelow != null && marketUsd < intent.skipBelow) return none("le prix a trop boug\xE9 depuis la cl\xF4ture");
-  const s = costs.spreadPct / 100;
-  const f = costs.feePct / 100;
+  if (!opts.asLimit) {
+    if (intent.skipAbove != null && marketUsd > intent.skipAbove) return none("le prix a trop boug\xE9 depuis la cl\xF4ture");
+    if (intent.skipBelow != null && marketUsd < intent.skipBelow) return none("le prix a trop boug\xE9 depuis la cl\xF4ture");
+  }
+  const isLimit = !!opts.asLimit;
+  const s = isLimit ? 0 : costs.spreadPct / 100;
+  const f = (isLimit ? costs.makerFeePct ?? costs.feePct : costs.feePct) / 100;
   const base = { coinId: intent.coinId, symbol: intent.symbol, name: intent.name, marketUsd, at: opts.at, reason: intent.reason, ...intent.tag ? { tag: intent.tag } : {} };
   if (intent.side === "buy") {
     const price = marketUsd * (1 + s);
     let amount;
     const sz = intent.sizing ?? { usd: 0 };
     if ("usd" in sz) amount = sz.usd;
-    else {
+    else if ("targetVolPct" in sz) {
+      const vol = Math.max(10, sz.assetVolAnnPct);
+      const raw = sz.equityUsd * (sz.targetVolPct / vol);
+      amount = Math.min(raw, sz.maxUsd);
+    } else {
       if (intent.stop == null || price <= intent.stop) return none("stop au-dessus du prix d\u2019achat");
       amount = Math.min(sz.riskUsd / (price - intent.stop) * price / (1 - f), sz.maxUsd);
     }
@@ -3331,32 +3439,57 @@ function applyIntent(book, intent, marketUsd, costs, opts) {
     const quantity = q8((amount - fee) / price);
     if (!(quantity > 0)) return none("montant trop petit");
     const prev = book.positions[intent.coinId];
-    const target = intent.stop != null && intent.targetR != null ? price + intent.targetR * (price - intent.stop) : void 0;
+    const riskPerUnit = intent.stop != null && price > intent.stop ? price - intent.stop : prev?.initialRiskPerUnit;
+    const target = !intent.tpLegs?.length && intent.stop != null && intent.targetR != null ? price + intent.targetR * (price - intent.stop) : void 0;
+    const tpLegs = intent.tpLegs?.length ? intent.tpLegs.map((l) => ({ ...l, done: false })) : prev?.tpLegs;
+    const trailing = intent.trailing ? { ...intent.trailing } : prev?.trailing;
+    const totalQty = q8((prev?.quantity ?? 0) + quantity);
+    const totalCost = (prev?.costUsd ?? 0) + amount;
+    const entryPriceUsd = prev?.entryPriceUsd != null ? totalCost / totalQty : price;
     const pos2 = {
       coinId: intent.coinId,
       symbol: intent.symbol,
       name: intent.name,
-      quantity: q8((prev?.quantity ?? 0) + quantity),
-      costUsd: (prev?.costUsd ?? 0) + amount,
+      quantity: totalQty,
+      initialQuantity: prev ? (prev.initialQuantity ?? prev.quantity) + quantity : quantity,
+      costUsd: totalCost,
       openedOn: prev?.openedOn ?? opts.day,
+      entryPriceUsd,
+      ...riskPerUnit != null && riskPerUnit > 0 ? { initialRiskPerUnit: riskPerUnit } : {},
       ...intent.stop != null ? { stop: intent.stop } : prev?.stop != null ? { stop: prev.stop } : {},
       ...target != null ? { target } : prev?.target != null ? { target: prev.target } : {},
-      ...intent.stopOnClose ? { stopOnClose: true } : prev?.stopOnClose ? { stopOnClose: true } : {}
+      ...intent.stopOnClose ? { stopOnClose: true } : prev?.stopOnClose ? { stopOnClose: true } : {},
+      ...tpLegs?.length ? { tpLegs } : {},
+      ...trailing ? { trailing } : {},
+      highWaterMark: Math.max(prev?.highWaterMark ?? 0, price)
     };
-    const fill = { ...base, side: "buy", kind: "market", quantity, priceUsd: price, feeUsd: fee, ...intent.stop != null ? { stop: intent.stop } : {}, ...target != null ? { target } : {}, ...intent.stopOnClose ? { stopOnClose: true } : {} };
+    const fill = {
+      ...base,
+      side: "buy",
+      kind: isLimit ? "limit" : "market",
+      quantity,
+      priceUsd: price,
+      feeUsd: fee,
+      ...intent.stop != null ? { stop: intent.stop } : {},
+      ...target != null ? { target } : {},
+      ...intent.stopOnClose ? { stopOnClose: true } : {},
+      ...tpLegs?.length ? { tpLegs } : {},
+      ...trailing ? { trailing } : {},
+      ...tpLegs?.length || trailing ? { entryPriceUsd, ...riskPerUnit != null ? { initialRiskPerUnit: riskPerUnit } : {} } : {}
+    };
     return { book: { cashUsd: book.cashUsd - amount, positions: { ...book.positions, [intent.coinId]: pos2 } }, fill, skip: null };
   }
   const pos = book.positions[intent.coinId];
   if (!pos || !(pos.quantity > 0)) return none("aucune position \xE0 vendre");
   const fraction = Math.min(1, Math.max(0, intent.fraction ?? 1));
   if (!(fraction > 0)) return none("aucune quantit\xE9 \xE0 vendre");
-  return sellOut(book, pos, fraction, marketUsd, costs, { ...base, kind: "market" });
+  return sellOut(book, pos, fraction, marketUsd, costs, { ...base, kind: isLimit ? "limit" : "market" }, isLimit);
 }
-function sellOut(book, pos, fraction, marketUsd, costs, base) {
-  const quantity = fraction >= 1 ? pos.quantity : q8(pos.quantity * fraction);
-  const price = marketUsd * (1 - costs.spreadPct / 100);
+function sellOut(book, pos, fraction, marketUsd, costs, base, asMaker = false) {
+  const quantity = fraction >= 1 ? pos.quantity : Math.min(pos.quantity, q8(pos.quantity * fraction));
+  const price = marketUsd * (1 - (asMaker ? 0 : costs.spreadPct / 100));
   const proceeds = quantity * price;
-  const fee = proceeds * (costs.feePct / 100);
+  const fee = proceeds * ((asMaker ? costs.makerFeePct ?? costs.feePct : costs.feePct) / 100);
   const positions = { ...book.positions };
   const left = q8(pos.quantity - quantity);
   if (left > 0) positions[pos.coinId] = { ...pos, quantity: left, costUsd: pos.costUsd * (left / pos.quantity) };
@@ -3370,21 +3503,102 @@ function pendingHit(kind, level, bar, opts = {}) {
   if (kind === "target") return gap && bar.open >= level ? bar.open : bar.high >= level ? level : null;
   return gap && bar.open <= level ? bar.open : bar.low <= level ? level : null;
 }
+function trailingStopLevel(pos) {
+  const tr = pos.trailing;
+  if (!tr) return null;
+  const entry = pos.entryPriceUsd ?? (pos.quantity > 0 ? pos.costUsd / pos.quantity : 0);
+  const hwm = pos.highWaterMark ?? entry;
+  if (!(hwm > 0)) return null;
+  if (tr.activateAfterR != null && tr.activateAfterR > 0) {
+    const risk = pos.initialRiskPerUnit ?? (pos.stop != null && entry > pos.stop ? entry - pos.stop : 0);
+    if (!(risk > 0) || hwm < entry + tr.activateAfterR * risk) return null;
+  }
+  if (tr.mode === "pct") return hwm * (1 - tr.value / 100);
+  if (tr.atr != null && tr.atr > 0) return hwm - tr.value * tr.atr;
+  return null;
+}
 function settleBar(book, coinId, bar, costs, at, opts = {}) {
-  const pos = book.positions[coinId];
-  if (!pos) return { book, fill: null };
+  const initialPos = book.positions[coinId];
+  if (!initialPos) return { book, fill: null, fills: [] };
+  let curBook = book;
+  let pos = initialPos;
+  const fills = [];
   const base = { coinId, symbol: pos.symbol, name: pos.name, at };
-  const stopAt = pos.stop != null && !pos.stopOnClose ? pendingHit("stop", pos.stop, bar, opts) : null;
-  if (stopAt != null) {
-    const r = sellOut(book, pos, 1, stopAt, costs, { ...base, marketUsd: stopAt, kind: "stop", reason: "stop touch\xE9", tag: "stop" });
-    return { book: r.book, fill: r.fill };
+  const trail = trailingStopLevel(pos);
+  const activeStop = trail != null ? pos.stop != null && !pos.stopOnClose ? Math.max(pos.stop, trail) : trail : pos.stop != null && !pos.stopOnClose ? pos.stop : null;
+  if (activeStop != null) {
+    const stopAt = pendingHit("stop", activeStop, bar, opts);
+    if (stopAt != null) {
+      const isTrailing = trail != null && (pos.stop == null || trail >= pos.stop - 1e-9);
+      const r = sellOut(curBook, pos, 1, stopAt, costs, { ...base, marketUsd: stopAt, kind: "stop", reason: isTrailing ? "stop suiveur touch\xE9" : "stop touch\xE9", tag: isTrailing ? "trailing-stop" : "stop" });
+      return { book: r.book, fill: r.fill, fills: [r.fill] };
+    }
   }
-  const targetAt = pos.target != null ? pendingHit("target", pos.target, bar, opts) : null;
-  if (targetAt != null) {
-    const r = sellOut(book, pos, 1, targetAt, costs, { ...base, marketUsd: targetAt, kind: "target", reason: "objectif atteint", tag: "target" });
-    return { book: r.book, fill: r.fill };
+  if (pos.tpLegs?.length) {
+    const entry = pos.entryPriceUsd ?? (pos.quantity > 0 ? pos.costUsd / pos.quantity : 0);
+    const risk = pos.initialRiskPerUnit ?? 0;
+    if (entry > 0 && risk > 0) {
+      const legs = pos.tpLegs.map((l) => ({ ...l }));
+      for (let i = 0; i < legs.length; i++) {
+        const leg = legs[i];
+        if (leg.done) continue;
+        const level = entry + leg.rMultiple * risk;
+        const hitAt = pendingHit("target", level, bar, opts);
+        if (hitAt == null) continue;
+        const livePos = curBook.positions[coinId];
+        if (!livePos) break;
+        const initQty = livePos.initialQuantity ?? livePos.quantity;
+        const targetQty = Math.min(livePos.quantity, q8(initQty * leg.fraction));
+        const frac = livePos.quantity > 0 ? Math.min(1, targetQty / livePos.quantity) : 0;
+        if (!(frac > 0)) continue;
+        const r = sellOut(curBook, livePos, frac, hitAt, costs, {
+          ...base,
+          marketUsd: hitAt,
+          kind: "target",
+          reason: `palier TP${i + 1} (${String(leg.rMultiple).replace(".", ",")} R)${leg.moveStopToBe ? " \xB7 stop \xE0 l\u2019\xE9quilibre" : ""}`,
+          tag: `tp:${i + 1}`
+        }, true);
+        curBook = r.book;
+        fills.push(r.fill);
+        legs[i] = { ...leg, done: true };
+        const rem2 = curBook.positions[coinId];
+        if (rem2) {
+          const beStop = leg.moveStopToBe ? entry * (1 + 2 * costs.feePct / 100) : void 0;
+          const nextStop = beStop != null ? Math.max(rem2.stop ?? 0, beStop) : rem2.stop;
+          curBook = {
+            ...curBook,
+            positions: {
+              ...curBook.positions,
+              [coinId]: { ...rem2, tpLegs: legs, ...nextStop != null ? { stop: nextStop } : {}, ...leg.moveStopToBe ? { stopOnClose: false } : {} }
+            }
+          };
+          pos = curBook.positions[coinId];
+        } else {
+          return { book: curBook, fill: fills[0] ?? null, fills };
+        }
+      }
+    }
+  } else if (pos.target != null) {
+    const targetAt = pendingHit("target", pos.target, bar, opts);
+    if (targetAt != null) {
+      const r = sellOut(curBook, pos, 1, targetAt, costs, { ...base, marketUsd: targetAt, kind: "target", reason: "objectif atteint", tag: "target" });
+      return { book: r.book, fill: r.fill, fills: [r.fill] };
+    }
   }
-  return { book, fill: null };
+  const rem = curBook.positions[coinId];
+  if (rem && rem.trailing && bar.high > (rem.highWaterMark ?? 0)) {
+    const nextPos = { ...rem, highWaterMark: bar.high };
+    const nextTrail = trailingStopLevel(nextPos);
+    const updatedStop = nextTrail != null ? Math.max(nextPos.stop ?? 0, nextTrail) : nextPos.stop;
+    curBook = {
+      ...curBook,
+      positions: {
+        ...curBook.positions,
+        [coinId]: { ...nextPos, ...updatedStop != null ? { stop: updatedStop } : {}, ...nextTrail != null ? { stopOnClose: false } : {} }
+      }
+    };
+  }
+  return { book: curBook, fill: fills[0] ?? null, fills };
 }
 function delist(book, coinId, lastClose, costs, at) {
   const pos = book.positions[coinId];
@@ -3829,7 +4043,8 @@ Ouvre Boussole pour cl\xF4turer le trade dans ton journal.` });
         unlocks: watch.unlocks,
         launchEvents: watch.launchEvents,
         syncSavedAt: bundle.savedAt ?? null,
-        syncDevice: bundle.device ?? null
+        syncDevice: bundle.device ?? null,
+        autopilots: autopilotLines
       }));
     } catch {
     }
@@ -4600,6 +4815,98 @@ function isoWeek(day) {
   return `${year}-W${String(week).padStart(2, "0")}`;
 }
 
+// src/lib/lab/copyTickets.ts
+function exchangeLinks(symbol) {
+  const s = symbol.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return {
+    binanceUrl: `https://www.binance.com/fr/trade/${s}_USDC?type=spot`,
+    cryptoComUrl: `https://crypto.com/exchange/trade/${s}_USD`
+  };
+}
+
+// src/lib/lab/stats.ts
+function median(xs) {
+  return quantile(xs, 0.5);
+}
+function quantile(xs, q) {
+  if (!xs.length) return NaN;
+  const s = [...xs].sort((a, b) => a - b);
+  const pos = Math.min(1, Math.max(0, q)) * (s.length - 1);
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  return s[lo] + (s[hi] - s[lo]) * (pos - lo);
+}
+function hashSeed(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = a + 1831565813 >>> 0;
+    let t = a;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function bootstrapMeans(xs, draws, seed) {
+  if (!xs.length) return [];
+  const rnd = mulberry32(seed);
+  const out = [];
+  for (let d = 0; d < draws; d++) {
+    let sum = 0;
+    for (let i = 0; i < xs.length; i++) sum += xs[Math.floor(rnd() * xs.length)];
+    out.push(sum / xs.length);
+  }
+  return out.sort((a, b) => a - b);
+}
+
+// src/lib/lab/features.ts
+var finiteOrNull = (v) => Number.isFinite(v) ? v : null;
+function computeAssetMetrics(candles, btcCandles, fundingRate8h = null) {
+  if (candles.length < 30) return null;
+  const closes = candles.map((c) => c.close);
+  const price = closes[closes.length - 1];
+  if (!(price > 0)) return null;
+  const btcCloses = btcCandles.map((c) => c.close);
+  const r7 = changePct(closes, 7);
+  const r30 = changePct(closes, 30);
+  const r90 = changePct(closes, 90);
+  const b7 = changePct(btcCloses, 7);
+  const b30 = changePct(btcCloses, 30);
+  const b90 = changePct(btcCloses, 90);
+  const rs7d = Number.isFinite(r7) && Number.isFinite(b7) ? r7 - b7 : null;
+  const rs30d = Number.isFinite(r30) && Number.isFinite(b30) ? r30 - b30 : null;
+  const rs90d = Number.isFinite(r90) && Number.isFinite(b90) ? r90 - b90 : null;
+  const vol = ewmaVolatility(closes.slice(-90));
+  const vol30dAnn = finiteOrNull(vol);
+  const sharpeMom = Number.isFinite(r30) && Number.isFinite(vol) && vol > 1 ? (r30 + (Number.isFinite(r90) ? r90 * 0.5 : 0)) / vol : null;
+  const corrBtc30d = btcCloses.length >= 31 ? finiteOrNull(rollingCorrelation(closes, btcCloses, 30)) : null;
+  const a14 = last(atr(candles, 14)) ?? NaN;
+  const atr14 = finiteOrNull(a14);
+  const atrPct = atr14 != null ? atr14 / price * 100 : null;
+  const adx14 = finiteOrNull(last(adx(candles, 14)) ?? NaN);
+  const volumeUsd30dMed = finiteOrNull(median(candles.slice(-30).map((c) => c.volume)));
+  return {
+    rs7d,
+    rs30d,
+    rs90d,
+    vol30dAnn,
+    sharpeMom,
+    corrBtc30d,
+    atr14,
+    atrPct,
+    adx14,
+    fundingRate8h: fundingRate8h != null && Number.isFinite(fundingRate8h) ? fundingRate8h : null,
+    volumeUsd30dMed
+  };
+}
+
 // src/lib/lab/autoState.ts
 function autoState(portfolio, logs, closeOf) {
   let cash = portfolio.startingUsd;
@@ -4620,23 +4927,49 @@ function autoState(portfolio, logs, closeOf) {
       if (f.side === "buy") {
         const amount = f.quantity * f.priceUsd + f.feeUsd;
         cash -= amount;
+        const totalQty = Math.round(((p?.quantity ?? 0) + f.quantity) * 1e8) / 1e8;
+        const totalCost = (p?.costUsd ?? 0) + amount;
+        const entryPriceUsd = f.entryPriceUsd ?? p?.entryPriceUsd ?? (totalQty > 0 ? totalCost / totalQty : f.priceUsd);
+        const initialRiskPerUnit = f.initialRiskPerUnit ?? p?.initialRiskPerUnit ?? (f.stop != null && entryPriceUsd > f.stop ? entryPriceUsd - f.stop : void 0);
         positions[f.coinId] = {
           coinId: f.coinId,
           symbol: f.symbol,
           name: f.name,
-          quantity: Math.round(((p?.quantity ?? 0) + f.quantity) * 1e8) / 1e8,
-          costUsd: (p?.costUsd ?? 0) + amount,
+          quantity: totalQty,
+          initialQuantity: p ? (p.initialQuantity ?? p.quantity) + f.quantity : f.quantity,
+          costUsd: totalCost,
           openedOn: p?.openedOn ?? l.day,
+          entryPriceUsd,
+          ...initialRiskPerUnit != null ? { initialRiskPerUnit } : {},
           ...f.stop != null ? { stop: f.stop } : p?.stop != null ? { stop: p.stop } : {},
           ...f.target != null ? { target: f.target } : p?.target != null ? { target: p.target } : {},
-          ...f.stopOnClose || p?.stopOnClose ? { stopOnClose: true } : {}
+          ...f.stopOnClose || p?.stopOnClose ? { stopOnClose: true } : {},
+          ...f.tpLegs?.length ? { tpLegs: f.tpLegs.map((x) => ({ ...x })) } : p?.tpLegs ? { tpLegs: p.tpLegs.map((x) => ({ ...x })) } : {},
+          ...f.trailing ? { trailing: { ...f.trailing } } : p?.trailing ? { trailing: { ...p.trailing } } : {},
+          highWaterMark: Math.max(p?.highWaterMark ?? 0, f.priceUsd)
         };
       } else {
         cash += f.quantity * f.priceUsd - f.feeUsd;
         if (!p) continue;
         const left = Math.round((p.quantity - f.quantity) * 1e8) / 1e8;
-        if (left > 0) positions[f.coinId] = { ...p, quantity: left, costUsd: p.costUsd * (left / p.quantity) };
-        else delete positions[f.coinId];
+        if (left > 0) {
+          let nextPos = { ...p, quantity: left, costUsd: p.costUsd * (left / p.quantity) };
+          if (f.tag?.startsWith("tp:") && nextPos.tpLegs?.length) {
+            const idx = Number(f.tag.slice(3)) - 1;
+            if (idx >= 0 && idx < nextPos.tpLegs.length) {
+              const legs = nextPos.tpLegs.map((leg, k) => k === idx ? { ...leg, done: true } : leg);
+              const hitLeg = legs[idx];
+              const entry = nextPos.entryPriceUsd ?? (p.quantity > 0 ? p.costUsd / p.quantity : 0);
+              const beStop = hitLeg.moveStopToBe && entry > 0 ? entry * (1 + 2 * portfolio.costs.feePct / 100) : void 0;
+              nextPos = {
+                ...nextPos,
+                tpLegs: legs,
+                ...beStop != null ? { stop: Math.max(nextPos.stop ?? 0, beStop), stopOnClose: false } : {}
+              };
+            }
+          }
+          positions[f.coinId] = nextPos;
+        } else delete positions[f.coinId];
       }
     }
     if (closeOf) {
@@ -4669,6 +5002,182 @@ function effectiveCursor(portfolio, logs) {
   let c = portfolio.cursorDay ?? "";
   for (const l of logs) if (l.portfolioId === portfolio.id && l.day > c) c = l.day;
   return c;
+}
+
+// src/lib/lab/regime.ts
+var REGIME_VERSION = 1;
+var HYSTERESIS_DAYS = 3;
+function rawRegime(price, s50, s200, slope200, adx14, volAnn, temperature) {
+  let trendScore = 0;
+  if (Number.isFinite(s200) && s200 > 0) {
+    trendScore += price > s200 ? 40 : -40;
+    if (Number.isFinite(slope200)) trendScore += Math.max(-25, Math.min(25, slope200 * 5));
+  }
+  if (Number.isFinite(s50) && Number.isFinite(s200) && s200 > 0) {
+    trendScore += s50 > s200 ? 25 : -25;
+  }
+  if (Number.isFinite(s50) && s50 > 0) {
+    trendScore += price > s50 ? 10 : -10;
+  }
+  trendScore = Math.max(-100, Math.min(100, Math.round(trendScore)));
+  if (temperature != null && (temperature >= 85 || temperature <= 15) || Number.isFinite(volAnn) && volAnn >= 95) {
+    return { regime: "EXTREME_STRESS", confidence: 0.9, btcTrendScore: trendScore };
+  }
+  const hasTrend = Number.isFinite(adx14) ? adx14 >= 20 : true;
+  if (Number.isFinite(s200) && Number.isFinite(s50) && price > s200 && s50 > s200 && hasTrend) {
+    const conf = Math.min(1, 0.55 + (Number.isFinite(adx14) ? Math.max(0, adx14 - 20) / 40 : 0.2));
+    return { regime: "BULL_TREND", confidence: Math.round(conf * 100) / 100, btcTrendScore: trendScore };
+  }
+  if (Number.isFinite(s200) && price < s200 && (!Number.isFinite(slope200) || slope200 <= 0.5) && (!Number.isFinite(adx14) || adx14 >= 18)) {
+    const conf = Math.min(1, 0.55 + (Number.isFinite(adx14) ? Math.max(0, adx14 - 18) / 40 : 0.2));
+    return { regime: "BEAR_TREND", confidence: Math.round(conf * 100) / 100, btcTrendScore: trendScore };
+  }
+  const rangeConf = Number.isFinite(adx14) ? Math.min(1, Math.max(0.4, (28 - adx14) / 20)) : 0.5;
+  return { regime: "RANGE_CHOP", confidence: Math.round(rangeConf * 100) / 100, btcTrendScore: trendScore };
+}
+function buildRegimeSeries(btcCandles, temperatureByDay) {
+  const out = /* @__PURE__ */ new Map();
+  if (btcCandles.length < 60) return out;
+  const closes = btcCandles.map((c) => c.close);
+  const s50 = sma(closes, 50);
+  const s200 = sma(closes, 200);
+  const adxArr = adx(btcCandles, 14);
+  const lambda = 0.94;
+  let ewmaVar = 0;
+  let prev = null;
+  for (let i = 1; i < btcCandles.length; i++) {
+    const r = closes[i - 1] > 0 && closes[i] > 0 ? Math.log(closes[i] / closes[i - 1]) : 0;
+    ewmaVar = i === 1 ? r * r : lambda * ewmaVar + (1 - lambda) * r * r;
+    if (i < 59) continue;
+    const day = new Date(btcCandles[i].time * 1e3).toISOString().slice(0, 10);
+    const slope200 = i >= 20 && Number.isFinite(s200[i]) && Number.isFinite(s200[i - 20]) && s200[i - 20] !== 0 ? (s200[i] - s200[i - 20]) / s200[i - 20] * 100 : NaN;
+    const volAnn = Math.sqrt(ewmaVar * 365) * 100;
+    const temp = temperatureByDay(day);
+    const raw = rawRegime(closes[i], s50[i], s200[i], slope200, adxArr[i], volAnn, temp);
+    let regime = raw.regime;
+    let daysInRegime = 1;
+    let pendingRegime = null;
+    let pendingCount = 0;
+    if (prev) {
+      if (raw.regime === prev.regime) {
+        regime = prev.regime;
+        daysInRegime = prev.daysInRegime + 1;
+      } else if (raw.regime === "EXTREME_STRESS") {
+        regime = "EXTREME_STRESS";
+        daysInRegime = 1;
+      } else {
+        const count = prev.pendingRegime === raw.regime ? (prev.pendingCount ?? 0) + 1 : 1;
+        if (count >= HYSTERESIS_DAYS) {
+          regime = raw.regime;
+          daysInRegime = count;
+        } else {
+          regime = prev.regime;
+          daysInRegime = prev.daysInRegime + 1;
+          pendingRegime = raw.regime;
+          pendingCount = count;
+        }
+      }
+    }
+    const snap = {
+      day,
+      regime,
+      confidence: raw.confidence,
+      btcTrendScore: raw.btcTrendScore,
+      adx14: Number.isFinite(adxArr[i]) ? Math.round(adxArr[i] * 10) / 10 : 0,
+      volAnnualizedPct: Number.isFinite(volAnn) ? Math.round(volAnn * 10) / 10 : 0,
+      temperature: temp,
+      daysInRegime,
+      pendingRegime,
+      pendingCount
+    };
+    out.set(day, snap);
+    prev = snap;
+  }
+  return out;
+}
+
+// src/lib/lab/riskOverlay.ts
+function scaleBuyIntent(intent, factor) {
+  if (factor >= 0.999 || !intent.sizing) return intent;
+  const sz = intent.sizing;
+  if ("usd" in sz) return { ...intent, sizing: { usd: Math.round(sz.usd * factor * 100) / 100 } };
+  if ("targetVolPct" in sz) return { ...intent, sizing: { ...sz, targetVolPct: sz.targetVolPct * factor, maxUsd: sz.maxUsd * factor } };
+  return { ...intent, sizing: { riskUsd: sz.riskUsd * factor, maxUsd: sz.maxUsd * factor } };
+}
+function drawdownScale(equityUsd, peakEquityUsd) {
+  if (!(peakEquityUsd > 0) || !(equityUsd > 0)) return 1;
+  const ddPct = (equityUsd / peakEquityUsd - 1) * 100;
+  if (ddPct <= -15) return 0.25;
+  if (ddPct <= -8) return 0.5;
+  return 1;
+}
+function portfolioHeatPct(ctx) {
+  const eq = ctx.portfolio.equityUsd;
+  if (!(eq > 0)) return 0;
+  let riskUsd = 0;
+  for (const p of ctx.portfolio.positions) {
+    const cs = ctx.candles(p.coinId);
+    const price = cs.length ? cs[cs.length - 1].close : p.entryPriceUsd ?? (p.quantity > 0 ? p.costUsd / p.quantity : 0);
+    if (!(price > 0)) continue;
+    const stop = p.stop != null && p.stop < price ? p.stop : price * 0.9;
+    riskUsd += p.quantity * Math.max(0, price - stop);
+  }
+  return riskUsd / eq * 100;
+}
+function estimatedRiskUsd(intent, ctx) {
+  const sz = intent.sizing;
+  if (!sz) return 0;
+  if ("riskUsd" in sz) return Math.min(sz.riskUsd, sz.maxUsd);
+  const cs = ctx.candles(intent.coinId);
+  const price = intent.limitPrice ?? (cs.length ? cs[cs.length - 1].close : 0);
+  const usd = "usd" in sz ? sz.usd : Math.min(sz.maxUsd, sz.equityUsd * (sz.targetVolPct / Math.max(10, sz.assetVolAnnPct)));
+  if (!(price > 0) || intent.stop == null || intent.stop >= price) return usd * 0.08;
+  return usd * ((price - intent.stop) / price);
+}
+function applyRiskOverlay(intents, ctx, cfg) {
+  if (!cfg) return { intents, skipped: [] };
+  const maxHeatPct = cfg.maxHeatPct ?? 5;
+  const maxHighCorr = cfg.maxHighCorrPositions ?? 2;
+  const ddFactor = cfg.drawdownScaling !== false ? drawdownScale(ctx.portfolio.equityUsd, ctx.portfolio.peakEquityUsd) : 1;
+  const eq = ctx.portfolio.equityUsd;
+  let curHeatPct = portfolioHeatPct(ctx);
+  let highCorrCount = ctx.portfolio.positions.filter((p) => {
+    const corr = ctx.metrics?.(p.coinId)?.corrBtc30d;
+    return corr != null && corr > 0.85;
+  }).length;
+  const out = [];
+  const skipped = [];
+  for (const raw of intents) {
+    if (raw.side === "sell") {
+      out.push(raw);
+      continue;
+    }
+    let intent = scaleBuyIntent(raw, ddFactor);
+    const corr = ctx.metrics?.(intent.coinId)?.corrBtc30d;
+    const isHighCorr = corr != null && corr > 0.85;
+    if (isHighCorr) {
+      if (highCorrCount >= maxHighCorr + 1) {
+        skipped.push({ symbol: intent.symbol.toUpperCase(), why: `plafond de corr\xE9lation atteint (${highCorrCount} positions > 0,85 BTC)` });
+        continue;
+      }
+      if (highCorrCount >= maxHighCorr) intent = scaleBuyIntent(intent, 0.5);
+    }
+    if (eq > 0 && maxHeatPct > 0) {
+      const remainingPct = maxHeatPct - curHeatPct;
+      if (remainingPct <= 0.1) {
+        skipped.push({ symbol: intent.symbol.toUpperCase(), why: `risque portefeuille satur\xE9 (${curHeatPct.toFixed(1)} % / ${maxHeatPct} %)` });
+        continue;
+      }
+      const reqPct = estimatedRiskUsd(intent, ctx) / eq * 100;
+      if (reqPct > remainingPct && reqPct > 0) {
+        intent = scaleBuyIntent(intent, remainingPct / reqPct);
+      }
+      curHeatPct += Math.min(reqPct, remainingPct);
+    }
+    if (isHighCorr) highCorrCount++;
+    out.push(intent);
+  }
+  return { intents: out, skipped };
 }
 
 // src/lib/gems.ts
@@ -4739,7 +5248,7 @@ function autoDiscoveryCandidates(rows, opts) {
 // src/lib/autoBasket.ts
 var AUTO_BASKET_VERSION = 1;
 var AUTO_BASE_TOP = 20;
-var AUTOPILOT_UNIVERSE_TOP = 100;
+var AUTOPILOT_UNIVERSE_TOP = 500;
 var AUTO_MAX_LINES = 3;
 var AUTO_MIN_INVESTOR_SCORE = -15;
 var round2 = (x) => Math.round(x * 100) / 100;
@@ -4975,48 +5484,6 @@ var investisseur = {
   }
 };
 
-// src/lib/lab/stats.ts
-function median(xs) {
-  return quantile(xs, 0.5);
-}
-function quantile(xs, q) {
-  if (!xs.length) return NaN;
-  const s = [...xs].sort((a, b) => a - b);
-  const pos = Math.min(1, Math.max(0, q)) * (s.length - 1);
-  const lo = Math.floor(pos);
-  const hi = Math.ceil(pos);
-  return s[lo] + (s[hi] - s[lo]) * (pos - lo);
-}
-function hashSeed(s) {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = a + 1831565813 >>> 0;
-    let t = a;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-function bootstrapMeans(xs, draws, seed) {
-  if (!xs.length) return [];
-  const rnd = mulberry32(seed);
-  const out = [];
-  for (let d = 0; d < draws; d++) {
-    let sum = 0;
-    for (let i = 0; i < xs.length; i++) sum += xs[Math.floor(rnd() * xs.length)];
-    out.push(sum / xs.length);
-  }
-  return out.sort((a, b) => a - b);
-}
-
 // src/lib/profile.ts
 var ARCHETYPES = {
   Prudent: {
@@ -5080,6 +5547,7 @@ var dcaBoussole = {
   defaults: { amountUsd: 25, daysOfWeek: [2, 5], basePct: 70, maxBaseLines: 3, maxDiscoveryLines: 3, discoverySource: "both", minOrderUsd: 5, baseMode: "top3", anchorPct: 70 },
   uses: ["signals", "cycle", "autoBasket"],
   replayable: false,
+  universeTop: AUTO_BASE_TOP,
   kind: "deposits",
   deposit: (ctx, p) => ctx.scheduled(p.daysOfWeek) ? p.amountUsd : 0,
   decide: (ctx, p) => {
@@ -5159,9 +5627,9 @@ var daysBetween3 = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.par
 var signed2 = (x) => `${x > 0 ? "+" : ""}${x}`;
 var trader = {
   id: "trader",
-  version: 3,
+  version: 4,
   label: "Trader (setups avec stop)",
-  describe: "Entre sur les seuls setups valid\xE9s par le banc d\u2019essai (cassure 20 j + volume, relance MACD) dans un univers \xE9largi (top 100) ; stop jug\xE9 \xE0 la cl\xF4ture, objectif \xE0 3 R ; risque 1 % par trade, 5 positions au plus, sortie au bout de 30 jours, pause apr\xE8s \u221220 %.",
+  describe: "Entre sur les seuls setups valid\xE9s par le banc d\u2019essai (cassure 20 j + volume, relance MACD) dans un univers \xE9largi (top 500) ; stop jug\xE9 \xE0 la cl\xF4ture, objectif \xE0 3 R ; risque 1 % par trade, 5 positions au plus, sortie au bout de 30 jours, pause apr\xE8s \u221220 %.",
   defaults: { riskPct: 1, maxPositions: 5, maxPositionPct: 20, targetR: 3, maxHoldDays: 30, cooldownDays: 5, maxChasePct: 3, regime: false, pauseDrawdownPct: 20, onlyAvailable: true, setups: validatedBullSetups() },
   uses: ["signals"],
   replayable: true,
@@ -5221,14 +5689,941 @@ var trader = {
   }
 };
 
+// src/lib/lab/strategies/meanReversion.ts
+var daysBetween4 = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 864e5);
+var meanReversion = {
+  id: "mean-reversion-daily",
+  version: 1,
+  label: "Retour \xE0 la moyenne (Quotidien)",
+  describe: "Ach\xE8te les replis violents court terme (RSI 2 j < 15 ou \u22121,6 ATR) sur des actifs en tendance haussi\xE8re (au-dessus de MM200) via ordre limite maker ; sortie rapide d\xE8s le rebond (EMA10 / RSI 2 j > 70) ou \xE0 7 jours.",
+  defaults: {
+    rsi2Max: 15,
+    atrPullback: 1.6,
+    limitDiscountPct: 0.5,
+    riskPct: 1,
+    maxPositions: 5,
+    maxPositionPct: 20,
+    maxHoldDays: 7,
+    cooldownDays: 3,
+    minVolumeUsd: 2e6
+  },
+  uses: ["regime"],
+  replayable: true,
+  universeTop: 150,
+  riskOverlay: { maxHeatPct: 5, maxHighCorrPositions: 3, drawdownScaling: true },
+  kind: "trades",
+  deposit: () => 0,
+  decide: (ctx, p) => {
+    const out = [];
+    const pf = ctx.portfolio;
+    for (const pos of pf.positions) {
+      const cs = ctx.candles(pos.coinId);
+      if (cs.length < 25) continue;
+      const closes = cs.map((c) => c.close);
+      const price = closes[closes.length - 1];
+      const e10 = last(ema(closes, 10)) ?? NaN;
+      const r22 = last(rsi(closes, 2)) ?? NaN;
+      if (pos.stopOnClose && pos.stop != null && price <= pos.stop) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "stop", reason: "Cl\xF4ture sous le stop : sortie retour \xE0 la moyenne" });
+        continue;
+      }
+      if (Number.isFinite(e10) && price >= e10 || Number.isFinite(r22) && r22 >= 70) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "mr-exit", reason: `Rebond capt\xE9 (RSI2 ${Number.isFinite(r22) ? Math.round(r22) : "\u2014"} / retour EMA10)` });
+        continue;
+      }
+      if (daysBetween4(pos.openedOn, ctx.execDay) >= p.maxHoldDays) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "time-exit", reason: `Dur\xE9e maximale atteinte (${p.maxHoldDays} jours)` });
+      }
+    }
+    if (ctx.regime?.regime === "BEAR_TREND" || ctx.regime?.regime === "EXTREME_STRESS") return out;
+    const held = new Set(pf.positions.map((x) => x.coinId));
+    let slots = p.maxPositions - pf.positions.length;
+    let cash = pf.cashUsd;
+    if (slots <= 0 || cash < 10) return out;
+    const candidates = [];
+    for (const u of ctx.universe) {
+      if (held.has(u.coinId)) continue;
+      const lastStop = pf.lastFillOn("stop", u.coinId);
+      if (lastStop != null && daysBetween4(lastStop, ctx.execDay) < p.cooldownDays) continue;
+      const cs = ctx.candles(u.coinId);
+      if (cs.length < 205) continue;
+      const m = ctx.metrics?.(u.coinId);
+      if (m?.volumeUsd30dMed != null && m.volumeUsd30dMed < p.minVolumeUsd) continue;
+      const closes = cs.map((c) => c.close);
+      const price = closes[closes.length - 1];
+      const s200 = last(sma(closes, 200)) ?? NaN;
+      const e20 = last(ema(closes, 20)) ?? NaN;
+      const r22 = last(rsi(closes, 2)) ?? NaN;
+      const a14 = last(atr(cs, 14)) ?? NaN;
+      if (!Number.isFinite(s200) || !Number.isFinite(e20) || !Number.isFinite(r22) || !Number.isFinite(a14) || a14 <= 0) continue;
+      if (price <= s200) continue;
+      const zDrop = (e20 - price) / a14;
+      if (r22 <= p.rsi2Max || zDrop >= p.atrPullback) {
+        candidates.push({ u, price, atr14: a14, r2: r22, zDrop });
+      }
+    }
+    candidates.sort((a, b) => a.r2 - b.r2 || b.zDrop - a.zDrop || (a.u.rank ?? Infinity) - (b.u.rank ?? Infinity));
+    for (const c of candidates) {
+      if (slots <= 0 || cash < 10) break;
+      const limitPrice = c.price * (1 - p.limitDiscountPct / 100);
+      const stop = limitPrice - 2.2 * c.atr14;
+      if (!(stop > 0) || stop >= limitPrice) continue;
+      const riskUsd = pf.equityUsd * (p.riskPct / 100);
+      const maxUsd = Math.min(pf.equityUsd * (p.maxPositionPct / 100), cash);
+      out.push({
+        coinId: c.u.coinId,
+        symbol: c.u.symbol,
+        name: c.u.name,
+        side: "buy",
+        orderType: "limit",
+        limitPrice,
+        expiresAfterHours: 24,
+        sizing: { riskUsd, maxUsd },
+        stop,
+        stopOnClose: true,
+        tpLegs: [{ rMultiple: 1.5, fraction: 0.5, moveStopToBe: true }],
+        tag: "mr-entry",
+        reason: `Repli court terme en tendance haussi\xE8re (RSI2 ${Math.round(c.r2)}, \u2212${c.zDrop.toFixed(1).replace(".", ",")} ATR) \xB7 ordre limite maker`
+      });
+      cash -= Math.min(maxUsd, riskUsd / Math.max(limitPrice - stop, 1e-9) * limitPrice);
+      slots--;
+    }
+    return out;
+  }
+};
+
+// src/lib/lab/strategies/rotationMomentum.ts
+var rotationMomentum = {
+  id: "rotation-momentum",
+  version: 1,
+  label: "Rotation Momentum (Leaders)",
+  describe: "D\xE9tient les 4 cryptos au meilleur momentum ajust\xE9 de la volatilit\xE9 (au-dessus de leur MM50), pond\xE9r\xE9es \xE0 l\u2019inverse de la volatilit\xE9 ; r\xE9\xE9quilibrage lundi & jeudi, bascule 100 % en USDC d\xE8s que Bitcoin passe en tendance baissi\xE8re.",
+  defaults: { topN: 4, rebalanceDays: [1, 4], maxWeightPct: 30, minSharpeMom: 0.1, minVolumeUsd: 5e6 },
+  uses: ["regime"],
+  replayable: true,
+  universeTop: 100,
+  kind: "trades",
+  deposit: () => 0,
+  decide: (ctx, p) => {
+    const out = [];
+    const pf = ctx.portfolio;
+    if (ctx.regime?.regime === "BEAR_TREND") {
+      for (const pos of pf.positions) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "bear-cash", reason: "R\xE9gime baissier BTC confirm\xE9 : passage en USDC refuge" });
+      }
+      return out;
+    }
+    if (!ctx.scheduled(p.rebalanceDays)) return out;
+    const picks = [];
+    for (const u of ctx.universe) {
+      const cs = ctx.candles(u.coinId);
+      if (cs.length < 95) continue;
+      const m = ctx.metrics?.(u.coinId);
+      if (!m || m.sharpeMom == null || m.vol30dAnn == null || m.sharpeMom < p.minSharpeMom) continue;
+      if (m.volumeUsd30dMed != null && m.volumeUsd30dMed < p.minVolumeUsd) continue;
+      const closes = cs.map((c) => c.close);
+      const price = closes[closes.length - 1];
+      const s50 = last(sma(closes, 50)) ?? NaN;
+      const r14 = last(rsi(closes, 14)) ?? NaN;
+      if (!Number.isFinite(s50) || price <= s50) continue;
+      if (Number.isFinite(r14) && r14 > 82) continue;
+      picks.push({ u, score: m.sharpeMom, vol: Math.max(20, m.vol30dAnn), price });
+    }
+    picks.sort((a, b) => b.score - a.score || (a.u.rank ?? Infinity) - (b.u.rank ?? Infinity));
+    const chosen = picks.slice(0, p.topN);
+    const chosenIds = new Set(chosen.map((x) => x.u.coinId));
+    const stressFactor = ctx.regime?.regime === "EXTREME_STRESS" ? 0.5 : 1;
+    const invSum = chosen.reduce((s, x) => s + 1 / x.vol, 0);
+    const targetWeight = /* @__PURE__ */ new Map();
+    for (const x of chosen) {
+      const raw = invSum > 0 ? 1 / x.vol / invSum : 0;
+      targetWeight.set(x.u.coinId, Math.min(p.maxWeightPct / 100, raw) * stressFactor);
+    }
+    let freedCash = pf.cashUsd;
+    const heldValue = /* @__PURE__ */ new Map();
+    for (const pos of pf.positions) {
+      const cs = ctx.candles(pos.coinId);
+      const px = cs.length ? cs[cs.length - 1].close : 0;
+      const val = pos.quantity * px;
+      heldValue.set(pos.coinId, val);
+      const tgtUsd = (targetWeight.get(pos.coinId) ?? 0) * pf.equityUsd;
+      if (!chosenIds.has(pos.coinId)) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "rot-out", reason: "Sorti du top momentum ou sous MM50 : rotation" });
+        freedCash += val;
+      } else if (val > tgtUsd + pf.equityUsd * 0.05 && val > 0) {
+        const frac = Math.min(1, (val - tgtUsd) / val);
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: frac, tag: "rot-trim", reason: "R\xE9\xE9quilibrage vers la cible inverse-volatilit\xE9" });
+        freedCash += val * frac;
+      }
+    }
+    for (const x of chosen) {
+      const tgtUsd = (targetWeight.get(x.u.coinId) ?? 0) * pf.equityUsd;
+      const curUsd = heldValue.get(x.u.coinId) ?? 0;
+      const delta = tgtUsd - curUsd;
+      if (delta < Math.max(10, pf.equityUsd * 0.03) || freedCash < 10) continue;
+      const usd = Math.min(delta, freedCash);
+      out.push({
+        coinId: x.u.coinId,
+        symbol: x.u.symbol,
+        name: x.u.name,
+        side: "buy",
+        sizing: { usd },
+        tag: "rot-in",
+        reason: `Leader momentum (SharpeMom ${x.score.toFixed(2).replace(".", ",")}, cible ${Math.round((targetWeight.get(x.u.coinId) ?? 0) * 100)} %)`
+      });
+      freedCash -= usd;
+    }
+    return out;
+  }
+};
+
+// src/lib/lab/strategies/trendDonchian.ts
+var daysBetween5 = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 864e5);
+var trendDonchian = {
+  id: "trend-donchian-vol",
+  version: 1,
+  label: "Trend Donchian + Trailing",
+  describe: "Suivi de tendance sur cassure des plus hauts 20 j (ADX \u2265 20) sur le top 500 ; taille adapt\xE9e \xE0 la volatilit\xE9, TP1 partiel (30 % \xE0 2 R + breakeven) et stop suiveur 2,5 \xD7 ATR pour laisser courir les gros mouvements.",
+  defaults: {
+    entryPeriod: 20,
+    exitPeriod: 10,
+    adxMin: 20,
+    volTargetPct: 18,
+    maxPositions: 5,
+    maxPositionPct: 22,
+    trailAtrMult: 2.5,
+    cooldownDays: 5,
+    minVolumeUsd: 2e6
+  },
+  uses: ["regime"],
+  replayable: true,
+  riskOverlay: { maxHeatPct: 6, maxHighCorrPositions: 3, drawdownScaling: true },
+  kind: "trades",
+  deposit: () => 0,
+  decide: (ctx, p) => {
+    const out = [];
+    const pf = ctx.portfolio;
+    for (const pos of pf.positions) {
+      const cs = ctx.candles(pos.coinId);
+      if (cs.length <= p.exitPeriod + 2) continue;
+      const price = cs[cs.length - 1].close;
+      const exitLow = lowest(cs.map((c) => c.low), p.exitPeriod, cs.length - 2);
+      if (price < exitLow) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "donchian-exit", reason: `Cassure du plus bas ${p.exitPeriod} j : fin de tendance` });
+      }
+    }
+    if (ctx.regime?.regime === "BEAR_TREND") return out;
+    const held = new Set(pf.positions.map((x) => x.coinId));
+    let slots = p.maxPositions - pf.positions.length;
+    let cash = pf.cashUsd;
+    if (slots <= 0 || cash < 10) return out;
+    const candidates = [];
+    for (const u of ctx.universe) {
+      if (held.has(u.coinId)) continue;
+      const lastStop = pf.lastFillOn("stop", u.coinId) ?? pf.lastFillOn("trailing-stop", u.coinId);
+      if (lastStop != null && daysBetween5(lastStop, ctx.execDay) < p.cooldownDays) continue;
+      const cs = ctx.candles(u.coinId);
+      if (cs.length < 60) continue;
+      const m = ctx.metrics?.(u.coinId);
+      if (m?.volumeUsd30dMed != null && m.volumeUsd30dMed < p.minVolumeUsd) continue;
+      const price = cs[cs.length - 1].close;
+      const prevHigh = highest(cs.map((c) => c.high), p.entryPeriod, cs.length - 2);
+      if (!(price > prevHigh)) continue;
+      const adx14 = m?.adx14 ?? last(adx(cs, 14)) ?? NaN;
+      const atr14 = m?.atr14 ?? last(atr(cs, 14)) ?? NaN;
+      const vr = volumeRatio(cs, 20, { closedOnly: true });
+      if (!Number.isFinite(adx14) || adx14 < p.adxMin || !Number.isFinite(atr14) || atr14 <= 0) continue;
+      if (Number.isFinite(vr) && vr < 1.2) continue;
+      candidates.push({ u, price, atr14, adx14, vr: Number.isFinite(vr) ? vr : 1.2, volAnn: Math.max(25, m?.vol30dAnn ?? 60) });
+    }
+    candidates.sort((a, b) => b.vr - a.vr || b.adx14 - a.adx14);
+    for (const c of candidates) {
+      if (slots <= 0 || cash < 10) break;
+      const stop = c.price - 2 * c.atr14;
+      if (!(stop > 0)) continue;
+      const maxUsd = Math.min(pf.equityUsd * (p.maxPositionPct / 100), cash);
+      out.push({
+        coinId: c.u.coinId,
+        symbol: c.u.symbol,
+        name: c.u.name,
+        side: "buy",
+        sizing: { targetVolPct: p.volTargetPct / p.maxPositions, assetVolAnnPct: c.volAnn, equityUsd: pf.equityUsd, maxUsd },
+        stop,
+        tpLegs: [{ rMultiple: 2, fraction: 0.3, moveStopToBe: true }],
+        trailing: { mode: "atr", value: p.trailAtrMult, activateAfterR: 1, atr: c.atr14 },
+        skipAbove: c.price * 1.035,
+        skipBelow: stop,
+        tag: "donchian-breakout",
+        reason: `Cassure Donchian ${p.entryPeriod} j \xB7 ADX ${Math.round(c.adx14)} \xB7 vol \xD7${c.vr.toFixed(1).replace(".", ",")} (TP1 2R + trailing ${p.trailAtrMult}\xD7 ATR)`
+      });
+      cash -= Math.min(maxUsd, pf.equityUsd * (p.volTargetPct / p.maxPositions / c.volAnn));
+      slots--;
+    }
+    return out;
+  }
+};
+
+// src/lib/lab/strategies/swing4h.ts
+var daysBetween6 = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 864e5);
+var swing4h = {
+  id: "swing-4h-multi",
+  version: 1,
+  label: "Swing 4H Actif (4\xD7/jour)",
+  describe: "Tourne 4 fois par jour \xE0 heures copiables (8 h, 12 h, 16 h, 20 h Paris) sur bougies 4H : cassures et pullbacks EMA21 en tendance haussi\xE8re, TP1 50 % \xE0 1,5 R + breakeven, trailing stop 2 \xD7 ATR, sortie max 10 j.",
+  defaults: { riskPct: 0.75, maxPositions: 4, maxPositionPct: 22, maxHoldDays: 10, cooldownDays: 2, minVolumeUsd: 5e6 },
+  uses: ["regime"],
+  replayable: true,
+  universeTop: 40,
+  executionHours: [8, 12, 16, 20],
+  riskOverlay: { maxHeatPct: 4.5, maxHighCorrPositions: 2, drawdownScaling: true },
+  kind: "trades",
+  deposit: () => 0,
+  decide: (ctx, p) => {
+    const out = [];
+    const pf = ctx.portfolio;
+    for (const pos of pf.positions) {
+      if (daysBetween6(pos.openedOn, ctx.execDay) >= p.maxHoldDays) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "time-exit", reason: `Swing 4H : dur\xE9e maximale atteinte (${p.maxHoldDays} j)` });
+      }
+    }
+    if (ctx.regime?.regime === "BEAR_TREND" || ctx.regime?.regime === "EXTREME_STRESS") return out;
+    const btcBars = (ctx.candles4h?.("bitcoin")?.length ?? 0) >= 60 ? ctx.candles4h("bitcoin") : ctx.candles("bitcoin");
+    if (btcBars.length >= 60) {
+      const btcCloses = btcBars.map((c) => c.close);
+      const btcE55 = last(ema(btcCloses, 55)) ?? NaN;
+      if (Number.isFinite(btcE55) && btcCloses[btcCloses.length - 1] < btcE55) return out;
+    }
+    const held = new Set(pf.positions.map((x) => x.coinId));
+    let slots = p.maxPositions - pf.positions.length;
+    let cash = pf.cashUsd;
+    if (slots <= 0 || cash < 10) return out;
+    const candidates = [];
+    for (const u of ctx.universe.slice(0, 40)) {
+      if (held.has(u.coinId)) continue;
+      const lastStop = pf.lastFillOn("stop", u.coinId);
+      if (lastStop != null && daysBetween6(lastStop, ctx.execDay) < p.cooldownDays) continue;
+      const m = ctx.metrics?.(u.coinId);
+      if (m?.volumeUsd30dMed != null && m.volumeUsd30dMed < p.minVolumeUsd) continue;
+      const bars4h = ctx.candles4h?.(u.coinId);
+      const cs = bars4h && bars4h.length >= 60 ? bars4h : ctx.candles(u.coinId);
+      if (cs.length < 60) continue;
+      const closes = cs.map((c2) => c2.close);
+      const c = cs[cs.length - 1];
+      const e21 = last(ema(closes, 21)) ?? NaN;
+      const e55 = last(ema(closes, 55)) ?? NaN;
+      const a14 = last(atr(cs, 14)) ?? NaN;
+      if (!Number.isFinite(e21) || !Number.isFinite(e55) || !Number.isFinite(a14) || a14 <= 0) continue;
+      if (!(e21 > e55 && c.close > e21)) continue;
+      const prevHigh = highest(cs.map((k) => k.high), 20, cs.length - 2);
+      const vr = volumeRatio(cs, 20, { closedOnly: true });
+      const isBreakout = c.close > prevHigh && Number.isFinite(vr) && vr >= 1.4;
+      const isPullback = c.low <= e21 * 1.006 && c.close > c.open && c.close > e21 && c.close - c.low > c.high - c.close;
+      if (!isBreakout && !isPullback) continue;
+      candidates.push({
+        u,
+        price: c.close,
+        atr14: a14,
+        score: (isBreakout ? 2 : 1) + (Number.isFinite(vr) ? vr : 1),
+        kind: isBreakout ? `Cassure 4H (vol \xD7${vr.toFixed(1).replace(".", ",")})` : "Pullback rejet EMA21 4H"
+      });
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    for (const x of candidates) {
+      if (slots <= 0 || cash < 10) break;
+      const stop = x.price - 1.8 * x.atr14;
+      if (!(stop > 0) || stop >= x.price) continue;
+      const riskUsd = pf.equityUsd * (p.riskPct / 100);
+      const maxUsd = Math.min(pf.equityUsd * (p.maxPositionPct / 100), cash);
+      out.push({
+        coinId: x.u.coinId,
+        symbol: x.u.symbol,
+        name: x.u.name,
+        side: "buy",
+        sizing: { riskUsd, maxUsd },
+        stop,
+        tpLegs: [{ rMultiple: 1.5, fraction: 0.5, moveStopToBe: true }],
+        trailing: { mode: "atr", value: 2, activateAfterR: 1.5, atr: x.atr14 },
+        skipAbove: x.price * 1.025,
+        skipBelow: stop,
+        tag: "swing4h-entry",
+        reason: `${x.kind} \xB7 TP1 50 % \xE0 1,5 R + breakeven, trailing 2\xD7 ATR`
+      });
+      cash -= Math.min(maxUsd, riskUsd / Math.max(x.price - stop, 1e-9) * x.price);
+      slots--;
+    }
+    return out;
+  }
+};
+
+// src/lib/lab/strategies/gridAuto.ts
+var COIN_META = {
+  bitcoin: { symbol: "btc", name: "Bitcoin" },
+  ethereum: { symbol: "eth", name: "Ethereum" },
+  solana: { symbol: "sol", name: "Solana" }
+};
+var gridAuto = {
+  id: "grid-auto",
+  version: 1,
+  label: "Grid Auto Adaptatif (BTC/ETH/SOL)",
+  describe: "Grille dynamique autour de la MM20 (\xB12,5 \xD7 ATR) sur BTC, ETH et SOL : ach\xE8te par paliers sur les replis et vend par paliers sur les rebonds ; coupe-circuit automatique sous la grille ou en bear market.",
+  defaults: { coins: ["bitcoin", "ethereum", "solana"], bandAtrMult: 2.5, levels: 6, maxAllocPerCoinPct: 30, stepTriggerPct: 3.5 },
+  uses: ["regime"],
+  replayable: true,
+  universeTop: 20,
+  kind: "trades",
+  deposit: () => 0,
+  decide: (ctx, p) => {
+    const out = [];
+    const pf = ctx.portfolio;
+    const posByCoin = new Map(pf.positions.map((x) => [x.coinId, x]));
+    let cash = pf.cashUsd;
+    for (const coinId of p.coins) {
+      const cs = ctx.candles(coinId);
+      if (cs.length < 30) continue;
+      const closes = cs.map((c) => c.close);
+      const price = closes[closes.length - 1];
+      const mid = last(sma(closes, 20)) ?? NaN;
+      const a14 = last(atr(cs, 14)) ?? NaN;
+      if (!Number.isFinite(mid) || !Number.isFinite(a14) || a14 <= 0 || !(price > 0)) continue;
+      const lower = mid - p.bandAtrMult * a14;
+      const upper = mid + p.bandAtrMult * a14;
+      const stopFloor = lower - a14;
+      const meta = COIN_META[coinId] ?? { symbol: coinId.slice(0, 4), name: coinId };
+      const pos = posByCoin.get(coinId);
+      const curUsd = pos ? pos.quantity * price : 0;
+      if (pos && (price < stopFloor || ctx.regime?.regime === "BEAR_TREND" && price < lower)) {
+        out.push({ coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "grid-stop", reason: "Sortie basse de grille : protection capital" });
+        cash += curUsd;
+        continue;
+      }
+      if (ctx.regime?.regime === "BEAR_TREND" || ctx.regime?.regime === "EXTREME_STRESS") continue;
+      const ratio = Math.max(0, Math.min(1, (price - lower) / Math.max(upper - lower, 1e-9)));
+      const targetAllocPct = (1 - ratio) * p.maxAllocPerCoinPct;
+      const targetUsd = pf.equityUsd * targetAllocPct / 100;
+      const stepUsd = pf.equityUsd * (p.maxAllocPerCoinPct / Math.max(2, p.levels)) / 100;
+      const diff = targetUsd - curUsd;
+      if (diff >= Math.max(10, stepUsd * 0.7) && cash >= 10) {
+        const buyUsd = Math.min(diff, cash);
+        out.push({
+          coinId,
+          symbol: meta.symbol,
+          name: meta.name,
+          side: "buy",
+          orderType: "limit",
+          limitPrice: price * 0.998,
+          expiresAfterHours: 24,
+          sizing: { usd: buyUsd },
+          tag: "grid-buy",
+          reason: `Grille ${meta.symbol.toUpperCase()} : repli au palier ${Math.round(ratio * 100)} % (cible ${Math.round(targetAllocPct)} % du capital)`
+        });
+        cash -= buyUsd;
+      } else if (pos && -diff >= Math.max(10, stepUsd * 0.7) && curUsd > 0) {
+        const frac = Math.min(1, -diff / curUsd);
+        out.push({
+          coinId,
+          symbol: pos.symbol,
+          name: pos.name,
+          side: "sell",
+          fraction: frac,
+          tag: "grid-sell",
+          reason: `Grille ${pos.symbol.toUpperCase()} : rebond au palier ${Math.round(ratio * 100)} % (prise de profit tranche)`
+        });
+      }
+    }
+    return out;
+  }
+};
+
+// src/lib/lab/strategies/fundingContrarian.ts
+var daysBetween7 = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 864e5);
+var fundingContrarian = {
+  id: "funding-contrarian",
+  version: 1,
+  label: "Funding Contrarian (D\xE9riv\xE9s)",
+  describe: "Ach\xE8te les exc\xE8s de shorts (funding perp \u2264 \u22120,012 %/8 h avec rebond technique) et prend ses profits sur surchauffe du levier (funding \u2265 +0,025 %), TP1 50 % \xE0 2 R + breakeven et trailing 2 \xD7 ATR.",
+  defaults: {
+    negFundingThreshold: -12e-5,
+    posFundingExit: 25e-5,
+    riskPct: 1,
+    maxPositions: 3,
+    maxPositionPct: 20,
+    maxHoldDays: 14,
+    cooldownDays: 5
+  },
+  uses: ["regime"],
+  replayable: true,
+  universeTop: 60,
+  riskOverlay: { maxHeatPct: 4, maxHighCorrPositions: 2, drawdownScaling: true },
+  kind: "trades",
+  deposit: () => 0,
+  decide: (ctx, p) => {
+    const out = [];
+    const pf = ctx.portfolio;
+    for (const pos of pf.positions) {
+      const funding = ctx.fundingAt?.(pos.coinId) ?? ctx.metrics?.(pos.coinId)?.fundingRate8h ?? null;
+      if (funding != null && funding >= p.posFundingExit) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "funding-hot", reason: `Funding surchauff\xE9 (+${(funding * 100).toFixed(3).replace(".", ",")} %/8 h) : prise de profit` });
+        continue;
+      }
+      if (daysBetween7(pos.openedOn, ctx.execDay) >= p.maxHoldDays) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "time-exit", reason: `Dur\xE9e maximale atteinte (${p.maxHoldDays} jours)` });
+      }
+    }
+    const held = new Set(pf.positions.map((x) => x.coinId));
+    let slots = p.maxPositions - pf.positions.length;
+    let cash = pf.cashUsd;
+    if (slots <= 0 || cash < 10) return out;
+    const candidates = [];
+    for (const u of ctx.universe.slice(0, 60)) {
+      if (held.has(u.coinId)) continue;
+      const lastStop = pf.lastFillOn("stop", u.coinId);
+      if (lastStop != null && daysBetween7(lastStop, ctx.execDay) < p.cooldownDays) continue;
+      const cs = ctx.candles(u.coinId);
+      if (cs.length < 35) continue;
+      const closes = cs.map((c) => c.close);
+      const lastBar = cs[cs.length - 1];
+      const r14 = last(rsi(closes, 14)) ?? NaN;
+      const a14 = last(atr(cs, 14)) ?? NaN;
+      if (!Number.isFinite(r14) || !Number.isFinite(a14) || a14 <= 0) continue;
+      const greenBounce = lastBar.close > lastBar.open;
+      if (!greenBounce) continue;
+      const funding = ctx.fundingAt?.(u.coinId) ?? ctx.metrics?.(u.coinId)?.fundingRate8h ?? null;
+      if (funding != null) {
+        if (funding <= p.negFundingThreshold && r14 < 45) {
+          candidates.push({
+            u,
+            price: lastBar.close,
+            atr14: a14,
+            score: -funding * 1e4 + (45 - r14),
+            reason: `Capitulation shorts (funding ${(funding * 100).toFixed(3).replace(".", ",")} %/8 h, RSI ${Math.round(r14)}) + rebond`
+          });
+        }
+      } else {
+        const vr = volumeRatio(cs, 20, { closedOnly: true });
+        if (r14 < 28 && Number.isFinite(vr) && vr >= 1.5) {
+          candidates.push({
+            u,
+            price: lastBar.close,
+            atr14: a14,
+            score: 30 - r14 + vr * 3,
+            reason: `Capitulation technique (RSI ${Math.round(r14)}, vol \xD7${vr.toFixed(1).replace(".", ",")}) + bougie verte`
+          });
+        }
+      }
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    for (const c of candidates) {
+      if (slots <= 0 || cash < 10) break;
+      const stop = c.price - 1.8 * c.atr14;
+      if (!(stop > 0)) continue;
+      const riskUsd = pf.equityUsd * (p.riskPct / 100);
+      const maxUsd = Math.min(pf.equityUsd * (p.maxPositionPct / 100), cash);
+      out.push({
+        coinId: c.u.coinId,
+        symbol: c.u.symbol,
+        name: c.u.name,
+        side: "buy",
+        sizing: { riskUsd, maxUsd },
+        stop,
+        tpLegs: [{ rMultiple: 2, fraction: 0.5, moveStopToBe: true }],
+        trailing: { mode: "atr", value: 2, activateAfterR: 1.5, atr: c.atr14 },
+        skipAbove: c.price * 1.03,
+        skipBelow: stop,
+        tag: "funding-entry",
+        reason: c.reason
+      });
+      cash -= Math.min(maxUsd, riskUsd / Math.max(c.price - stop, 1e-9) * c.price);
+      slots--;
+    }
+    return out;
+  }
+};
+
+// src/lib/lab/strategies/pairsArb.ts
+var PAIRS = [
+  { a: { coinId: "ethereum", symbol: "eth", name: "Ethereum" }, b: { coinId: "bitcoin", symbol: "btc", name: "Bitcoin" } },
+  { a: { coinId: "solana", symbol: "sol", name: "Solana" }, b: { coinId: "ethereum", symbol: "eth", name: "Ethereum" } },
+  { a: { coinId: "chainlink", symbol: "link", name: "Chainlink" }, b: { coinId: "ethereum", symbol: "eth", name: "Ethereum" } },
+  { a: { coinId: "binancecoin", symbol: "bnb", name: "BNB" }, b: { coinId: "bitcoin", symbol: "btc", name: "Bitcoin" } }
+];
+var daysBetween8 = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 864e5);
+function ratioStats(aCloses, bCloses) {
+  const n2 = Math.min(aCloses.length, bCloses.length);
+  if (n2 < 65) return null;
+  const a = aCloses.slice(-n2);
+  const b = bCloses.slice(-n2);
+  const ratios = [];
+  for (let i = 0; i < n2; i++) {
+    if (a[i] > 0 && b[i] > 0) ratios.push(a[i] / b[i]);
+  }
+  if (ratios.length < 35) return null;
+  const z = zScore(ratios, 30);
+  const corr = rollingCorrelation(a, b, 60);
+  if (!Number.isFinite(z) || !Number.isFinite(corr)) return null;
+  return { z, corr };
+}
+var pairsArb = {
+  id: "pairs-arb-stat",
+  version: 1,
+  label: "Arbitrage Statistique (Z-Score)",
+  describe: "Surveille les ratios ETH/BTC, SOL/ETH, LINK/ETH et BNB/BTC (Z-score 30 j) : ach\xE8te la crypto statistiquement d\xE9cot\xE9e face \xE0 son pair (Z < \u22121,8) et prend profit au retour \xE0 l\u2019\xE9quilibre (Z \u2265 0).",
+  defaults: { zEntry: -1.8, zExit: 0, zStop: -3.5, minCorr: 0.65, allocPerPairPct: 24, maxHoldDays: 20 },
+  uses: [],
+  replayable: true,
+  universeTop: 30,
+  riskOverlay: { maxHeatPct: 6, maxHighCorrPositions: 4, drawdownScaling: true },
+  kind: "trades",
+  deposit: () => 0,
+  decide: (ctx, p) => {
+    const out = [];
+    const pf = ctx.portfolio;
+    const held = new Map(pf.positions.map((x) => [x.coinId, x]));
+    let cash = pf.cashUsd;
+    const candlesOf = (coinId, sym) => {
+      const c1 = ctx.candles(coinId);
+      if (c1.length) return c1;
+      return ctx.candles(sym.toUpperCase());
+    };
+    for (const pair of PAIRS) {
+      const ca = candlesOf(pair.a.coinId, pair.a.symbol);
+      const cb = candlesOf(pair.b.coinId, pair.b.symbol);
+      const st = ratioStats(ca.map((c) => c.close), cb.map((c) => c.close));
+      const posA = held.get(pair.a.coinId);
+      if (posA) {
+        if (st && st.z >= p.zExit) {
+          out.push({ coinId: posA.coinId, symbol: posA.symbol, name: posA.name, side: "sell", fraction: 1, tag: "pair-revert", reason: `Ratio ${pair.a.symbol.toUpperCase()}/${pair.b.symbol.toUpperCase()} revenu \xE0 l\u2019\xE9quilibre (Z = ${st.z.toFixed(2).replace(".", ",")})` });
+          continue;
+        }
+        if (st && st.z <= p.zStop) {
+          out.push({ coinId: posA.coinId, symbol: posA.symbol, name: posA.name, side: "sell", fraction: 1, tag: "stop", reason: `Divergence extr\xEAme ${pair.a.symbol.toUpperCase()}/${pair.b.symbol.toUpperCase()} (Z = ${st.z.toFixed(2).replace(".", ",")}) : stop` });
+          continue;
+        }
+        if (daysBetween8(posA.openedOn, ctx.execDay) >= p.maxHoldDays) {
+          out.push({ coinId: posA.coinId, symbol: posA.symbol, name: posA.name, side: "sell", fraction: 1, tag: "time-exit", reason: `Arbitrage paire : dur\xE9e max atteinte (${p.maxHoldDays} j)` });
+        }
+        continue;
+      }
+      if (!st || st.corr < p.minCorr || st.z > p.zEntry || cash < 10) continue;
+      const priceA = ca[ca.length - 1].close;
+      const usd = Math.min(pf.equityUsd * p.allocPerPairPct / 100, cash);
+      if (usd < 10) continue;
+      out.push({
+        coinId: pair.a.coinId,
+        symbol: pair.a.symbol,
+        name: pair.a.name,
+        side: "buy",
+        sizing: { usd },
+        stop: priceA * 0.9,
+        stopOnClose: true,
+        tag: `pair:${pair.a.symbol}-${pair.b.symbol}`,
+        reason: `${pair.a.symbol.toUpperCase()}/${pair.b.symbol.toUpperCase()} d\xE9cot\xE9 (Z = ${st.z.toFixed(2).replace(".", ",")}, corr ${st.corr.toFixed(2).replace(".", ",")})`
+      });
+      cash -= usd;
+    }
+    return out;
+  }
+};
+
+// src/lib/lab/strategies/metaAllocator.ts
+function scaleIntent(intent, factor, tagPrefix) {
+  if (intent.side === "sell") return { ...intent, tag: `${tagPrefix}:${intent.tag ?? "sell"}` };
+  const sz = intent.sizing;
+  if (!sz) return { ...intent, tag: `${tagPrefix}:${intent.tag ?? "buy"}` };
+  const scaled = "usd" in sz ? { usd: Math.round(sz.usd * factor * 100) / 100 } : "targetVolPct" in sz ? { ...sz, targetVolPct: sz.targetVolPct * factor, maxUsd: sz.maxUsd * factor } : { riskUsd: sz.riskUsd * factor, maxUsd: sz.maxUsd * factor };
+  return { ...intent, sizing: scaled, tag: `${tagPrefix}:${intent.tag ?? "buy"}`, reason: `[All-Weather] ${intent.reason}` };
+}
+var metaAllocator = {
+  id: "meta-allocator",
+  version: 1,
+  label: "M\xE9ta-Allocateur All-Weather",
+  describe: "Chef d\u2019orchestre adaptatif au r\xE9gime : Rotation Momentum + Donchian en march\xE9 haussier, Retour \xE0 la moyenne + Arbitrage Paires en range, passage automatique en USDC refuge en bear market et all\xE8gement en stress extr\xEAme.",
+  defaults: { bullMomentumShare: 0.6, rangeMrShare: 0.55, bearMaxExposurePct: 25, stressTrimFraction: 0.5 },
+  uses: ["regime"],
+  replayable: true,
+  universeTop: 150,
+  riskOverlay: { maxHeatPct: 5, maxHighCorrPositions: 3, drawdownScaling: true },
+  kind: "trades",
+  deposit: () => 0,
+  decide: (ctx, p) => {
+    const regime = ctx.regime?.regime ?? "RANGE_CHOP";
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    const pushUnique = (list3) => {
+      for (const item of list3) {
+        const key = `${item.side}|${item.coinId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(item);
+      }
+    };
+    if (regime === "EXTREME_STRESS") {
+      const lastTrim = ctx.portfolio.lastFillOn("meta:stress-trim");
+      if (lastTrim !== ctx.execDay) {
+        for (const pos of ctx.portfolio.positions) {
+          out.push({
+            coinId: pos.coinId,
+            symbol: pos.symbol,
+            name: pos.name,
+            side: "sell",
+            fraction: p.stressTrimFraction,
+            tag: "meta:stress-trim",
+            reason: "[All-Weather] Stress extr\xEAme d\xE9tect\xE9 : all\xE8gement d\xE9fensif"
+          });
+        }
+      }
+      return out;
+    }
+    if (regime === "BEAR_TREND") {
+      const pairIntents = pairsArb.decide(ctx, { ...pairsArb.defaults, allocPerPairPct: Math.min(12, p.bearMaxExposurePct / 2) });
+      const pairBuys = new Set(pairIntents.filter((x) => x.side === "buy").map((x) => x.coinId));
+      for (const pos of ctx.portfolio.positions) {
+        if (!pairBuys.has(pos.coinId)) {
+          out.push({
+            coinId: pos.coinId,
+            symbol: pos.symbol,
+            name: pos.name,
+            side: "sell",
+            fraction: 1,
+            tag: "meta:bear-cash",
+            reason: "[All-Weather] March\xE9 baissier BTC : bascule en USDC refuge"
+          });
+          seen.add(`sell|${pos.coinId}`);
+        }
+      }
+      pushUnique(pairIntents.map((x) => scaleIntent(x, 0.7, "meta-pair")));
+      return out;
+    }
+    if (regime === "BULL_TREND") {
+      const mom = rotationMomentum.decide(ctx, rotationMomentum.defaults).map((x) => scaleIntent(x, p.bullMomentumShare, "meta-mom"));
+      const don = trendDonchian.decide(ctx, trendDonchian.defaults).map((x) => scaleIntent(x, 1 - p.bullMomentumShare, "meta-don"));
+      pushUnique([...mom, ...don]);
+      return out;
+    }
+    const mr = meanReversion.decide(ctx, meanReversion.defaults).map((x) => scaleIntent(x, p.rangeMrShare, "meta-mr"));
+    const pr = pairsArb.decide(ctx, pairsArb.defaults).map((x) => scaleIntent(x, 1 - p.rangeMrShare, "meta-pair"));
+    pushUnique([...mr, ...pr]);
+    return out;
+  }
+};
+
+// src/lib/lab/strategies/smartShadow.ts
+var daysBetween9 = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 864e5);
+var smartShadow = {
+  id: "smart-money-shadow",
+  version: 1,
+  label: "Smart Money Shadow (Traction)",
+  describe: "Rep\xE8re les acc\xE9l\xE9rations de flux acheteurs (pression acheteuse > 58 %, volume \xD72, hors FOMO +50 %/7 j) dans le top 500 ; plafond strict 5 % par ligne, retrait de mise \xE0 \xD71,8 et stop suiveur 20 %.",
+  defaults: { maxLinePct: 5, maxPositions: 4, takeInitialMultiple: 1.8, trailingPct: 20, maxHoldDays: 21, minVolumeUsd: 3e6 },
+  uses: ["regime"],
+  replayable: true,
+  universeTop: 500,
+  riskOverlay: { maxHeatPct: 4, maxHighCorrPositions: 2, drawdownScaling: true },
+  kind: "trades",
+  deposit: () => 0,
+  decide: (ctx, p) => {
+    const out = [];
+    const pf = ctx.portfolio;
+    for (const pos of pf.positions) {
+      if (daysBetween9(pos.openedOn, ctx.execDay) >= p.maxHoldDays) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "time-exit", reason: `Smart Shadow : dur\xE9e max atteinte (${p.maxHoldDays} j)` });
+      }
+    }
+    if (ctx.regime?.regime === "BEAR_TREND" || ctx.regime?.regime === "EXTREME_STRESS") return out;
+    const held = new Set(pf.positions.map((x) => x.coinId));
+    let slots = p.maxPositions - pf.positions.length;
+    let cash = pf.cashUsd;
+    if (slots <= 0 || cash < 10) return out;
+    const candidates = [];
+    for (const u of ctx.universe) {
+      if (held.has(u.coinId) || u.coinId === "bitcoin" || u.coinId === "ethereum") continue;
+      const cs = ctx.candles(u.coinId);
+      if (cs.length < 40) continue;
+      const m = ctx.metrics?.(u.coinId);
+      if (m?.volumeUsd30dMed != null && m.volumeUsd30dMed < p.minVolumeUsd) continue;
+      const closes = cs.map((c) => c.close);
+      const ch7 = changePct(closes, 7);
+      if (Number.isFinite(ch7) && ch7 > 50) continue;
+      const vr = volumeRatio(cs, 20, { closedOnly: true });
+      if (!Number.isFinite(vr) || vr < 2) continue;
+      const lastBar = cs[cs.length - 1];
+      if (lastBar.close <= lastBar.open) continue;
+      const buyRatio = lastBar.takerBuyQuote != null && lastBar.volume > 0 ? lastBar.takerBuyQuote / lastBar.volume : (lastBar.close - lastBar.low) / Math.max(lastBar.high - lastBar.low, 1e-9);
+      if (buyRatio < 0.58) continue;
+      const a14 = m?.atr14 ?? last(atr(cs, 14)) ?? NaN;
+      if (!Number.isFinite(a14) || a14 <= 0) continue;
+      candidates.push({ u, price: lastBar.close, atr14: a14, score: vr * buyRatio, vr, buyRatio });
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    for (const c of candidates) {
+      if (slots <= 0 || cash < 10) break;
+      const stop = c.price * 0.85;
+      const usd = Math.min(pf.equityUsd * p.maxLinePct / 100, cash);
+      if (usd < 10) break;
+      out.push({
+        coinId: c.u.coinId,
+        symbol: c.u.symbol,
+        name: c.u.name,
+        side: "buy",
+        sizing: { usd },
+        stop,
+        tpLegs: [{ rMultiple: (p.takeInitialMultiple - 1) / 0.15, fraction: 0.5, moveStopToBe: true }],
+        trailing: { mode: "pct", value: p.trailingPct, activateAfterR: 1 },
+        skipAbove: c.price * 1.04,
+        tag: "smart-shadow",
+        reason: `Afflux acheteur d\xE9tect\xE9 (vol \xD7${c.vr.toFixed(1).replace(".", ",")}, achats ${Math.round(c.buyRatio * 100)} %) \xB7 plafond ${p.maxLinePct} %`
+      });
+      cash -= usd;
+      slots--;
+    }
+    return out;
+  }
+};
+
+// src/lib/lab/scoring.ts
+var FEATURE_NAMES = [
+  "sharpeMom",
+  "distSma50Atr",
+  "distSma200Log",
+  "rsiWeeklyNorm",
+  "volRatioLog",
+  "tempNorm",
+  "fundingNeg",
+  "rsBtc30d"
+];
+var DEFAULT_SCORING_MODEL = {
+  version: 1,
+  bias: -0.18,
+  weights: [0.22, -0.06, -0.18, -0.25, 0.28, -0.32, 0.2, 0.14],
+  plattA: 1,
+  plattB: 0,
+  oosBrierSkill: 0.03
+};
+var clamp2 = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+var sigmoid = (z) => 1 / (1 + Math.exp(-clamp2(z, -20, 20)));
+function extractFeatures(candles, metrics, temperature) {
+  if (candles.length < 200) return null;
+  const closes = candles.map((c) => c.close);
+  const price = closes[closes.length - 1];
+  if (!(price > 0)) return null;
+  const s50 = last(sma(closes, 50)) ?? NaN;
+  const s200 = last(sma(closes, 200)) ?? NaN;
+  const a14 = metrics?.atr14 ?? last(atr(candles, 14)) ?? NaN;
+  const weekly = toWeekly(candles);
+  const rw = last(rsi(weekly.map((w) => w.close), 14)) ?? 50;
+  const vr = volumeRatio(candles, 20, { closedOnly: true });
+  const r30 = changePct(closes, 30);
+  const sharpeMom = clamp2(metrics?.sharpeMom ?? (Number.isFinite(r30) ? r30 / 60 : 0), -3, 3);
+  const distSma50Atr = Number.isFinite(s50) && Number.isFinite(a14) && a14 > 0 ? clamp2((price - s50) / (a14 * 3), -3, 3) : 0;
+  const distSma200Log = Number.isFinite(s200) && s200 > 0 ? clamp2(Math.log(price / s200) * 2, -3, 3) : 0;
+  const rsiWeeklyNorm = Number.isFinite(rw) ? clamp2((rw - 50) / 20, -3, 3) : 0;
+  const volRatioLog = Number.isFinite(vr) && vr > 0 ? clamp2(Math.log(vr), -3, 3) : 0;
+  const tempNorm = temperature != null && Number.isFinite(temperature) ? clamp2((temperature - 50) / 25, -3, 3) : 0;
+  const fundingNeg = metrics?.fundingRate8h != null ? clamp2(-metrics.fundingRate8h * 4e3, -3, 3) : 0;
+  const rsBtc30d = metrics?.rs30d != null ? clamp2(metrics.rs30d / 20, -3, 3) : 0;
+  return [sharpeMom, distSma50Atr, distSma200Log, rsiWeeklyNorm, volRatioLog, tempNorm, fundingNeg, rsBtc30d];
+}
+function predictProbUp14d(candles, metrics, temperature, model = DEFAULT_SCORING_MODEL) {
+  const x = extractFeatures(candles, metrics, temperature);
+  if (!x) return null;
+  let logit = model.bias;
+  for (let i = 0; i < x.length; i++) logit += (model.weights[i] ?? 0) * x[i];
+  const probUp14d = sigmoid(model.plattA * logit + model.plattB);
+  const edgePts = (probUp14d - 0.44) * 100;
+  const grade = edgePts >= 6 ? "favorable" : edgePts <= -6 ? "defavorable" : "neutre";
+  const features = Object.fromEntries(FEATURE_NAMES.map((k, i) => [k, Math.round(x[i] * 100) / 100]));
+  return { probUp14d, edgePts, grade, features };
+}
+
+// src/lib/lab/strategies/catalystEvent.ts
+var daysBetween10 = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 864e5);
+var catalystEvent = {
+  id: "catalyst-event",
+  version: 1,
+  label: "Catalyseur & Scoring Probabiliste",
+  describe: "Entre lorsque le mod\xE8le probabiliste calibr\xE9 d\xE9passe 52 % de hausse \xE0 14 j avec force relative 7 j > +5 % vs BTC ; stop 1,5 \xD7 ATR, TP1 50 % \xE0 1,5 R + breakeven, objectif 2,5 R, dur\xE9e max 10 j.",
+  defaults: { minProbUp: 0.52, minRs7dPct: 5, riskPct: 0.75, maxPositions: 3, maxPositionPct: 18, maxHoldDays: 10, cooldownDays: 5 },
+  uses: ["regime"],
+  replayable: true,
+  universeTop: 150,
+  riskOverlay: { maxHeatPct: 4, maxHighCorrPositions: 2, drawdownScaling: true },
+  kind: "trades",
+  deposit: () => 0,
+  decide: (ctx, p) => {
+    const out = [];
+    const pf = ctx.portfolio;
+    for (const pos of pf.positions) {
+      if (daysBetween10(pos.openedOn, ctx.execDay) >= p.maxHoldDays) {
+        out.push({ coinId: pos.coinId, symbol: pos.symbol, name: pos.name, side: "sell", fraction: 1, tag: "time-exit", reason: `Catalyseur : dur\xE9e maximale atteinte (${p.maxHoldDays} j)` });
+      }
+    }
+    if (ctx.regime?.regime === "BEAR_TREND") return out;
+    const held = new Set(pf.positions.map((x) => x.coinId));
+    let slots = p.maxPositions - pf.positions.length;
+    let cash = pf.cashUsd;
+    if (slots <= 0 || cash < 10) return out;
+    const candidates = [];
+    for (const u of ctx.universe) {
+      if (held.has(u.coinId)) continue;
+      const lastStop = pf.lastFillOn("stop", u.coinId);
+      if (lastStop != null && daysBetween10(lastStop, ctx.execDay) < p.cooldownDays) continue;
+      const cs = ctx.candles(u.coinId);
+      if (cs.length < 200) continue;
+      const m = ctx.metrics?.(u.coinId) ?? null;
+      if (!m || m.rs7d == null || m.rs7d < p.minRs7dPct) continue;
+      const pred = predictProbUp14d(cs, m, ctx.temperature);
+      if (!pred || pred.probUp14d < p.minProbUp) continue;
+      const a14 = m.atr14 ?? last(atr(cs, 14)) ?? NaN;
+      if (!Number.isFinite(a14) || a14 <= 0) continue;
+      candidates.push({ u, price: cs[cs.length - 1].close, atr14: a14, prob: pred.probUp14d, rs7d: m.rs7d });
+    }
+    candidates.sort((a, b) => b.prob - a.prob || b.rs7d - a.rs7d);
+    for (const c of candidates) {
+      if (slots <= 0 || cash < 10) break;
+      const stop = c.price - 1.5 * c.atr14;
+      if (!(stop > 0)) continue;
+      const riskUsd = pf.equityUsd * (p.riskPct / 100);
+      const maxUsd = Math.min(pf.equityUsd * (p.maxPositionPct / 100), cash);
+      out.push({
+        coinId: c.u.coinId,
+        symbol: c.u.symbol,
+        name: c.u.name,
+        side: "buy",
+        sizing: { riskUsd, maxUsd },
+        stop,
+        tpLegs: [
+          { rMultiple: 1.5, fraction: 0.5, moveStopToBe: true },
+          { rMultiple: 2.5, fraction: 0.5 }
+        ],
+        skipAbove: c.price * 1.03,
+        skipBelow: stop,
+        tag: "catalyst",
+        reason: `Prob. calibr\xE9e ${Math.round(c.prob * 100)} % (14 j) \xB7 RS 7 j +${c.rs7d.toFixed(1).replace(".", ",")} % vs BTC`
+      });
+      cash -= Math.min(maxUsd, riskUsd / Math.max(c.price - stop, 1e-9) * c.price);
+      slots--;
+    }
+    return out;
+  }
+};
+
 // src/lib/lab/strategies/index.ts
 var STRATEGIES = {
+  [metaAllocator.id]: metaAllocator,
   [dcaBtc.id]: dcaBtc,
   [investisseur.id]: investisseur,
   [dcaBoussole.id]: dcaBoussole,
-  [trader.id]: trader
+  [trader.id]: trader,
+  [meanReversion.id]: meanReversion,
+  [rotationMomentum.id]: rotationMomentum,
+  [trendDonchian.id]: trendDonchian,
+  [swing4h.id]: swing4h,
+  [gridAuto.id]: gridAuto,
+  [fundingContrarian.id]: fundingContrarian,
+  [pairsArb.id]: pairsArb,
+  [smartShadow.id]: smartShadow,
+  [catalystEvent.id]: catalystEvent
 };
-var COMPONENT_VERSION = { signals: SIGNALS_VERSION, cycle: CYCLE_VERSION, autoBasket: AUTO_BASKET_VERSION };
+var COMPONENT_VERSION = { signals: SIGNALS_VERSION, cycle: CYCLE_VERSION, autoBasket: AUTO_BASKET_VERSION, regime: REGIME_VERSION };
 function rulesFingerprint(s) {
   return [`${s.id}@${s.version}`, ...s.uses.map((u) => `${u}${COMPONENT_VERSION[u]}`)].join("+");
 }
@@ -5236,6 +6631,7 @@ function rulesFingerprint(s) {
 // src/lib/lab/autopilot.ts
 var HOUR = 36e5;
 var dayOf2 = (c) => new Date(c.time * 1e3).toISOString().slice(0, 10);
+var slotKeyOf = (day, hour) => `${day}@${String(hour).padStart(2, "0")}`;
 var NO_DEVICE = "aucun appareil n\u2019a tourn\xE9 ce jour-l\xE0";
 function needsArchive(p, strategies = STRATEGIES) {
   if (p.kind !== "auto") return false;
@@ -5247,7 +6643,7 @@ var toPaperFill = (f) => ({
   symbol: f.symbol,
   name: f.name,
   side: f.side,
-  kind: f.kind === "limit" ? "market" : f.kind,
+  kind: f.kind,
   quantity: f.quantity,
   marketUsd: f.marketUsd,
   priceUsd: f.priceUsd,
@@ -5257,19 +6653,26 @@ var toPaperFill = (f) => ({
   ...f.tag ? { tag: f.tag } : {},
   ...f.stop != null ? { stop: f.stop } : {},
   ...f.target != null ? { target: f.target } : {},
-  ...f.stopOnClose ? { stopOnClose: true } : {}
+  ...f.stopOnClose ? { stopOnClose: true } : {},
+  ...f.tpLegs?.length ? { tpLegs: f.tpLegs.map((l) => ({ ...l })) } : {},
+  ...f.trailing ? { trailing: { ...f.trailing } } : {},
+  ...f.entryPriceUsd != null ? { entryPriceUsd: f.entryPriceUsd } : {},
+  ...f.initialRiskPerUnit != null ? { initialRiskPerUnit: f.initialRiskPerUnit } : {}
 });
 async function tickAutopilot(p, logs, nowMs, src, device, strategies = STRATEGIES) {
   const strategy = p.strategyId ? strategies[p.strategyId] : void 0;
   if (p.kind !== "auto" || !strategy || p.paused || p.archived || needsArchive(p, strategies)) return { portfolio: p, changed: [], events: [] };
   const tz = p.timeZone ?? "Europe/Paris";
-  const hour = p.executionHour ?? 8;
+  const rawHours = p.executionHours?.length ? p.executionHours : strategy.executionHours?.length ? strategy.executionHours : [p.executionHour ?? 8];
+  const hours = [...new Set(rawHours.map((h) => Math.max(0, Math.min(23, Math.round(h)))))].sort((a, b) => a - b);
+  const firstHour = hours[0] ?? 8;
+  const isMultiSlot = hours.length > 1;
   const params = { ...strategy.defaults, ...p.params ?? {} };
   const costs = { feePct: p.costs.feePct, spreadPct: p.costs.spreadPct };
-  const X = (day) => execInstant(day, hour, tz);
+  const X = (day, hour = firstHour) => execInstant(day, hour, tz);
   const dayOfInstant = (ms) => {
     const d = localDay(ms, tz);
-    return ms >= X(d) ? d : addDays(d, -1);
+    return ms >= X(d, firstHour) ? d : addDays(d, -1);
   };
   let portfolio = { ...p };
   const byDay = new Map(logs.filter((l) => l.portfolioId === p.id).map((l) => [l.day, l]));
@@ -5281,15 +6684,26 @@ async function tickAutopilot(p, logs, nowMs, src, device, strategies = STRATEGIE
     changedDays.add(l.day);
   };
   const allLogs = () => [...byDay.values()];
-  const dailyCache = /* @__PURE__ */ new Map();
+  const dailyCache2 = /* @__PURE__ */ new Map();
   const daily = async (coinId) => {
-    if (!dailyCache.has(coinId)) dailyCache.set(coinId, await src.daily(coinId));
-    return dailyCache.get(coinId);
+    if (!dailyCache2.has(coinId)) dailyCache2.set(coinId, await src.daily(coinId));
+    return dailyCache2.get(coinId);
+  };
+  const c4hCache = /* @__PURE__ */ new Map();
+  const candles4h = async (coinId) => {
+    if (!src.candles4h) return [];
+    if (!c4hCache.has(coinId)) c4hCache.set(coinId, await src.candles4h(coinId).catch(() => []));
+    return c4hCache.get(coinId);
   };
   const upTo = (cs, day) => {
     let j = cs.length - 1;
     while (j >= 0 && dayOf2(cs[j]) > day) j--;
     return cs.slice(Math.max(0, j - 399), j + 1);
+  };
+  const upTo4h = (cs, execMs) => {
+    let j = cs.length - 1;
+    while (j >= 0 && (cs[j].time + 4 * 3600) * 1e3 > execMs) j--;
+    return cs.slice(Math.max(0, j - 249), j + 1);
   };
   const closeOn = (cs, day) => {
     if (!cs) return null;
@@ -5299,7 +6713,7 @@ async function tickAutopilot(p, logs, nowMs, src, device, strategies = STRATEGIE
   const settle = async (fromMs, toMs) => {
     if (toMs <= fromMs) return;
     const st = autoState(portfolio, allLogs());
-    const watched = Object.values(st.positions).filter((x) => x.stop != null || x.target != null);
+    const watched = Object.values(st.positions).filter((x) => x.stop != null || x.target != null || x.tpLegs?.length || x.trailing != null);
     if (!watched.length) return;
     const bars = [];
     for (const pos of watched) for (const c of await src.hourly(pos.coinId, fromMs, toMs)) if (c.time * 1e3 >= fromMs && c.time * 1e3 + HOUR <= toMs) bars.push({ coinId: pos.coinId, c });
@@ -5308,24 +6722,38 @@ async function tickAutopilot(p, logs, nowMs, src, device, strategies = STRATEGIE
     for (const { coinId, c } of bars) {
       const at = new Date(c.time * 1e3).toISOString();
       const r = settleBar(book, coinId, c, costs, at);
-      if (!r.fill) continue;
       book = r.book;
-      const day = dayOfInstant(c.time * 1e3);
-      const l = logFor(day);
-      const fill = toPaperFill(r.fill);
-      save({ ...l, fills: [...l.fills, fill] });
-      events.push({ kind: r.fill.kind === "target" ? "target" : "stop", day, fill });
+      for (const rf of r.fills) {
+        const day = dayOfInstant(c.time * 1e3);
+        const l = logFor(day);
+        const fill = toPaperFill(rf);
+        save({ ...l, fills: [...l.fills, fill] });
+        events.push({ kind: rf.kind === "target" ? "target" : "stop", day, fill });
+      }
     }
   };
   const cursor = effectiveCursor(p, logs) || localDay(nowMs, tz);
-  let settledFrom = p.settledTo ? Date.parse(p.settledTo) : X(cursor);
+  const lastSlotKey = p.cursorSlot ?? slotKeyOf(cursor, hours[hours.length - 1] ?? firstHour);
+  let settledFrom = p.settledTo ? Date.parse(p.settledTo) : X(cursor, hours[hours.length - 1] ?? firstHour);
   const today = localDay(nowMs, tz);
-  const pending = [];
-  for (let E = addDays(cursor, 1); E <= today && X(E) <= nowMs; E = addDays(E, 1)) pending.push(E);
+  const pendingSlots = [];
+  const startDay = isMultiSlot ? cursor : addDays(cursor, 1);
+  for (let E = startDay; E <= today; E = addDays(E, 1)) {
+    for (let hi = 0; hi < hours.length; hi++) {
+      const h = hours[hi];
+      const key = slotKeyOf(E, h);
+      if (key <= lastSlotKey) continue;
+      const instant = X(E, h);
+      if (instant > nowMs) continue;
+      pendingSlots.push({ day: E, hour: h, instant, key, firstOfDay: hi === 0 });
+    }
+  }
   const scheduledOf = (E) => strategy.deposit({ execDay: E, scheduled: (dw) => dw.includes(((/* @__PURE__ */ new Date(`${E}T00:00:00Z`)).getUTCDay() + 6) % 7 + 1) }, params) > 0;
-  const lastScheduled = strategy.replayable ? null : [...pending].reverse().find(scheduledOf) ?? null;
-  for (const E of pending) {
-    const xE = X(E);
+  const lastScheduled = strategy.replayable ? null : [...pendingSlots].map((s) => s.day).reverse().find(scheduledOf) ?? null;
+  let regimes = null;
+  for (const slot of pendingSlots) {
+    const E = slot.day;
+    const xE = slot.instant;
     const D = decisionDay(xE);
     const scheduled = (dw) => dw.includes(((/* @__PURE__ */ new Date(`${E}T00:00:00Z`)).getUTCDay() + 6) % 7 + 1);
     await settle(settledFrom, xE);
@@ -5336,26 +6764,42 @@ async function tickAutopilot(p, logs, nowMs, src, device, strategies = STRATEGIE
     const universe = (portfolio.universe ?? []).map((x) => ({ coinId: x.coinId, symbol: x.symbol, name: x.name, rank: x.rank, available: x.available ?? null }));
     const st0 = autoState(portfolio, allLogs());
     const coins = [.../* @__PURE__ */ new Set([...universe.map((u) => u.coinId), ...Object.keys(st0.positions), "bitcoin"])];
-    for (const c of coins) await daily(c);
-    const st = autoState(portfolio, allLogs(), (coinId, day) => closeOn(dailyCache.get(coinId), day));
-    const btc = upTo(dailyCache.get("bitcoin") ?? [], D);
+    let nextCoin = 0;
+    await Promise.all(Array.from({ length: Math.min(6, coins.length) }, async () => {
+      while (nextCoin < coins.length) await daily(coins[nextCoin++]);
+    }));
+    if (isMultiSlot && src.candles4h) {
+      const top4h = [.../* @__PURE__ */ new Set([...universe.slice(0, 40).map((u) => u.coinId), ...Object.keys(st0.positions), "bitcoin"])];
+      let k4 = 0;
+      await Promise.all(Array.from({ length: Math.min(6, top4h.length) }, async () => {
+        while (k4 < top4h.length) await candles4h(top4h[k4++]);
+      }));
+    }
+    if (!regimes) {
+      const btcAll = dailyCache2.get("bitcoin") ?? [];
+      regimes = buildRegimeSeries(btcAll, src.temperatureAt);
+    }
+    const st = autoState(portfolio, allLogs(), (coinId, day) => closeOn(dailyCache2.get(coinId), day));
+    const btc = upTo(dailyCache2.get("bitcoin") ?? [], D);
     const s200 = sma(btc.map((c) => c.close), 200);
     const btcAbove = btc.length && Number.isFinite(s200[s200.length - 1]) ? btc[btc.length - 1].close > s200[s200.length - 1] : null;
-    const equity = st.cashUsd + Object.values(st.positions).reduce((sum, x) => sum + x.quantity * (closeOn(dailyCache.get(x.coinId), D) ?? 0), 0);
+    const equity = st.cashUsd + Object.values(st.positions).reduce((sum, x) => sum + x.quantity * (closeOn(dailyCache2.get(x.coinId), D) ?? 0), 0);
     let book = { cashUsd: st.cashUsd, positions: st.positions };
     const fills = [];
     const skipped = [];
     let lateDays;
-    for (const pos of Object.values(st.positions)) {
-      const cs = dailyCache.get(pos.coinId);
-      const last2 = cs?.[cs.length - 1];
-      if (last2 && dayOf2(last2) < D) {
-        const r = delist(book, pos.coinId, last2.close, costs, new Date(xE).toISOString());
-        book = r.book;
-        if (r.fill) fills.push(toPaperFill(r.fill));
+    if (slot.firstOfDay) {
+      for (const pos of Object.values(st.positions)) {
+        const cs = dailyCache2.get(pos.coinId);
+        const last2 = cs?.[cs.length - 1];
+        if (last2 && dayOf2(last2) < D) {
+          const r = delist(book, pos.coinId, last2.close, costs, new Date(xE).toISOString());
+          book = r.book;
+          if (r.fill) fills.push(toPaperFill(r.fill));
+        }
       }
     }
-    const deposit = strategy.deposit({ execDay: E, scheduled }, params);
+    const deposit = slot.firstOfDay ? strategy.deposit({ execDay: E, scheduled }, params) : 0;
     book = { ...book, cashUsd: book.cashUsd + deposit };
     let intents = [];
     let execAt = xE;
@@ -5368,14 +6812,25 @@ async function tickAutopilot(p, logs, nowMs, src, device, strategies = STRATEGIE
         lateDays = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${E}T00:00:00Z`)) / 864e5);
         execAt = Math.floor(nowMs / HOUR) * HOUR - HOUR;
       }
+      const metricsCache = /* @__PURE__ */ new Map();
+      const candlesFn = (coinId) => upTo(dailyCache2.get(coinId) ?? [], D);
       const ctx = {
         decidedOn: D,
         execDay: E,
         scheduled,
         universe,
-        candles: (coinId) => upTo(dailyCache.get(coinId) ?? [], D),
+        timeframe: isMultiSlot ? "4h" : "1d",
+        slotIso: new Date(xE).toISOString(),
+        candles: candlesFn,
+        candles4h: isMultiSlot && src.candles4h ? (coinId) => upTo4h(c4hCache.get(coinId) ?? [], xE) : void 0,
+        fundingAt: src.fundingAt,
         temperature: src.temperatureAt(D),
         btcAboveSma200: btcAbove,
+        regime: regimes.get(D) ?? null,
+        metrics: (coinId) => {
+          if (!metricsCache.has(coinId)) metricsCache.set(coinId, computeAssetMetrics(candlesFn(coinId), btc, src.fundingAt?.(coinId) ?? null));
+          return metricsCache.get(coinId) ?? null;
+        },
         portfolio: {
           cashUsd: book.cashUsd,
           equityUsd: equity + deposit,
@@ -5386,24 +6841,55 @@ async function tickAutopilot(p, logs, nowMs, src, device, strategies = STRATEGIE
         },
         ...live ? { live } : {}
       };
-      intents = strategy.decide(ctx, params);
+      const overlay = applyRiskOverlay(strategy.decide(ctx, params), ctx, strategy.riskOverlay);
+      intents = overlay.intents;
+      skipped.push(...overlay.skipped);
     }
     let missing = false;
     const fillsBefore = fills.length;
     for (const intent of intents) {
-      const bars = await src.hourly(intent.coinId, execAt, execAt + HOUR);
-      const bar = bars.find((c) => c.time * 1e3 <= execAt && execAt < c.time * 1e3 + HOUR);
-      if (!bar) {
-        missing = true;
-        break;
+      const isLimit = intent.orderType === "limit" && intent.limitPrice != null && intent.side === "buy";
+      if (isLimit) {
+        const windowMs = Math.max(1, intent.expiresAfterHours ?? 24) * HOUR;
+        const bars = await src.hourly(intent.coinId, execAt, Math.min(nowMs + HOUR, execAt + windowMs));
+        if (!bars.length) {
+          missing = true;
+          break;
+        }
+        let hit = null;
+        for (const b of bars) {
+          const h = pendingHit("limitBuy", intent.limitPrice, b);
+          if (h != null) {
+            hit = { price: h, at: new Date(b.time * 1e3).toISOString() };
+            break;
+          }
+        }
+        if (!hit) {
+          skipped.push({ symbol: intent.symbol.toUpperCase(), why: "ordre limite non touch\xE9" });
+          continue;
+        }
+        const r = applyIntent(book, intent, hit.price, costs, { at: hit.at, day: E, minOrderUsd: 5, asLimit: true });
+        if (r.skip) {
+          skipped.push({ symbol: intent.symbol.toUpperCase(), why: r.skip });
+          continue;
+        }
+        book = r.book;
+        if (r.fill) fills.push(toPaperFill(r.fill));
+      } else {
+        const bars = await src.hourly(intent.coinId, execAt, execAt + HOUR);
+        const bar = bars.find((c) => c.time * 1e3 <= execAt && execAt < c.time * 1e3 + HOUR);
+        if (!bar) {
+          missing = true;
+          break;
+        }
+        const r = applyIntent(book, intent, bar.open, costs, { at: new Date(execAt).toISOString(), day: E, minOrderUsd: 5 });
+        if (r.skip) {
+          skipped.push({ symbol: intent.symbol.toUpperCase(), why: r.skip });
+          continue;
+        }
+        book = r.book;
+        if (r.fill) fills.push(toPaperFill(r.fill));
       }
-      const r = applyIntent(book, intent, bar.open, costs, { at: new Date(execAt).toISOString(), day: E, minOrderUsd: 5 });
-      if (r.skip) {
-        skipped.push({ symbol: intent.symbol.toUpperCase(), why: r.skip });
-        continue;
-      }
-      book = r.book;
-      if (r.fill) fills.push(toPaperFill(r.fill));
     }
     if (missing) {
       fills.length = fillsBefore;
@@ -5412,10 +6898,20 @@ async function tickAutopilot(p, logs, nowMs, src, device, strategies = STRATEGIE
     const prev = byDay.get(E);
     if (deposit > 0 || fills.length || skipped.length || prev) {
       const base = prev ?? logFor(E);
-      save({ ...base, decidedOn: D, rules: p.rules ?? "", depositUsd: deposit, fills: [...prev?.fills.filter((f) => f.kind === "stop" || f.kind === "target") ?? [], ...fills], skipped, ...lateDays != null ? { lateDays } : {} });
+      const prevFills = prev ? slot.firstOfDay ? prev.fills.filter((f) => f.kind === "stop" || f.kind === "target") : prev.fills : [];
+      const prevSkipped = prev && !slot.firstOfDay ? prev.skipped : [];
+      save({
+        ...base,
+        decidedOn: D,
+        rules: p.rules ?? "",
+        depositUsd: slot.firstOfDay ? deposit : base.depositUsd,
+        fills: [...prevFills, ...fills],
+        skipped: [...prevSkipped, ...skipped],
+        ...lateDays != null ? { lateDays } : {}
+      });
       if (fills.length || skipped.length) events.push({ kind: "orders", day: E, fills, skipped, ...lateDays != null ? { lateDays } : {} });
     }
-    portfolio = { ...portfolio, cursorDay: E };
+    portfolio = { ...portfolio, cursorDay: E, ...isMultiSlot ? { cursorSlot: slot.key } : {} };
     settledFrom = xE;
   }
   const lastClosed = Math.floor(nowMs / HOUR) * HOUR;
@@ -5424,6 +6920,19 @@ async function tickAutopilot(p, logs, nowMs, src, device, strategies = STRATEGIE
   portfolio = { ...portfolio, settledTo: new Date(settledFrom).toISOString() };
   const changed = [...changedDays].sort().map((d) => byDay.get(d));
   return { portfolio, changed, events };
+}
+
+// src/lib/lab/compact.ts
+function compactPaperDays(days, today, keepEmptyDays = 90) {
+  const cutoff = addDays(today, -Math.max(7, keepEmptyDays));
+  const kept = [];
+  let removed = 0;
+  for (const d of days) {
+    const hasActivity = d.fills.length > 0 || d.depositUsd > 0;
+    if (hasActivity || d.day >= cutoff) kept.push(d);
+    else removed++;
+  }
+  return { days: removed ? kept : days, removed };
 }
 
 // src/lib/lab/settle.ts
@@ -6389,11 +7898,19 @@ var fr2 = (x, d = 2) => x.toFixed(d).replace(".", ",").replace(/,00$/, "");
 var pct3 = (x) => `${x >= 0 ? "+" : ""}${x.toFixed(1).replace(".", ",")} %`;
 var dm2 = (day) => `${day.slice(8, 10)}/${day.slice(5, 7)}`;
 var list2 = (b, k) => Array.isArray(b.data[k]) ? b.data[k] : [];
-function fillLine(f) {
-  const head = `${f.side === "buy" ? "ACHAT" : "VENTE"} ${f.symbol.toUpperCase()} : ${f.side === "buy" ? `${fr2(f.quantity * f.priceUsd + f.feeUsd)} USDC` : "toute la position"} \xE0 \u2248 ${fmtPrice(f.marketUsd, "USD")} \u2014 ${f.reason}`;
-  const legs = [f.stop != null ? `stop ${fmtPrice(f.stop, "USD")} (${pct3((f.stop / f.marketUsd - 1) * 100)})` : "", f.target != null ? `objectif ${fmtPrice(f.target, "USD")} (${pct3((f.target / f.marketUsd - 1) * 100)})` : ""].filter(Boolean);
-  return legs.length ? `${head}
-  ${legs.join(", ")}` : head;
+function fillLine(f, urgentRealClose = false) {
+  const verb = f.side === "buy" ? f.kind === "limit" ? "ACHAT LIMITE" : "ACHAT" : "VENTE";
+  const prefix = urgentRealClose ? "\u{1F6A8} CL\xD4TURE POSITION COPI\xC9E \xB7 " : "";
+  const head = `${prefix}${verb} ${f.symbol.toUpperCase()} : ${f.side === "buy" ? `${fr2(f.quantity * f.priceUsd + f.feeUsd)} USDC` : `${fr2(f.quantity * f.priceUsd)} USDC`} \xE0 \u2248 ${fmtPrice(f.marketUsd, "USD")} \u2014 ${f.reason}`;
+  const legs = [
+    f.side === "buy" ? `max chase ${fmtPrice(f.marketUsd * 1.025, "USD")}` : "",
+    f.stop != null ? `stop ${fmtPrice(f.stop, "USD")} (${pct3((f.stop / f.marketUsd - 1) * 100)})` : "",
+    f.target != null ? `objectif ${fmtPrice(f.target, "USD")} (${pct3((f.target / f.marketUsd - 1) * 100)})` : "",
+    f.tpLegs?.length ? `TP partiels ${f.tpLegs.map((l) => `${l.rMultiple}R`).join(" / ")}` : "",
+    f.trailing ? `trailing ${f.trailing.value}${f.trailing.mode === "pct" ? " %" : "\xD7 ATR"}` : ""
+  ].filter(Boolean);
+  const link = f.kind !== "delist" ? exchangeLinks(f.symbol).binanceUrl : "";
+  return [head, legs.length ? `  ${legs.join(", ")}` : "", link ? `  ${link}` : ""].filter(Boolean).join("\n");
 }
 async function summary(p, logs, src, today) {
   const s = p.strategyId ? STRATEGIES[p.strategyId] : void 0;
@@ -6417,6 +7934,9 @@ async function runAutopilots(bundle, src, nowMs, device) {
   let days = list2(bundle, "paperDays");
   let trades = list2(bundle, "paperTrades");
   let orders = list2(bundle, "paperOrders");
+  const openRealCopied = new Set(
+    list2(bundle, "trades").filter((t) => t.status === "open" && t.copyOf).map((t) => `${t.copyOf.portfolioId}|${t.coinId}`)
+  );
   let changed = 0;
   const events = [];
   const briefLines = [];
@@ -6429,7 +7949,7 @@ async function runAutopilots(bundle, src, nowMs, device) {
       days = merged.days;
       changed += merged.changed.length;
     }
-    if (r.portfolio.cursorDay !== p.cursorDay || r.portfolio.settledTo !== p.settledTo || r.portfolio.universeWeek !== p.universeWeek) {
+    if (r.portfolio.cursorDay !== p.cursorDay || r.portfolio.cursorSlot !== p.cursorSlot || r.portfolio.settledTo !== p.settledTo || r.portfolio.universeWeek !== p.universeWeek) {
       portfolios = portfolios.map((x) => x.id === p.id ? { ...r.portfolio, updatedAt: now } : x);
       changed++;
     }
@@ -6437,10 +7957,19 @@ async function runAutopilots(bundle, src, nowMs, device) {
     const confidence = sum.verdict ? `Confiance : ${sum.verdict.headline}` : "Portefeuille de r\xE9f\xE9rence.";
     for (const e of r.events) {
       if (e.kind === "orders") {
-        const lines = [`Autopilote \xAB ${p.name} \xBB \u2014 ordres du ${dm2(e.day)} (papier)${e.lateDays ? `, ex\xE9cut\xE9s avec ${e.lateDays} jour${e.lateDays > 1 ? "s" : ""} de retard` : ""}`, ...e.fills.map(fillLine), ...e.skipped.filter((x) => x.symbol !== "\u2014").map((x) => `${x.symbol} \xE9cart\xE9e : ${x.why}`), confidence];
+        const lines = [
+          `Autopilote \xAB ${p.name} \xBB \u2014 ordres du ${dm2(e.day)} (papier)${e.lateDays ? `, ex\xE9cut\xE9s avec ${e.lateDays} jour${e.lateDays > 1 ? "s" : ""} de retard` : ""}`,
+          ...e.fills.map((f) => fillLine(f, f.side === "sell" && openRealCopied.has(`${p.id}|${f.coinId}`))),
+          ...e.skipped.filter((x) => x.symbol !== "\u2014").map((x) => `${x.symbol} \xE9cart\xE9e : ${x.why}`),
+          confidence
+        ];
         if (e.fills.length) events.push({ key: `auto:${p.id}:${e.day}`, text: lines.join("\n") });
       } else {
-        events.push({ key: `auto:${p.id}:${e.fill.at}`, text: `Autopilote \xAB ${p.name} \xBB : ${e.kind === "stop" ? "stop touch\xE9" : "objectif atteint"} sur ${e.fill.symbol.toUpperCase()} \xE0 ${fmtPrice(e.fill.marketUsd, "USD")} (papier).` });
+        const urgent = openRealCopied.has(`${p.id}|${e.fill.coinId}`);
+        events.push({
+          key: `auto:${p.id}:${e.fill.at}`,
+          text: `${urgent ? "\u{1F6A8} POSITION COPI\xC9E \xB7 " : ""}Autopilote \xAB ${p.name} \xBB : ${e.kind === "stop" ? "stop touch\xE9" : "objectif atteint"} sur ${e.fill.symbol.toUpperCase()} \xE0 ${fmtPrice(e.fill.marketUsd, "USD")} (papier).${urgent ? "\nOuvre Boussole (Labo \u2192 \xC0 copier) pour cl\xF4turer ton trade r\xE9el." : ""}`
+        });
       }
     }
     briefLines.push(`${p.name} : ${sum.value != null ? `${fr2(sum.value)} USDC` : "d\xE9marre bient\xF4t"}${sum.perf != null ? ` (${pct3(sum.perf)})` : ""} \u2014 ${sum.verdict ? LEVEL[sum.verdict.level] : "r\xE9f\xE9rence"}`);
@@ -6463,6 +7992,10 @@ async function runAutopilots(bundle, src, nowMs, device) {
       changed += fresh.length + upd.size;
       for (const t of fresh) events.push({ key: `paper:${t.id}`, text: `Papier \xAB ${p.name} \xBB : ordre ${t.orderType === "stop" ? "stop" : t.orderType === "target" ? "objectif" : "limite"} ex\xE9cut\xE9 \u2014 ${t.type === "buy" ? "achat" : "vente"} de ${t.symbol.toUpperCase()} \xE0 ${fmtPrice(t.marketUsd ?? t.priceUsd, "USD")}.` });
     }
+  }
+  if (changed) {
+    const compacted = compactPaperDays(days, today, 90);
+    days = compacted.days;
   }
   return { bundle: changed ? { ...bundle, data: { ...bundle.data, paperPortfolios: portfolios, paperDays: days, paperTrades: trades, paperOrders: orders } } : bundle, changed, events, briefLines };
 }
@@ -6536,8 +8069,101 @@ function parseInstruments(json) {
   return [...set].sort();
 }
 
-// src/lib/lab/pairs.ts
+// src/lib/lab/candleCache.ts
 var HOUR3 = 36e5;
+var DAY_START_DEFAULT = Date.UTC(2017, 7, 17);
+function mergeCandles(existing, incoming) {
+  if (!incoming.length) return existing;
+  if (!existing.length) return [...incoming].sort((a, b) => a.time - b.time);
+  const byTime = /* @__PURE__ */ new Map();
+  for (const c of existing) byTime.set(c.time, c);
+  for (const c of incoming) byTime.set(c.time, c);
+  return [...byTime.values()].sort((a, b) => a.time - b.time);
+}
+function createDailyCache(fetchSince, opts = {}) {
+  const startMs = opts.startMs ?? DAY_START_DEFAULT;
+  const refreshMs = opts.refreshMs ?? 6 * HOUR3;
+  const now = opts.now ?? Date.now;
+  const store = /* @__PURE__ */ new Map();
+  const inflight = /* @__PURE__ */ new Map();
+  const load = async (symbol) => {
+    const t = now();
+    const hit = store.get(symbol);
+    if (hit && t - hit.fetchedAt < refreshMs) return closedCandles(hit.candles, t);
+    const last2 = hit?.candles[hit.candles.length - 1];
+    const from = last2 ? last2.time * 1e3 : startMs;
+    try {
+      const fresh = await fetchSince(symbol, from);
+      const merged = hit ? mergeCandles(hit.candles, fresh) : mergeCandles([], fresh);
+      store.set(symbol, { fetchedAt: t, candles: merged });
+      return closedCandles(merged, t);
+    } catch (e) {
+      if (hit) return closedCandles(hit.candles, t);
+      throw e;
+    }
+  };
+  return {
+    get(symbol) {
+      const existing = inflight.get(symbol);
+      if (existing) return existing;
+      const p = load(symbol).finally(() => inflight.delete(symbol));
+      inflight.set(symbol, p);
+      return p;
+    },
+    clear() {
+      store.clear();
+      inflight.clear();
+    }
+  };
+}
+function createHourlyCache(fetchRange, opts = {}) {
+  const maxBars = opts.maxBars ?? 2500;
+  const now = opts.now ?? Date.now;
+  const store = /* @__PURE__ */ new Map();
+  const slice = (candles, fromMs, toMs) => candles.filter((c) => c.time * 1e3 >= fromMs && c.time * 1e3 < toMs);
+  return {
+    async get(symbol, fromMs, toMs) {
+      const start = Math.floor(fromMs / HOUR3) * HOUR3;
+      const lastClosed = Math.floor(now() / HOUR3) * HOUR3;
+      const end = Math.min(toMs, lastClosed);
+      if (end <= start) return [];
+      let entry = store.get(symbol);
+      if (!entry) {
+        const fetched = mergeCandles([], await fetchRange(symbol, start, end));
+        const trimmed = fetched.length > maxBars ? fetched.slice(-maxBars) : fetched;
+        const minMs2 = trimmed.length ? Math.min(start, trimmed[0].time * 1e3) : start;
+        entry = { minMs: minMs2, maxMs: end, candles: trimmed };
+        store.set(symbol, entry);
+        return slice(entry.candles, start, end);
+      }
+      let candles = entry.candles;
+      let minMs = entry.minMs;
+      let maxMs = entry.maxMs;
+      if (start < minMs) {
+        const head = await fetchRange(symbol, start, minMs);
+        candles = mergeCandles(candles, head);
+        minMs = start;
+      }
+      if (end > maxMs) {
+        const tail = await fetchRange(symbol, maxMs, end);
+        candles = mergeCandles(candles, tail);
+        maxMs = end;
+      }
+      if (candles.length > maxBars) {
+        candles = candles.slice(-maxBars);
+        minMs = Math.max(minMs, candles[0].time * 1e3);
+      }
+      store.set(symbol, { minMs, maxMs, candles });
+      return slice(candles, start, end);
+    },
+    clear() {
+      store.clear();
+    }
+  };
+}
+
+// src/lib/lab/pairs.ts
+var HOUR4 = 36e5;
 function pairOf(coin, prices, priceUsd) {
   if (coin.coinId === "bitcoin") return "BTCUSDT";
   if (coin.coinId === "ethereum") return "ETHUSDT";
@@ -6547,7 +8173,7 @@ function pairOf(coin, prices, priceUsd) {
 }
 async function hourlyBetween(symbol, fromMs, toMs = Infinity) {
   const out = [];
-  let cursor = Math.floor(fromMs / HOUR3) * HOUR3;
+  let cursor = Math.floor(fromMs / HOUR4) * HOUR4;
   for (let page = 0; page < 12 && cursor < toMs; page++) {
     const chunk = await getKlines(symbol, "1h", 1e3, cursor);
     if (!chunk.length) break;
@@ -6578,6 +8204,8 @@ function temperatureSeries(btc, fngByDay, mvrvByDay) {
 // src/runner/autopilotSources.ts
 var H = 36e5;
 var memo = /* @__PURE__ */ new Map();
+var dailyCache = createDailyCache((sym, startMs) => getDailyHistory(sym, startMs), { refreshMs: 6 * H });
+var hourlyCache = createHourlyCache((sym, fromMs, toMs) => hourlyBetween(sym, fromMs, toMs));
 async function cached(key, ttlMs, load) {
   const hit = memo.get(key);
   if (hit && Date.now() - hit.at < ttlMs) return hit.value;
@@ -6591,20 +8219,36 @@ async function getJson3(url, headers = {}) {
   return await r.json();
 }
 var markets = (key, page) => getJson3(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${page}&price_change_percentage=7d,30d`, key ? { "x-cg-demo-api-key": key } : {});
+async function loadTop500(key) {
+  const p1 = await markets(key, 1);
+  const p2 = await markets(key, 2).catch(() => []);
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const row of [...p1, ...p2]) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(row);
+  }
+  return out;
+}
 async function runnerAutopilotSources(coingeckoKey, rules) {
-  const top = await cached("markets", 24 * H, () => markets(coingeckoKey, 1));
+  const top = await cached("markets:top500", 24 * H, () => loadTop500(coingeckoKey));
   const prices = await cached("prices", 10 * 6e4, getAllPrices);
+  const fundingMap = await cached("funding:all", 15 * 6e4, async () => {
+    const rows = await getJson3("https://fapi.binance.com/fapi/v1/premiumIndex").catch(() => []);
+    const map = /* @__PURE__ */ new Map();
+    for (const r of rows) {
+      const v = Number(r.lastFundingRate);
+      if (Number.isFinite(v)) map.set(r.symbol, v);
+    }
+    return map;
+  });
   const symbolOf = (coinId) => {
     const m = top.find((x) => x.id === coinId);
     return pairOf({ coinId, symbol: m?.symbol ?? coinId }, prices, m?.current_price ?? null);
   };
-  const daily = (sym) => cached(`daily:${sym}`, 6 * H, async () => {
-    const cs = await getDailyHistory(sym, Date.UTC(2017, 7, 17));
-    const last2 = cs[cs.length - 1];
-    return last2 && last2.time + 86400 > Date.now() / 1e3 ? cs.slice(0, -1) : cs;
-  });
   const temps = await cached("temps", 6 * H, async () => {
-    const btc = await daily("BTCUSDT");
+    const btc = await dailyCache.get("BTCUSDT");
     const fngRows = await getJson3("https://api.alternative.me/fng/?limit=0&format=json").then((r) => r.data).catch(() => []);
     const mvrvRows = await getJson3("https://bitcoin-data.com/v1/mvrv").catch(() => []);
     const fng = new Map(fngRows.map((x) => [new Date(Number(x.timestamp) * 1e3).toISOString().slice(0, 10), Number(x.value)]));
@@ -6612,17 +8256,30 @@ async function runnerAutopilotSources(coingeckoKey, rules) {
     return temperatureSeries(btc, fng, mvrv);
   });
   const available = await cached("cdc", 6 * H, () => getJson3("https://api.crypto.com/exchange/v1/public/get-instruments").then(parseInstruments).catch(() => null));
+  const load4h = (sym) => cached(`4h:${sym}`, 30 * 6e4, async () => {
+    const raw = await getKlines(sym, "4h", 250).catch(() => []);
+    const last2 = raw[raw.length - 1];
+    return last2 && last2.time + 4 * 3600 > Date.now() / 1e3 ? raw.slice(0, -1) : raw;
+  });
   return {
     daily: async (coinId) => {
       const s = symbolOf(coinId);
-      return s ? daily(s) : [];
+      return s ? dailyCache.get(s) : [];
     },
     hourly: async (coinId, fromMs, toMs) => {
       const s = symbolOf(coinId);
-      return s ? hourlyBetween(s, fromMs, toMs) : [];
+      return s ? hourlyCache.get(s, fromMs, toMs) : [];
+    },
+    candles4h: async (coinId) => {
+      const s = symbolOf(coinId);
+      return s ? load4h(s) : [];
+    },
+    fundingAt: (coinId) => {
+      const s = symbolOf(coinId);
+      return s ? fundingMap.get(s) ?? null : null;
     },
     temperatureAt: (day) => temps.get(day) ?? null,
-    universe: async () => topBaseUniverse(top.map((m) => ({ id: m.id, symbol: m.symbol, name: m.name, image: m.image, rank: m.market_cap_rank })), AUTOPILOT_UNIVERSE_TOP).map((u) => ({ coinId: u.id, symbol: u.symbol, name: u.name, rank: u.rank, available: available ? available.includes(u.symbol.toUpperCase()) : null })),
+    universe: async () => topBaseUniverse(top.map((m) => ({ id: m.id, symbol: m.symbol, name: m.name, image: m.image, rank: m.market_cap_rank })), AUTOPILOT_UNIVERSE_TOP).filter((u) => symbolOf(u.id) != null).map((u) => ({ coinId: u.id, symbol: u.symbol, name: u.name, rank: u.rank, available: available ? available.includes(u.symbol.toUpperCase()) : null })),
     live: async () => {
       const smallCaps = await cached("smallcaps", 24 * H, async () => {
         const pages = await Promise.allSettled([2, 3, 4, 5].map((p) => markets(coingeckoKey, p)));

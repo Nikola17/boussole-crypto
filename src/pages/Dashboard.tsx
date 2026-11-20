@@ -23,6 +23,7 @@ import { Markdown } from '../components/Markdown';
 import { fngLabel } from '../api/feargreed';
 import { WeeklyCard } from '../components/WeeklyCard';
 import { AutopilotCard } from '../components/AutopilotCard';
+import { CopyTodayCard } from './labo/CopyQueue';
 import { DisciplineCard } from '../components/DisciplineCard';
 
 import { DriftCard } from '../components/DriftCard';
@@ -176,6 +177,8 @@ export default function Dashboard() {
       </div>
 
       <MacroCard />
+
+      <CopyTodayCard />
 
       <DerivativesCard />
 

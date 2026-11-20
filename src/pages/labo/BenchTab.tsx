@@ -10,6 +10,8 @@ import { useDailyHistory } from '../../api/history';
 import { binanceSymbolFor, getAllPrices } from '../../api/binance';
 import { getFearGreed } from '../../api/feargreed';
 import { useMarkets, usePrices } from '../../hooks/useMarket';
+import { useStore } from '../../store/useStore';
+import { evaluateAiTrackRecord } from '../../lib/aiTrackRecord';
 import { CoinPicker } from '../../components/CoinPicker';
 import { Badge, Banner, Card, Field, Spinner } from '../../components/ui';
 import type { CoinRef } from '../../types';
@@ -101,6 +103,31 @@ function Replay() {
   );
 }
 
+function AiTrackRecordCard() {
+  const reports = useStore((s) => s.reports);
+  const markets = useMarkets();
+  const track = useMemo(() => {
+    const byId = new Map((markets.data ?? []).map((m) => [m.id, m.current_price]));
+    return evaluateAiTrackRecord(reports, (id) => byId.get(id) ?? null);
+  }, [reports, markets.data]);
+
+  if (!track.total) return null;
+  return (
+    <Card title="Fiabilité mesurée de tes analyses IA (AI Track Record)" subtitle={`${track.wins} verdicts directionnels gagnants sur ${track.total} (${Math.round(track.winRatePct)} %)`}>
+      <ul className="divide-y divide-line text-sm">
+        {track.byModel.map((m) => (
+          <li key={m.model} className="flex flex-wrap items-center justify-between gap-2 py-2">
+            <span className="font-medium text-ink">{m.model}</span>
+            <span className="tnum text-xs text-ink-2">
+              {m.wins}/{m.total} gagnants ({Math.round(m.winRatePct)} %) · rendement directionnel moyen {s1(m.avgReturnPct)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 export function BenchTab() {
   const entries = useMemo(() => Object.entries(RELIABILITY.entries).sort(([ka, a], [kb, b]) => ORDER.indexOf(a.verdict) - ORDER.indexOf(b.verdict) || ka.localeCompare(kb)), []);
   const from = reliabilityFromYear();
@@ -115,6 +142,7 @@ export function BenchTab() {
           </>
         )}
       </Card>
+      <AiTrackRecordCard />
       <Replay />
       <Card title="Méthode">
         <details className="text-sm text-ink-2">

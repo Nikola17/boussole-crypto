@@ -87,4 +87,49 @@ describe('règles d’exécution', () => {
     expect(b.positions.btc.stopOnClose).toBe(true);
     expect(settleBar(b, 'btc', bar(95, 96, 80, 92), ex, 'T').fill).toBeNull();
   });
+
+  it('paliers TP partiels + passage automatique du stop à l’équilibre', () => {
+    const b = applyIntent(empty(), buy({
+      sizing: { usd: 100 }, stop: 90,
+      tpLegs: [{ rMultiple: 1.5, fraction: 0.5, moveStopToBe: true }, { rMultiple: 3, fraction: 0.5 }],
+    }), 100, ex, opts).book;
+    // TP1 à ~100.05 + 1.5 * 10.05 = 115.125 : touché par la bougie 116
+    const r1 = settleBar(b, 'btc', bar(105, 116, 104, 114), ex, 'T1');
+    expect(r1.fills).toHaveLength(1);
+    expect(r1.fills[0].kind).toBe('target');
+    expect(r1.fills[0].tag).toBe('tp:1');
+    // Moitié vendue, stop remonté au breakeven (>= 100.05)
+    expect(r1.book.positions.btc.quantity).toBeCloseTo(b.positions.btc.quantity / 2, 6);
+    expect(r1.book.positions.btc.stop!).toBeGreaterThan(100);
+    expect(r1.book.positions.btc.tpLegs![0].done).toBe(true);
+    // Retour sous 100 : le stop breakeven coupe la moitié restante sans perte !
+    const r2 = settleBar(r1.book, 'btc', bar(104, 105, 98, 99), ex, 'T2');
+    expect(r2.fills[0].kind).toBe('stop');
+    expect(r2.book.positions.btc).toBeUndefined();
+  });
+
+  it('trailing stop : monte après un sommet et protège sans lookahead intra-bougie', () => {
+    const b = applyIntent(empty(), buy({
+      sizing: { usd: 100 }, stop: 90,
+      trailing: { mode: 'pct', value: 5 },
+    }), 100, ex, opts).book;
+    // Bougie 1 monte à 120 : HWM passe à 120 en fin de bougie → trailing stop devient 114
+    const r1 = settleBar(b, 'btc', bar(100, 120, 99, 118), ex, 'T1');
+    expect(r1.fills).toHaveLength(0);
+    expect(r1.book.positions.btc.highWaterMark).toBe(120);
+    expect(r1.book.positions.btc.stop).toBeCloseTo(114, 6);
+    // Bougie 2 casse 114 → sortie par trailing stop à 114
+    const r2 = settleBar(r1.book, 'btc', bar(118, 119, 112, 113), ex, 'T2');
+    expect(r2.fills[0].kind).toBe('stop');
+    expect(r2.fills[0].tag).toBe('trailing-stop');
+    expect(r2.fills[0].marketUsd).toBeCloseTo(114, 6);
+  });
+
+  it('ordre limite maker (asLimit) : écart nul et frais maker', () => {
+    const makerCosts = { feePct: 0.1, spreadPct: 0.05, makerFeePct: 0.05 };
+    const r = applyIntent(empty(), buy({ sizing: { usd: 100 } }), 100, makerCosts, { ...opts, asLimit: true });
+    expect(r.fill?.kind).toBe('limit');
+    expect(r.fill?.priceUsd).toBe(100);
+    expect(r.fill?.feeUsd).toBeCloseTo(0.05, 9);
+  });
 });

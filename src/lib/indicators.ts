@@ -271,3 +271,103 @@ export function maxDrawdown(values: number[]): number {
   }
   return mdd * 100;
 }
+
+/** ADX de Wilder (force de la tendance, 0-100 : < 20 = range, >= 25 = tendance marquée). */
+export function adx(candles: Candle[], period = 14): number[] {
+  const n = candles.length;
+  const out = new Array<number>(n).fill(NaN);
+  if (n < period * 2 + 1 || period <= 0) return out;
+  const tr = new Array<number>(n).fill(0);
+  const plusDm = new Array<number>(n).fill(0);
+  const minusDm = new Array<number>(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    const up = candles[i].high - candles[i - 1].high;
+    const down = candles[i - 1].low - candles[i].low;
+    plusDm[i] = up > down && up > 0 ? up : 0;
+    minusDm[i] = down > up && down > 0 ? down : 0;
+    const pc = candles[i - 1].close;
+    tr[i] = Math.max(candles[i].high - candles[i].low, Math.abs(candles[i].high - pc), Math.abs(candles[i].low - pc));
+  }
+  let sTr = 0, sPlus = 0, sMinus = 0;
+  for (let i = 1; i <= period; i++) { sTr += tr[i]; sPlus += plusDm[i]; sMinus += minusDm[i]; }
+  const dx = new Array<number>(n).fill(NaN);
+  const calcDx = (t: number, p: number, m: number) => {
+    if (t <= 0) return 0;
+    const pdi = (p / t) * 100;
+    const mdi = (m / t) * 100;
+    const sum = pdi + mdi;
+    return sum > 0 ? (Math.abs(pdi - mdi) / sum) * 100 : 0;
+  };
+  dx[period] = calcDx(sTr, sPlus, sMinus);
+  for (let i = period + 1; i < n; i++) {
+    sTr = sTr - sTr / period + tr[i];
+    sPlus = sPlus - sPlus / period + plusDm[i];
+    sMinus = sMinus - sMinus / period + minusDm[i];
+    dx[i] = calcDx(sTr, sPlus, sMinus);
+  }
+  let adxVal = 0;
+  for (let i = period; i < period * 2; i++) adxVal += dx[i];
+  adxVal /= period;
+  out[period * 2 - 1] = adxVal;
+  for (let i = period * 2; i < n; i++) {
+    adxVal = (adxVal * (period - 1) + dx[i]) / period;
+    out[i] = adxVal;
+  }
+  return out;
+}
+
+/** Volatilité annualisée EWMA (en %, 365 jours pour la crypto). */
+export function ewmaVolatility(closes: number[], lambda = 0.94): number {
+  if (closes.length < 10) return NaN;
+  const rets: number[] = [];
+  for (let i = 1; i < closes.length; i++) {
+    if (closes[i - 1] > 0 && closes[i] > 0) rets.push(Math.log(closes[i] / closes[i - 1]));
+  }
+  if (rets.length < 5) return NaN;
+  const seedN = Math.min(20, rets.length);
+  let variance = rets.slice(0, seedN).reduce((s, r) => s + r * r, 0) / seedN;
+  for (let i = seedN; i < rets.length; i++) {
+    variance = lambda * variance + (1 - lambda) * rets[i] * rets[i];
+  }
+  return Math.sqrt(variance * 365) * 100;
+}
+
+/** Corrélation de Pearson des rendements simples des `period` dernières périodes entre deux séries alignées à la fin. */
+export function rollingCorrelation(a: number[], b: number[], period = 30): number {
+  const n = Math.min(a.length, b.length);
+  if (n < period + 1) return NaN;
+  const ra: number[] = [];
+  const rb: number[] = [];
+  for (let k = period; k >= 1; k--) {
+    const ia = a.length - k;
+    const ib = b.length - k;
+    if (a[ia - 1] > 0 && b[ib - 1] > 0) {
+      ra.push(a[ia] / a[ia - 1] - 1);
+      rb.push(b[ib] / b[ib - 1] - 1);
+    }
+  }
+  if (ra.length < Math.max(10, Math.floor(period * 0.7))) return NaN;
+  const ma = ra.reduce((s, x) => s + x, 0) / ra.length;
+  const mb = rb.reduce((s, x) => s + x, 0) / rb.length;
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < ra.length; i++) {
+    const xa = ra[i] - ma;
+    const xb = rb[i] - mb;
+    num += xa * xb;
+    da += xa * xa;
+    db += xb * xb;
+  }
+  const den = Math.sqrt(da * db);
+  return den > 0 ? Math.max(-1, Math.min(1, num / den)) : NaN;
+}
+
+/** Z-score de la dernière valeur par rapport aux `period` dernières valeurs (incluses). */
+export function zScore(values: number[], period = 30): number {
+  if (values.length < period || period < 2) return NaN;
+  const slice = values.slice(-period);
+  if (slice.some((v) => !Number.isFinite(v))) return NaN;
+  const mean = slice.reduce((s, v) => s + v, 0) / period;
+  const variance = slice.reduce((s, v) => s + (v - mean) ** 2, 0) / period;
+  const sd = Math.sqrt(variance);
+  return sd > 1e-12 ? (slice[slice.length - 1] - mean) / sd : 0;
+}

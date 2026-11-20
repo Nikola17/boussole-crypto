@@ -63,4 +63,23 @@ describe('simulateur', () => {
   it('déterministe', () => {
     expect(simulate(test, test.defaults, data(), cfg())).toEqual(simulate(test, test.defaults, data(), cfg()));
   });
+  it('univers simulé : aligné sur le top 500 par défaut et surchargeable par la stratégie ou la config', () => {
+    const longCandles = (v: number): Candle[] => Array.from({ length: 210 }, (_, i) => ({ time: T0 + i * D, open: 100, high: 101, low: 99, close: 100, volume: v }));
+    const assets = Array.from({ length: 25 }, (_, i) => makeAsset(i === 0 ? 'BTC' : `C${i}`, longCandles(1000 - i)));
+    const seen: number[] = [];
+    const probe: Strategy<Record<string, never>> = {
+      id: 'probe', version: 1, label: 'Probe', describe: '', defaults: {}, uses: [], replayable: true, kind: 'trades',
+      deposit: () => 0,
+      decide: (ctx) => { seen.push(ctx.universe.length); return []; },
+    };
+    const simCfg = cfg({ from: day(201), to: day(202) });
+    simulate(probe, {}, { assets, temperature: new Map(), btcId: 'BTC' }, simCfg);
+    expect(seen[0]).toBe(25); // plus bridé à 20
+    seen.length = 0;
+    simulate({ ...probe, universeTop: 10 }, {}, { assets, temperature: new Map(), btcId: 'BTC' }, simCfg);
+    expect(seen[0]).toBe(10);
+    seen.length = 0;
+    simulate(probe, {}, { assets, temperature: new Map(), btcId: 'BTC' }, { ...simCfg, universeTop: 7 });
+    expect(seen[0]).toBe(7);
+  });
 });

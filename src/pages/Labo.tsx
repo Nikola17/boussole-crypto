@@ -8,10 +8,12 @@ import { useMarkets } from '../hooks/useMarket';
 import { GhostCard } from './Paper';
 import { PortfoliosTab } from './labo/Portfolios';
 import { AutopilotCards, AutopilotDetail, LeaderboardTab } from './labo/Autopilots';
+import { CopyQueueTab } from './labo/CopyQueue';
+import { ArenaTab } from './labo/ArenaTab';
 import { BenchTab } from './labo/BenchTab';
 import { GridBacktestCard } from '../components/GridBacktestCard';
 
-type Tab = 'papier' | 'classement' | 'fantomes' | 'banc';
+type Tab = 'papier' | 'copier' | 'arene' | 'classement' | 'fantomes' | 'banc';
 
 function Ghosts() {
   const markets = useMarkets();
@@ -24,14 +26,18 @@ export default function Labo({ initialTab }: { initialTab?: Tab }) {
   const tab = ((query.get('tab') as Tab | null) ?? initialTab ?? 'papier');
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader title="Labo" subtitle="Teste sans risquer un euro : ordres fictifs aux prix réels, achats que tu n’as pas faits, et ce que valent vraiment les signaux de Boussole sur l’historique." />
+      <PageHeader title="Labo" subtitle="Teste sans risquer un euro : autopilotes quotidiens, tickets prêts à copier, arène comparative, achats fantômes et banc d’essai quantitatif." />
       <Segmented value={tab} onChange={(v) => setQuery({ tab: v })} options={[
         { value: 'papier', label: 'Portefeuilles papier' },
+        { value: 'copier', label: 'À copier' },
+        { value: 'arene', label: 'Arène' },
         { value: 'classement', label: 'Classement' },
         { value: 'fantomes', label: 'Achats fantômes' },
         { value: 'banc', label: 'Banc d’essai' },
       ]} />
       {tab === 'papier' && <PortfoliosTab autoCards={(open) => <AutopilotCards open={open} />} renderAuto={(p, back) => <AutopilotDetail p={p} onBack={back} />} />}
+      {tab === 'copier' && <CopyQueueTab />}
+      {tab === 'arene' && <ArenaTab />}
       {tab === 'classement' && <LeaderboardTab />}
       {tab === 'fantomes' && <Ghosts />}
       {tab === 'banc' && <div className="space-y-4"><BenchTab /><GridBacktestCard /></div>}

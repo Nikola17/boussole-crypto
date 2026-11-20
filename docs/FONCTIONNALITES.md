@@ -293,6 +293,15 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 - **Menu de 13 à 9 entrées** : Cockpit, Signaux, DCA, Wallet, Labo, Pépites (avec Smart money et Airdrops en onglets), Trading, Copilote IA, Plus (Rendement & DeFi, Guide & profil, Réglages). « Narratives du jour » et « Les plus recherchées » passent du Cockpit à Pépites → Narratives. Les anciennes adresses restent valides.
 - **Données v5** : thèses, checklist et ancien réglage du papier sont retirés (copie de précaution avant migration) ; les paliers de vente des thèses deviennent des paliers personnalisés. Un appareil resté en 1.27 passe en lecture seule jusqu'à sa mise à jour.
 
+### v2.0.0 — Moteur quantitatif, Paper Trading quotidien actif & Centre Copy-Trading (Lots 0 → 6)
+
+- **Lot 0 — Fondations & Top 500** : marché global et univers autopilotes élargis au **Top 500 CoinGecko** (filtré sur paires Binance, scan réglable jusqu'au Top 500), alignement du simulateur `sim.ts` sur le même univers, frais maker Binance VIP/BNB déduits dans le backtest Grid, cache incrémental 1D & 1H (App + VPS).
+- **Lot 1 — Moteur d'exécution V2 & Régimes** : détecteur de régime 4 états avec hystérésis 3 j (`BULL_TREND`, `BEAR_TREND`, `RANGE_CHOP`, `EXTREME_STRESS`), Feature Store causal (`rs7d/30d/90d`, `sharpeMom`, vol EWMA, corrélation BTC, ADX, funding batch Binance fapi), paliers TP partiels avec passage automatique du stop à l'équilibre, trailing stop ATR/% sans biais intra-bougie, ordres limites maker, Risk Overlay portefeuille (*Heat Cap*, corrélation, *Drawdown Scaling*), et cadence multi-créneaux 4H.
+- **Lots 2 & 5 — 10 nouvelles stratégies d'autopilotes (14 au total, limite portée à 12 actifs)** : **Méta-Allocateur All-Weather**, **Retour à la moyenne (Quotidien)**, **Rotation Momentum (Leaders)**, **Trend Donchian + Trailing**, **Swing 4H Actif (4×/jour)**, **Grid Auto Adaptatif**, **Funding Contrarian**, **Arbitrage Statistique (Z-Score)**, **Smart Money Shadow** et **Catalyseur & Scoring Probabiliste** (régression logistique L2 calibrée).
+- **Lot 3 — Centre « À copier aujourd'hui » & Telegram Pro** : onglet Labo « À copier » + carte Cockpit avec tickets d'ordres prêts à exécuter (sizing réel calculé, prix limite, max chase, stop/TP, liens Binance & Crypto.com, copie presse-papiers), clôture en 1 clic des trades réels copiés, décomposition d'écart Papier→Réel (frais, slippage, délai, manqués) et alertes Telegram prioritaires sur clôture de position copiée.
+- **Lot 4 — Banc d'essai 2.0** : ratios institutionnels (**Sharpe, Sortino, Calmar, Ulcer Index, Exposition, Alpha/Beta**), simulation **Monte Carlo** par blocs, détecteur d'**Alpha Decay** et commandes CLI **Walk-Forward (`npm run bench -- wfo <id>`)** et **Monte Carlo (`npm run bench -- montecarlo <id>`)**.
+- **Lot 6 — Arène UX, AI Track Record & Imports Multi-Exchanges** : onglet **Arène** (multi-courbes normalisées base 100, Heatmap P&L quotidien 60 j, tableau quantitatif complet), notation réelle des verdicts IA (**AI Track Record** par modèle), import CSV auto-détecté **Binance / Kraken / Coinbase** en plus de Crypto.com, compactage automatique des `paperDays` vides anciens, et résumé autopilotes assaini sur le dashboard VPS.
+
 ### v1.38.1 — Correctif : mise à jour embarquée Android (et plugins natifs) réparés
 
 - **Cause racine** : depuis Capacitor 6+, `window.Capacitor.Plugins[...]` n'est plus rempli pour les plugins natifs — il faut un proxy `registerPlugin()`. Conséquence : la mise à jour embarquée Android échouait silencieusement (« la mise à jour embarquée exige la version installée »), et au passage le verrou biométrique, le keystore (secrets) et le widget Android étaient invisibles. Tout passe désormais par `registerPlugin` (`src/lib/capPlugins.ts`), avec secours sur l'ancien accès.
@@ -376,20 +385,15 @@ Une seule version regroupe les cinq lots de la fiche `docs/superpowers/specs/202
 
 ### Priorité haute
 1. **Import CSV des autres plateformes** (Binance, Coinbase, Kraken, Bitpanda) sur le modèle de l'import Crypto.com.
-2. Alertes plus complètes (changement de zone du marché, euphorie) : LIVRÉES en v1.9.0 — calculées par le runner du VPS, elles arrivent sur Telegram même application fermée.
-3. **Calendrier des déblocages de tokens** (Tokenomist) sur les positions et la watchlist, avec alerte J-7 : aucune source gratuite fiable aujourd'hui.
-
-### Priorité moyenne
-4. **Suivi des « smart money »** : wallets publics de fonds et de traders réputés, avec alerte quand ils achètent un token.
-5. **Backtest des signaux** Boussole sur chaque crypto (performance de la stratégie vs achat-conservation).
-6. **Délai de réflexion de 24 h** obligatoire avant un achat hors panier sur une crypto à +50 % en 7 jours (le panier applique déjà la règle).
-7. **Révocation des approbations** : détection des autorisations à risque sur les wallets EVM suivis.
+2. **Moteur d'exécution Paper Trading v2 & stratégies quotidiennes** : trailing stop, TP partiels, ordres limites maker, détecteur de régime 4 états, nouvelles stratégies actives (rotation momentum, retour à la moyenne, swing 4H, grid auto, arbitrage statistique, méta-allocateur) et centre unifié « À copier aujourd'hui ».
+3. **Banc d'essai 2.0** : Walk-Forward Optimization, simulation Monte Carlo, métriques Sharpe/Sortino/Calmar et détection d'alpha decay.
 
 ### Pour plus tard
-8. Lecture des positions DeFi (prêts, pools de liquidité, staking) sur les wallets suivis.
-9. Widget Android (température du marché et valeur du portefeuille sur l'écran d'accueil).
-10. Rapport mensuel PDF (performance, respect des règles).
-11. Version iOS (Capacitor la permet, mais il faut un Mac pour compiler).
+4. Lecture automatique des positions DeFi (prêts, pools de liquidité, staking) sur les wallets suivis.
+5. Rapport mensuel PDF (export Markdown déjà livré en v1.33.0).
+6. Calendrier automatique des déblocages de tokens si une source gratuite fiable redevient disponible (suivi manuel + alertes Telegram J-1/J-0 livrés en v1.31.0 / v1.35.0).
+
+*(Les anciennes idées « Alertes de zone », « Smart money », « Backtest des signaux », « Anti-FOMO 24 h », « Scanner d'approvals EVM », « Widget Android/Windows » et « Projet iOS » ont toutes été livrées entre v1.9.0 et v1.35.0.)*
 
 ## Limites connues
 - La synchronisation tourne quand l'application est ouverte (au lancement, après tes modifications, toutes les 15 minutes) : une saisie faite hors ligne sur un appareil n'arrive sur l'autre qu'au prochain cycle des deux côtés. La phrase de passe et le jeton ne sont pas récupérables : garde-les (coffre-fort de mots de passe).

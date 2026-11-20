@@ -43,7 +43,7 @@ export function importableSettings(s: unknown): Partial<Settings> {
   if (typeof out.binanceVip !== 'number' || !Number.isFinite(out.binanceVip) || out.binanceVip < 0 || out.binanceVip > 9) delete out.binanceVip;
   if (typeof out.bnbFeeDiscount !== 'boolean') delete out.bnbFeeDiscount;
   if (typeof out.taxRatePct !== 'number' || !Number.isFinite(out.taxRatePct) || out.taxRatePct < 0 || out.taxRatePct > 100) delete out.taxRatePct;
-  if (out.scanSize !== 50 && out.scanSize !== 100) delete out.scanSize;
+  if (out.scanSize !== 50 && out.scanSize !== 100 && out.scanSize !== 250 && out.scanSize !== 500) delete out.scanSize;
   for (const k of ['briefingAuto', 'aiWebSearch'] as const) if (typeof out[k] !== 'boolean') delete out[k];
   for (const k of ['aiModel', 'compatModel', 'mistralModel'] as const) if (typeof out[k] !== 'string' || !(out[k] as string).trim()) delete out[k];
   return out as Partial<Settings>;

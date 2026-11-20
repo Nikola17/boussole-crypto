@@ -531,6 +531,7 @@ Prépare ta décision : vendre, garder, ou attendre — et à quel palier.` });
         btcPrice: priceRows.bitcoin ?? null,
         unlocks: watch.unlocks, launchEvents: watch.launchEvents,
         syncSavedAt: bundle.savedAt ?? null, syncDevice: bundle.device ?? null,
+        autopilots: autopilotLines,
       }));
     } catch { /* le dashboard ne doit jamais casser la surveillance */ }
   }

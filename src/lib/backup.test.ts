@@ -57,6 +57,8 @@ describe('vérification d’un fichier de sauvegarde', () => {
     expect(importableSettings({ currency: 'BTC', theme: 'rose', taxRatePct: 900, scanSize: 7, briefingAuto: 'oui', aiModel: '' })).toEqual({});
     expect(importableSettings('x')).toEqual({});
     expect(importableSettings({ scanSize: 100, aiWebSearch: false, compatModel: 'deepseek/deepseek-v4.1-flash' })).toEqual({ scanSize: 100, aiWebSearch: false, compatModel: 'deepseek/deepseek-v4.1-flash' });
+    expect(importableSettings({ scanSize: 250 })).toEqual({ scanSize: 250 });
+    expect(importableSettings({ scanSize: 500 })).toEqual({ scanSize: 500 });
   });
 
   it('remet en forme le JSON des rapports IA importés', () => {
