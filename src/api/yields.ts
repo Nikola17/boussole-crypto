@@ -50,12 +50,47 @@ export async function getProjectTopPools(project: string, limit = 4): Promise<Pr
   }
 }
 
-/** Projets DEX suivis dans l'onglet Earn (Solana + Hyperliquid). */
+/** Projets DEX suivis par défaut dans l'onglet Earn (Solana, Base, EVM & Hyperliquid). */
 export const DEFI_PROJECTS: { slug: string; label: string; url: string }[] = [
+  { slug: 'uniswap-v3', label: 'Uniswap V3 (EVM)', url: 'https://app.uniswap.org' },
+  { slug: 'pancakeswap-amm-v3', label: 'PancakeSwap V3 (BNB / EVM)', url: 'https://pancakeswap.finance' },
+  { slug: 'aerodrome-slipstream', label: 'Aerodrome (Base)', url: 'https://aerodrome.finance' },
   { slug: 'jupiter', label: 'Jupiter (Solana)', url: 'https://jup.ag' },
-  { slug: 'orca', label: 'Orca (Solana)', url: 'https://www.orca.so' },
-  { slug: 'raydium', label: 'Raydium (Solana)', url: 'https://raydium.io' },
+  { slug: 'orca-dex', label: 'Orca (Solana)', url: 'https://www.orca.so' },
+  { slug: 'raydium-amm', label: 'Raydium (Solana)', url: 'https://raydium.io' },
   { slug: 'hyperliquid', label: 'Hyperliquid (HYPE)', url: 'https://app.hyperliquid.xyz' },
+  { slug: 'curve-dex', label: 'Curve (EVM)', url: 'https://curve.fi' },
+];
+
+/** Catalogue étendu de DEX compatibles DefiLlama (sélectionnables à la demande dans l'onglet Earn). */
+export const EXTRA_DEFI_PROJECTS: { slug: string; label: string; url: string }[] = [
+  { slug: 'meteora-dlmm', label: 'Meteora (Solana)', url: 'https://app.meteora.ag' },
+  { slug: 'gmx-v2-perps', label: 'GMX V2 (Arbitrum / Avax)', url: 'https://app.gmx.io' },
+  { slug: 'balancer-v2', label: 'Balancer V2 (EVM)', url: 'https://app.balancer.fi' },
+  { slug: 'sushiswap', label: 'SushiSwap (EVM)', url: 'https://www.sushi.com' },
+  { slug: 'trader-joe-dex', label: 'LFJ / Trader Joe (Avax / Arb)', url: 'https://lfj.gg' },
+  { slug: 'velodrome-v2', label: 'Velodrome (Optimism)', url: 'https://velodrome.finance' },
+  { slug: 'fluid-dex', label: 'Fluid (EVM)', url: 'https://fluid.io' },
+  { slug: 'drift', label: 'Drift (Solana)', url: 'https://app.drift.trade' },
+  { slug: 'camelot-v3', label: 'Camelot (Arbitrum)', url: 'https://app.camelot.exchange' },
+  { slug: 'quickswap-v3', label: 'QuickSwap (Polygon)', url: 'https://quickswap.exchange' },
+  { slug: 'ekubo', label: 'Ekubo (Starknet / ETH)', url: 'https://app.ekubo.org' },
+  { slug: 'ambient', label: 'Ambient (EVM)', url: 'https://ambient.finance' },
+  { slug: 'maverick-v2', label: 'Maverick (EVM)', url: 'https://app.mav.xyz' },
+  { slug: 'dodo', label: 'DODO (EVM)', url: 'https://app.dodoex.io' },
+  { slug: 'cetus-amm', label: 'Cetus (Sui / Aptos)', url: 'https://app.cetus.zone' },
+  { slug: 'bluefin-amm', label: 'Bluefin (Sui)', url: 'https://trade.bluefin.io' },
+  { slug: 'thala-lsd', label: 'Thala (Aptos)', url: 'https://app.thala.fi' },
+  { slug: 'ston.fi', label: 'STON.fi (TON)', url: 'https://app.ston.fi' },
+  { slug: 'dedust', label: 'DeDust (TON)', url: 'https://dedust.io' },
+  { slug: 'osmosis-dex', label: 'Osmosis (Cosmos)', url: 'https://app.osmosis.zone' },
+  { slug: 'syncswap', label: 'SyncSwap (zkSync)', url: 'https://syncswap.xyz' },
+  { slug: 'gains-network', label: 'Gains Network / gTrade', url: 'https://gains.trade' },
+  { slug: 'synthetix', label: 'Synthetix (Optimism / Base)', url: 'https://www.synthetix.io' },
+  { slug: 'woofi-earn', label: 'WOOFi (Multi-chain)', url: 'https://fi.woo.org' },
+  { slug: 'shadow-exchange', label: 'Shadow (Sonic)', url: 'https://www.shadow.so' },
+  { slug: 'bancor-v3', label: 'Bancor (Ethereum)', url: 'https://bancor.network' },
+  { slug: 'spookyswap', label: 'SpookySwap (Sonic / Fantom)', url: 'https://spooky.fi' },
 ];
 
 // ---------------------------------------------------------------- comparateur

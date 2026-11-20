@@ -9,6 +9,7 @@ import { fmtMoney, fmtNum, isoDay, uid } from '../lib/format';
 import { isStable } from '../lib/portfolio';
 import { eurPerUsdOn, FALLBACK_EUR_PER_USD } from '../lib/fx';
 import { outsideDcaCheck, impulseVerdict, panicVerdict, FOMO_WAIT_MS } from '../lib/rules';
+import { CEX_PLATFORMS, DEX_PLATFORMS } from '../lib/platforms';
 import type { CoinRef, DcaPlan, PriceAlert, TradeEntry, Transaction, TxType } from '../types';
 import type { Currency } from '../lib/format';
 import { CoinPicker } from './CoinPicker';
@@ -379,7 +380,12 @@ export function DcaPlanModal({ open, onClose, initial, presetCoin }: { open: boo
             {Object.entries(STRATEGY_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </Select>
         </Field>
-        <Field label="Plateforme (facultatif)"><Input value={exchange} onChange={(e) => setExchange(e.target.value)} placeholder="Ex : Coinbase, Kraken, Bitpanda…" /></Field>
+        <Field label="Plateforme (facultatif)">
+          <Input list="boussole-dca-platforms" value={exchange} onChange={(e) => setExchange(e.target.value)} placeholder="Ex : Binance, Kraken, Bitpanda, Uniswap, Hyperliquid…" />
+          <datalist id="boussole-dca-platforms">
+            {[...CEX_PLATFORMS, ...DEX_PLATFORMS].map((p) => <option key={p.id} value={p.name} />)}
+          </datalist>
+        </Field>
         <Toggle checked={reminder} onChange={setReminder} label="Rappel le jour de l’achat" hint="Notification à 9 h sur Android. Sur ordinateur, l’échéance s’affiche dans l’application, sans notification séparée." />
         <p className="text-xs text-muted">≈ {fmtMoney(monthly, currency, 0)} par mois en mode classique{budget ? ` (budget mensuel du profil : ${fmtMoney(budget, currency, 0)})` : ''}.</p>
       </div>

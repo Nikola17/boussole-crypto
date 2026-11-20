@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyApproval, humanAllowance, isKnownSpender, isUnlimited } from './approvals';
+import { classifyApproval, humanAllowance, isKnownSpender, isUnlimited, spenderName } from './approvals';
 
 const MAX = `0x${'f'.repeat(64)}`;
 const UNLIM = `0x${'8'.padStart(64, '0')}${'0'.repeat(63)}`; // 2^255
@@ -29,5 +29,14 @@ describe('approvals', () => {
     expect(c.active).toBe(true);
     expect(c.risky).toBe(false);
     expect(c.human).toBeCloseTo(100);
+  });
+
+  it('reconnaît les routeurs majeurs des 50 DEX (PancakeSwap, CoW Swap, Aerodrome, GMX, Velora, KyberSwap…)', () => {
+    expect(spenderName('0x13f4ea83d0bd40e75c8222255bc855a974568dd4')).toContain('PancakeSwap');
+    expect(spenderName('0xc92e8bdf79f0507f65a392b0ab4667716bfe0110')).toContain('CoW Swap');
+    expect(spenderName('0xcf77a3ba9a5ca399b7c97c74d54e5b1beb874e43')).toContain('Aerodrome');
+    expect(spenderName('0x7c68c7866a64fa2160f78eeae12217ffbf871fa8')).toContain('GMX');
+    expect(spenderName('0x6a000f20005980200259b80c5102003040001068')).toContain('Velora');
+    expect(isKnownSpender('0x6131b5fae19ea4f9d964eac0408e4408b66337b5')).toBe(true);
   });
 });

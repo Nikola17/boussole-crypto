@@ -8,7 +8,8 @@ import { searchCoins } from '../api/coingecko';
 import {
   buildCryptoComTransactions, CLASS_LABEL, parseCryptoComCsv, resolveSymbols, type ImportClass, type ParsedCryptoCom,
 } from '../lib/importers/cryptocom';
-import { buildExchangeTransactions, detectExchangeCsv, parseExchangeCsv, type ParsedExchangeCsv } from '../lib/importers/exchanges';
+import { buildExchangeTransactions, detectExchangeCsv, EXCHANGE_LABELS, parseExchangeCsv, type ParsedExchangeCsv } from '../lib/importers/exchanges';
+import { CEX_PLATFORMS, DEX_PLATFORMS, findPlatform } from '../lib/platforms';
 import { fmtDate, fmtQty } from '../lib/format';
 import { dayBeforeFirst, matchManualEntries, missingStock } from '../lib/stock';
 import type { CoinRef, Transaction } from '../types';
@@ -30,6 +31,7 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
   const [parsed, setParsed] = useState<ParsedCryptoCom | null>(null);
   const [parsedExchange, setParsedExchange] = useState<ParsedExchangeCsv | null>(null);
   const [account, setAccount] = useState(NEW_ACCOUNT);
+  const [genericPlatformId, setGenericPlatformId] = useState('binance');
   const [classes, setClasses] = useState<Record<string, ImportClass>>({});
   const [depositFrom, setDepositFrom] = useState('external');
   const [withdrawTo, setWithdrawTo] = useState('external');
@@ -116,10 +118,19 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
   function doImport() {
     if (!parsed?.ok && !parsedExchange?.ok) return;
     let id = account;
-    const exchangeLabel = parsedExchange?.exchange ? parsedExchange.exchange[0].toUpperCase() + parsedExchange.exchange.slice(1) : 'Crypto.com';
+    const isGeneric = parsedExchange?.exchange === 'generic';
+    const pickedPlatform = isGeneric ? findPlatform(genericPlatformId) : parsedExchange?.exchange ? findPlatform(parsedExchange.exchange) : findPlatform('cryptocom');
+    const exchangeLabel = pickedPlatform?.name ?? (parsedExchange?.exchange ? EXCHANGE_LABELS[parsedExchange.exchange] : 'Crypto.com');
     if (account === NEW_ACCOUNT) {
       id = newId();
-      upsertAccount({ id, name: exchangeLabel, kind: 'exchange', walletIds: [], createdAt: new Date().toISOString() });
+      upsertAccount({
+        id,
+        name: exchangeLabel,
+        kind: pickedPlatform?.accountKind ?? 'exchange',
+        ...(pickedPlatform ? { platformId: pickedPlatform.id } : {}),
+        walletIds: [],
+        createdAt: new Date().toISOString(),
+      });
     }
     const out = parsed?.ok
       ? buildCryptoComTransactions(parsed, { accountId: id, classByKind: classes, symbols, depositFrom, withdrawTo, fxEurPerUsd: fx })
@@ -141,6 +152,11 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
 
   const otherAccounts = accounts.filter((a) => a.id !== account);
   const anyOk = !!(parsed?.ok || parsedExchange?.ok);
+  const newAccountLabel = parsedExchange?.exchange === 'generic'
+    ? (findPlatform(genericPlatformId)?.name ?? 'Plateforme')
+    : parsedExchange?.exchange
+      ? EXCHANGE_LABELS[parsedExchange.exchange]
+      : 'Crypto.com';
   const footer = result ? (
     <Button variant="primary" onClick={onClose}>Fermer</Button>
   ) : (
@@ -151,7 +167,7 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
   );
 
   return (
-    <Modal open={open} onClose={onClose} wide title="Importer un historique CSV (Crypto.com, Binance, Kraken, Coinbase)" footer={footer}>
+    <Modal open={open} onClose={onClose} wide title="Importer un historique CSV (50 plateformes & DEX)" footer={footer}>
       {result ? (
         <Banner tone="success" title={`${result.added} transaction${result.added > 1 ? 's' : ''} ajoutée${result.added > 1 ? 's' : ''}`}>
           {result.skipped > 0 ? `${result.skipped} déjà présente${result.skipped > 1 ? 's' : ''} (ignorée${result.skipped > 1 ? 's' : ''}, aucun doublon). ` : ''}
@@ -161,7 +177,7 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
         </Banner>
       ) : !anyOk ? (
         <div className="space-y-3">
-          <p className="text-sm text-ink-2">Formats détectés automatiquement : <b className="text-ink">Crypto.com</b>, <b className="text-ink">Binance</b> (historique Spot), <b className="text-ink">Kraken</b> (Ledger) et <b className="text-ink">Coinbase</b> (Transactions). Le fichier reste sur ton appareil.</p>
+          <p className="text-sm text-ink-2">Détection native pour <b className="text-ink">Crypto.com, Binance, Coinbase, Kraken, Bybit, OKX, Bitget, KuCoin, MEXC, Gate, Bitpanda, Bitvavo, HTX, Bitfinex, Bitstamp, Gemini, BingX, Pionex, WhiteBIT</b> + lecteur <b className="text-ink">CSV universel</b> pour les 50 plateformes centralisées et DEX. Le fichier reste 100 % sur ton appareil.</p>
           <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void onFile(e.target.files?.[0])} />
           <Button variant="primary" icon={<FileUp className="size-4" />} onClick={() => fileRef.current?.click()}>Choisir le fichier CSV</Button>
           {fileName && <p className="text-xs text-muted">{fileName}</p>}
@@ -170,13 +186,25 @@ export function ImportCryptoCom({ open, onClose }: { open: boolean; onClose: () 
       ) : (
         <div className="space-y-4">
           <div className="rounded-lg bg-surface-2 p-3 text-sm text-ink-2">
-            <b className="text-ink">{fileName}</b>{parsedExchange?.exchange ? ` · format ${parsedExchange.exchange.toUpperCase()} détecté` : ''} · {parsed ? parsed.rows.length : parsedExchange?.rows.length ?? 0} lignes{parsed?.range ? ` · du ${fmtDate(parsed.range.from)} au ${fmtDate(parsed.range.to)}` : ''} · {activeSymbols.length} cryptos
+            <b className="text-ink">{fileName}</b>{parsedExchange?.exchange ? ` · format ${EXCHANGE_LABELS[parsedExchange.exchange]} détecté` : ''} · {parsed ? parsed.rows.length : parsedExchange?.rows.length ?? 0} lignes{parsed?.range ? ` · du ${fmtDate(parsed.range.from)} au ${fmtDate(parsed.range.to)}` : ''} · {activeSymbols.length} cryptos
             {parsed && parsed.invalidRows > 0 && <span className="text-down"> · {parsed.invalidRows} ligne{parsed.invalidRows > 1 ? 's' : ''} illisible{parsed.invalidRows > 1 ? 's' : ''}</span>}
           </div>
+          {parsedExchange?.exchange === 'generic' && account === NEW_ACCOUNT && (
+            <Field label="Plateforme source (CSV universel)" hint="Choisis la plateforme correspondante pour créer le bon compte.">
+              <Select value={genericPlatformId} onChange={(e) => setGenericPlatformId(e.target.value)}>
+                <optgroup label="Plateformes centralisées (50)">
+                  {CEX_PLATFORMS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </optgroup>
+                <optgroup label="Plateformes décentralisées (50)">
+                  {DEX_PLATFORMS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </optgroup>
+              </Select>
+            </Field>
+          )}
           <Field label="Compte qui reçoit ces opérations">
             <Select value={account} onChange={(e) => setAccount(e.target.value)}>
               {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              <option value={NEW_ACCOUNT}>Nouveau compte « {parsedExchange?.exchange ? parsedExchange.exchange[0].toUpperCase() + parsedExchange.exchange.slice(1) : 'Crypto.com'} »</option>
+              <option value={NEW_ACCOUNT}>Nouveau compte « {newAccountLabel} »</option>
             </Select>
           </Field>
           {parsed?.ok && (

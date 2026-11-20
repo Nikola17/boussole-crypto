@@ -5,7 +5,11 @@ import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { useFx, useMarkets, usePrices } from './useMarket';
 import { buildPositions, allocation, type Position } from '../lib/portfolio';
-import { getBtcBalance, getEvmBalances, getSolanaHoldings, scanXpub, xpubNote, type WalletHolding, type WalletResult } from '../api/wallets';
+import {
+  getAptosHoldings, getBtcBalance, getCosmosHoldings, getEvmBalances, getHyperliquidHoldings,
+  getSolanaHoldings, getSuiHoldings, getTonHoldings, normalizeWalletAddress, scanXpub, xpubNote,
+  type WalletHolding, type WalletResult,
+} from '../api/wallets';
 import { getAllPrices } from '../api/binance';
 import { getBinanceAccount } from '../api/binanceAccount';
 import { buildExchangeHoldings } from '../lib/exchangeHoldings';
@@ -20,21 +24,43 @@ async function fetchWallet(w: WalletAddress): Promise<WalletResult> {
   const errors: string[] = [];
   const notes: string[] = [];
   let holdings: WalletHolding[] = [];
-  // Les prix BTC/EVM sont résolus ensuite à partir des données de marché déjà chargées (moins d'appels CoinGecko).
+  const addr = normalizeWalletAddress(w.address);
+  // Les prix BTC/EVM/TON/Sui/Aptos/Cosmos/Hyperliquid sont résolus ensuite à partir des données de marché déjà chargées.
   if (w.chain === 'bitcoin') {
     let q: number;
-    if (isExtendedKey(w.address)) {
-      const scan = await scanXpub(w.address, w.btcScript ?? 'auto');
+    if (isExtendedKey(addr)) {
+      const scan = await scanXpub(addr, w.btcScript ?? 'auto');
       q = scan.sats / 1e8;
       notes.push(xpubNote(scan));
-    } else q = await getBtcBalance(w.address);
+    } else q = await getBtcBalance(addr);
     holdings = [{ chain: 'Bitcoin', symbol: 'BTC', name: 'Bitcoin', quantity: q, priceUsd: null, valueUsd: null, coingeckoId: 'bitcoin' }];
   } else if (w.chain === 'evm') {
-    const { raw, errors: e } = await getEvmBalances(w.address, w.evmChains?.length ? w.evmChains : ['ethereum', 'base', 'arbitrum'], w.customTokens);
+    const { raw, errors: e } = await getEvmBalances(addr, w.evmChains?.length ? w.evmChains : ['ethereum', 'base', 'arbitrum'], w.customTokens);
     errors.push(...e);
     holdings = raw.map((r) => ({ chain: r.chain, symbol: r.symbol, name: r.symbol, quantity: r.quantity, priceUsd: null, valueUsd: null, coingeckoId: r.coingeckoId, tokenAddress: r.tokenAddress }));
+  } else if (w.chain === 'ton') {
+    const r = await getTonHoldings(addr);
+    errors.push(...r.errors);
+    holdings = r.holdings;
+  } else if (w.chain === 'sui') {
+    const r = await getSuiHoldings(addr);
+    errors.push(...r.errors);
+    holdings = r.holdings;
+  } else if (w.chain === 'aptos') {
+    const r = await getAptosHoldings(addr);
+    errors.push(...r.errors);
+    holdings = r.holdings;
+  } else if (w.chain === 'cosmos') {
+    const r = await getCosmosHoldings(addr);
+    errors.push(...r.errors);
+    holdings = r.holdings;
+  } else if (w.chain === 'hyperliquid') {
+    const r = await getHyperliquidHoldings(addr);
+    errors.push(...r.errors);
+    if (r.notes) notes.push(...r.notes);
+    holdings = r.holdings;
   } else {
-    const r = await getSolanaHoldings(w.address);
+    const r = await getSolanaHoldings(addr);
     errors.push(...r.errors);
     holdings = r.holdings;
   }
@@ -46,7 +72,7 @@ export function useWalletBalances() {
   const wallets = useStore((s) => s.wallets);
   const results = useQueries({
     queries: wallets.map((w) => ({
-      queryKey: ['wallet', w.id, w.address, w.btcScript ?? '', (w.evmChains ?? []).join(','), (w.customTokens ?? []).map((t) => `${t.chain}:${t.address}`).join(',')],
+      queryKey: ['wallet', w.id, w.chain, w.address, w.btcScript ?? '', (w.evmChains ?? []).join(','), (w.customTokens ?? []).map((t) => `${t.chain}:${t.address}`).join(',')],
       queryFn: () => fetchWallet(w),
       // Une clé publique étendue demande des dizaines de lectures : on la rafraîchit moins souvent.
       staleTime: isExtendedKey(w.address) ? 30 * 60_000 : 5 * 60_000,

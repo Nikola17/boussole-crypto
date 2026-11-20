@@ -31,13 +31,29 @@ export interface WalletResult {
   fetchedAt: number;
 }
 
-export function detectChain(address: string): WalletAddress['chain'] | null {
+export function normalizeWalletAddress(address: string): string {
   const a = address.trim();
-  if (isExtendedKey(a)) return 'bitcoin';
-  if (/^0x[a-fA-F0-9]{40}$/.test(a)) return 'evm';
-  if (/^(bc1[a-z0-9]{25,62}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/.test(a)) return 'bitcoin';
-  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)) return 'solana';
-  return null;
+  if (/^ronin:[a-fA-F0-9]{40}$/i.test(a)) return `0x${a.slice(6)}`;
+  return a;
+}
+
+/** Retourne toutes les chaînes compatibles avec une adresse (ex. 0x 40 hex = EVM ou Hyperliquid ; 0x 64 hex = Sui ou Aptos). */
+export function detectChainCandidates(address: string): WalletAddress['chain'][] {
+  const raw = address.trim();
+  if (!raw) return [];
+  if (isExtendedKey(raw)) return ['bitcoin'];
+  if (/^ronin:[a-fA-F0-9]{40}$/i.test(raw)) return ['evm'];
+  if (/^0x[a-fA-F0-9]{40}$/.test(raw)) return ['evm', 'hyperliquid'];
+  if (/^0x[a-fA-F0-9]{64}$/.test(raw)) return ['sui', 'aptos'];
+  if (/^(EQ|UQ|kQ|0Q)[A-Za-z0-9_-]{46}$/.test(raw) || /^-?\d:[a-fA-F0-9]{64}$/.test(raw)) return ['ton'];
+  if (/^(cosmos|osmo|celestia|inj|sei|neutron|dydx)1[a-z0-9]{38,59}$/.test(raw)) return ['cosmos'];
+  if (/^(bc1[a-z0-9]{25,62}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/.test(raw)) return ['bitcoin'];
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(raw)) return ['solana'];
+  return [];
+}
+
+export function detectChain(address: string): WalletAddress['chain'] | null {
+  return detectChainCandidates(address)[0] ?? null;
 }
 
 // ------------------------------------------------------------------ Bitcoin
@@ -205,6 +221,30 @@ export const EVM_CHAINS: EvmChain[] = [
       { symbol: 'USDT', address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', decimals: 6, coingeckoId: 'tether' },
     ],
   },
+  {
+    key: 'sonic', label: 'Sonic', rpc: 'https://sonic-rpc.publicnode.com',
+    native: { symbol: 'S', coingeckoId: 'sonic-3' },
+    tokens: [
+      { symbol: 'USDC', address: '0x29219dd400f2Bf60E5a23d13Be72B486D4038894', decimals: 6, coingeckoId: 'usd-coin' },
+      { symbol: 'WETH', address: '0x50c42dEAcD8Fc9773493ED674b675bE577f2634b', decimals: 18, coingeckoId: 'weth' },
+    ],
+  },
+  {
+    key: 'zksync', label: 'zkSync Era', rpc: 'https://zksync-era-rpc.publicnode.com',
+    native: { symbol: 'ETH', coingeckoId: 'ethereum' },
+    tokens: [
+      { symbol: 'USDC', address: '0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4', decimals: 6, coingeckoId: 'usd-coin' },
+      { symbol: 'ZK', address: '0x5A7d6b2F92C77FAD6CCaBd7EE0624E64907Eaf3E', decimals: 18, coingeckoId: 'zksync' },
+    ],
+  },
+  {
+    key: 'cronos', label: 'Cronos', rpc: 'https://cronos-evm-rpc.publicnode.com',
+    native: { symbol: 'CRO', coingeckoId: 'crypto-com-chain' },
+    tokens: [
+      { symbol: 'USDC', address: '0xc21223249CA28397B4B6541dfFaEcC539BfF0c59', decimals: 6, coingeckoId: 'usd-coin' },
+      { symbol: 'USDT', address: '0x66e428c3f67a68878562e79A0234c1F83c208770', decimals: 6, coingeckoId: 'tether' },
+    ],
+  },
 ];
 
 interface RpcResult { id: number; result?: string; error?: { message: string } }
@@ -359,4 +399,235 @@ export async function getSolanaHoldings(address: string): Promise<{ holdings: Wa
     });
   }
   return { holdings, errors };
+}
+
+// ------------------------------------------------------------------ TON (Tonkeeper, TON Wallet Telegram)
+
+export function parseTonBalance(raw: { ok?: boolean; result?: string | number }): WalletHolding[] {
+  const nano = Number(raw?.result);
+  if (!Number.isFinite(nano) || nano <= 0) return [];
+  return [{
+    chain: 'TON',
+    symbol: 'TON',
+    name: 'Toncoin',
+    quantity: nano / 1e9,
+    priceUsd: null,
+    valueUsd: null,
+    coingeckoId: 'the-open-network',
+  }];
+}
+
+export async function getTonHoldings(address: string): Promise<{ holdings: WalletHolding[]; errors: string[] }> {
+  try {
+    const r = await getJson<{ ok?: boolean; result?: string | number; error?: string }>(
+      `https://toncenter.com/api/v2/getAddressBalance?address=${encodeURIComponent(address)}`,
+      { timeoutMs: 15000, retries: 1 },
+    );
+    if (r.ok === false) return { holdings: [], errors: [`TON : ${r.error ?? 'erreur toncenter'}`] };
+    return { holdings: parseTonBalance(r), errors: [] };
+  } catch (e) {
+    return { holdings: [], errors: [`TON : ${(e as Error).message}`] };
+  }
+}
+
+// ------------------------------------------------------------------ Sui (Slush / Sui Wallet)
+
+const KNOWN_SUI: Record<string, { symbol: string; name: string; decimals: number; coingeckoId: string }> = {
+  '0x2::sui::SUI': { symbol: 'SUI', name: 'Sui', decimals: 9, coingeckoId: 'sui' },
+  '0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC': { symbol: 'USDC', name: 'USD Coin', decimals: 6, coingeckoId: 'usd-coin' },
+  '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN': { symbol: 'USDT', name: 'Tether', decimals: 6, coingeckoId: 'tether' },
+  '0x06864a6f921804860930db6ddbe2e16acdf8504495ea7481637a1c8b9a8fe54b::cetus::CETUS': { symbol: 'CETUS', name: 'Cetus Protocol', decimals: 9, coingeckoId: 'cetus-protocol' },
+  '0xdeeb7a4662eec9f2f3def03fb937a663dddaa2e215b8078a284d026b7946c270::deep::DEEP': { symbol: 'DEEP', name: 'DeepBook', decimals: 6, coingeckoId: 'deep' },
+  '0xe1b45a0e641b9955a20aa0ad1c1f4ad86aad8afb07296d4085e349a50e90bdca::blue::BLUE': { symbol: 'BLUE', name: 'Bluefin', decimals: 9, coingeckoId: 'bluefin' },
+};
+
+export function parseSuiBalances(list: { coinType: string; totalBalance: string }[]): WalletHolding[] {
+  const out: WalletHolding[] = [];
+  for (const item of list ?? []) {
+    const known = KNOWN_SUI[item.coinType];
+    if (!known) continue;
+    const raw = Number(item.totalBalance);
+    if (!Number.isFinite(raw) || raw <= 0) continue;
+    out.push({
+      chain: 'Sui',
+      symbol: known.symbol,
+      name: known.name,
+      quantity: raw / 10 ** known.decimals,
+      priceUsd: null,
+      valueUsd: null,
+      coingeckoId: known.coingeckoId,
+      tokenAddress: item.coinType,
+    });
+  }
+  return out;
+}
+
+export async function getSuiHoldings(address: string): Promise<{ holdings: WalletHolding[]; errors: string[] }> {
+  try {
+    const r = await postJson<{ result?: { coinType: string; totalBalance: string }[]; error?: { message: string } }>(
+      'https://fullnode.mainnet.sui.io:443',
+      { jsonrpc: '2.0', id: 1, method: 'suix_getAllBalances', params: [address] },
+      { timeoutMs: 15000, retries: 1 },
+    );
+    if (r.error) return { holdings: [], errors: [`Sui : ${r.error.message}`] };
+    return { holdings: parseSuiBalances(r.result ?? []), errors: [] };
+  } catch (e) {
+    return { holdings: [], errors: [`Sui : ${(e as Error).message}`] };
+  }
+}
+
+// ------------------------------------------------------------------ Aptos (Petra, Thala)
+
+const KNOWN_APTOS: Record<string, { symbol: string; name: string; decimals: number; coingeckoId: string }> = {
+  '0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>': { symbol: 'APT', name: 'Aptos', decimals: 8, coingeckoId: 'aptos' },
+  '0x1::coin::CoinStore<0xf22bede237a07e121b56d91a491eb7bcdfd1f5907926a9e58338f964a01b17fa::asset::USDC>': { symbol: 'USDC', name: 'USD Coin', decimals: 6, coingeckoId: 'usd-coin' },
+  '0x1::coin::CoinStore<0xf22bede237a07e121b56d91a491eb7bcdfd1f5907926a9e58338f964a01b17fa::asset::USDT>': { symbol: 'USDT', name: 'Tether', decimals: 6, coingeckoId: 'tether' },
+};
+
+export function parseAptosResources(resources: { type: string; data?: { coin?: { value?: string } } }[]): WalletHolding[] {
+  const out: WalletHolding[] = [];
+  for (const res of resources ?? []) {
+    const known = KNOWN_APTOS[res.type];
+    if (!known) continue;
+    const raw = Number(res.data?.coin?.value);
+    if (!Number.isFinite(raw) || raw <= 0) continue;
+    out.push({
+      chain: 'Aptos',
+      symbol: known.symbol,
+      name: known.name,
+      quantity: raw / 10 ** known.decimals,
+      priceUsd: null,
+      valueUsd: null,
+      coingeckoId: known.coingeckoId,
+    });
+  }
+  return out;
+}
+
+export async function getAptosHoldings(address: string): Promise<{ holdings: WalletHolding[]; errors: string[] }> {
+  try {
+    const r = await getJson<{ type: string; data?: { coin?: { value?: string } } }[]>(
+      `https://fullnode.mainnet.aptoslabs.com/v1/accounts/${encodeURIComponent(address)}/resources`,
+      { timeoutMs: 15000, retries: 1 },
+    );
+    return { holdings: parseAptosResources(Array.isArray(r) ? r : []), errors: [] };
+  } catch (e) {
+    return { holdings: [], errors: [`Aptos : ${(e as Error).message}`] };
+  }
+}
+
+// ------------------------------------------------------------------ Cosmos / Osmosis / dYdX / Celestia / Injective (Keplr, Leap)
+
+const COSMOS_NETWORKS: Record<string, { label: string; rest: string; denom: string; symbol: string; name: string; decimals: number; coingeckoId: string }> = {
+  cosmos: { label: 'Cosmos Hub', rest: 'https://cosmos-rest.publicnode.com', denom: 'uatom', symbol: 'ATOM', name: 'Cosmos', decimals: 6, coingeckoId: 'cosmos' },
+  osmo: { label: 'Osmosis', rest: 'https://osmosis-rest.publicnode.com', denom: 'uosmo', symbol: 'OSMO', name: 'Osmosis', decimals: 6, coingeckoId: 'osmosis' },
+  dydx: { label: 'dYdX Chain', rest: 'https://dydx-rest.publicnode.com', denom: 'adydx', symbol: 'DYDX', name: 'dYdX', decimals: 18, coingeckoId: 'dydx-chain' },
+  celestia: { label: 'Celestia', rest: 'https://celestia-rest.publicnode.com', denom: 'utia', symbol: 'TIA', name: 'Celestia', decimals: 6, coingeckoId: 'celestia' },
+  inj: { label: 'Injective', rest: 'https://injective-rest.publicnode.com', denom: 'inj', symbol: 'INJ', name: 'Injective', decimals: 18, coingeckoId: 'injective-protocol' },
+};
+
+export function parseCosmosBalances(prefix: string, balances: { denom: string; amount: string }[]): WalletHolding[] {
+  const net = COSMOS_NETWORKS[prefix];
+  if (!net) return [];
+  const out: WalletHolding[] = [];
+  for (const b of balances ?? []) {
+    if (b.denom !== net.denom) continue;
+    const raw = Number(b.amount);
+    if (!Number.isFinite(raw) || raw <= 0) continue;
+    out.push({
+      chain: net.label,
+      symbol: net.symbol,
+      name: net.name,
+      quantity: raw / 10 ** net.decimals,
+      priceUsd: null,
+      valueUsd: null,
+      coingeckoId: net.coingeckoId,
+    });
+  }
+  return out;
+}
+
+export async function getCosmosHoldings(address: string): Promise<{ holdings: WalletHolding[]; errors: string[] }> {
+  const prefix = address.trim().split('1')[0]?.toLowerCase() ?? '';
+  const net = COSMOS_NETWORKS[prefix];
+  if (!net) return { holdings: [], errors: [`Réseau Cosmos « ${prefix || '?'} » non pris en charge en lecture directe.`] };
+  try {
+    const r = await getJson<{ balances?: { denom: string; amount: string }[] }>(
+      `${net.rest}/cosmos/bank/v1beta1/balances/${encodeURIComponent(address)}`,
+      { timeoutMs: 15000, retries: 1 },
+    );
+    return { holdings: parseCosmosBalances(prefix, r.balances ?? []), errors: [] };
+  } catch (e) {
+    return { holdings: [], errors: [`${net.label} : ${(e as Error).message}`] };
+  }
+}
+
+// ------------------------------------------------------------------ Hyperliquid (Perps + Spot via API publique lecture seule)
+
+const HL_SPOT_IDS: Record<string, string> = {
+  USDC: 'usd-coin',
+  HYPE: 'hyperliquid',
+  PURR: 'purr-2',
+  BTC: 'bitcoin',
+  UBTC: 'bitcoin',
+  ETH: 'ethereum',
+  UETH: 'ethereum',
+  SOL: 'solana',
+  USOL: 'solana',
+};
+
+export function parseHyperliquidState(
+  perp: { marginSummary?: { accountValue?: string }; assetPositions?: { position?: { coin?: string; szi?: string } }[] } | null,
+  spot: { balances?: { coin: string; total: string }[] } | null,
+): { holdings: WalletHolding[]; notes: string[] } {
+  const holdings: WalletHolding[] = [];
+  const notes: string[] = [];
+  const perpEquity = Number(perp?.marginSummary?.accountValue ?? 0);
+  if (Number.isFinite(perpEquity) && perpEquity > 0.01) {
+    holdings.push({
+      chain: 'Hyperliquid Perps',
+      symbol: 'USDC',
+      name: 'Marge Perps Hyperliquid',
+      quantity: perpEquity,
+      priceUsd: 1,
+      valueUsd: perpEquity,
+      coingeckoId: 'usd-coin',
+    });
+  }
+  const openPos = (perp?.assetPositions ?? []).filter((p) => Math.abs(Number(p.position?.szi ?? 0)) > 0);
+  if (openPos.length) {
+    notes.push(`Hyperliquid : ${openPos.length} position${openPos.length > 1 ? 's' : ''} perp ouverte${openPos.length > 1 ? 's' : ''} (${openPos.slice(0, 4).map((p) => p.position?.coin).filter(Boolean).join(', ')})`);
+  }
+  for (const b of spot?.balances ?? []) {
+    const qty = Number(b.total);
+    if (!Number.isFinite(qty) || qty <= 1e-8) continue;
+    const sym = b.coin.toUpperCase();
+    const isUsd = sym === 'USDC' || sym === 'USDT';
+    holdings.push({
+      chain: 'Hyperliquid Spot',
+      symbol: sym,
+      name: sym,
+      quantity: qty,
+      priceUsd: isUsd ? 1 : null,
+      valueUsd: isUsd ? qty : null,
+      coingeckoId: HL_SPOT_IDS[sym],
+    });
+  }
+  return { holdings, notes };
+}
+
+export async function getHyperliquidHoldings(address: string): Promise<{ holdings: WalletHolding[]; errors: string[]; notes: string[] }> {
+  const errors: string[] = [];
+  let perp: Parameters<typeof parseHyperliquidState>[0] = null;
+  let spot: Parameters<typeof parseHyperliquidState>[1] = null;
+  await Promise.all([
+    postJson<typeof perp>('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: address }, { timeoutMs: 15000, retries: 1 })
+      .then((r) => { perp = r; })
+      .catch((e) => { errors.push(`Hyperliquid Perps : ${(e as Error).message}`); }),
+    postJson<typeof spot>('https://api.hyperliquid.xyz/info', { type: 'spotClearinghouseState', user: address }, { timeoutMs: 15000, retries: 1 })
+      .then((r) => { spot = r; })
+      .catch((e) => { errors.push(`Hyperliquid Spot : ${(e as Error).message}`); }),
+  ]);
+  const parsed = parseHyperliquidState(perp, spot);
+  return { holdings: parsed.holdings, errors, notes: parsed.notes };
 }

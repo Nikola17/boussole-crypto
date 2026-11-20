@@ -232,7 +232,7 @@ export interface Transaction extends CoinRef {
   copyOf?: { portfolioId: string; day: string; coinId: string };
 }
 
-export type WalletChain = 'bitcoin' | 'evm' | 'solana';
+export type WalletChain = 'bitcoin' | 'evm' | 'solana' | 'ton' | 'sui' | 'aptos' | 'cosmos' | 'hyperliquid';
 
 export interface CustomToken {
   chain: string; // clé de chaîne EVM
@@ -249,6 +249,8 @@ export interface WalletAddress {
   label: string;
   chain: WalletChain;
   address: string;
+  /** Identifiant du wallet ou DEX dans le catalogue (ex. 'ledger', 'metamask', 'tonkeeper', 'hyperliquid'). */
+  providerId?: string;
   evmChains?: string[];
   customTokens?: CustomToken[];
   /** Bitcoin : format d'adresses d'une clé publique étendue (xpub/ypub/zpub). */
@@ -257,15 +259,17 @@ export interface WalletAddress {
   createdAt: string;
 }
 
-export type AccountKind = 'exchange' | 'hardware' | 'hot';
+export type AccountKind = 'exchange' | 'dex' | 'hardware' | 'hot';
 
-/** Un endroit où sont rangées tes cryptos (plateforme, Ledger, Phantom…). */
+/** Un endroit où sont rangées tes cryptos (plateforme, DEX, Ledger, Phantom…). */
 export interface Account {
   // Synchronisation : date de la dernière modification de cet élément (ISO 8601).
   updatedAt?: UpdatedAt;
   id: string;
   name: string;
   kind: AccountKind;
+  /** Identifiant de la plateforme ou du portefeuille dans le catalogue (150 références). */
+  platformId?: string;
   /** Wallets suivis (adresses publiques) dont la blockchain fait foi pour ce compte. */
   walletIds: string[];
   /** Plateforme connectée en lecture seule (ses soldes font foi pour ce compte, comme un wallet). */

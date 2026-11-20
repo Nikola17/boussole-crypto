@@ -1,7 +1,7 @@
 // Rendement (staking, prêt de stablecoins) et enveloppe DeFi (petits paris bornés sur Solana).
 
 import { ExternalLink } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../store/useStore';
 import { useFx } from '../hooks/useMarket';
@@ -11,9 +11,9 @@ import { YIELD_OPTIONS, yieldRows, type YieldRow } from '../lib/staking';
 import { fmtMoney, fmtNum } from '../lib/format';
 import { openExternal } from '../lib/platform';
 import { getBinanceFlexibleEarn } from '../api/binanceAccount';
-import { getProjectTopPools } from '../api/yields';
+import { DEFI_PROJECTS, EXTRA_DEFI_PROJECTS, getProjectTopPools } from '../api/yields';
 import { Link, setQuery, useHashPath } from '../router';
-import { Badge, Banner, Card, ErrorNote, PageHeader, Segmented, Spinner } from '../components/ui';
+import { Badge, Banner, Card, ErrorNote, PageHeader, Segmented, Select, Spinner } from '../components/ui';
 import { Envelope } from '../components/Envelope';
 import { EarnTools } from '../components/EarnTools';
 import { FALLBACK_EUR_PER_USD } from '../lib/fx';
@@ -89,9 +89,8 @@ function Yields() {
   );
 }
 
-/** Onglet « Earn & plateformes » : Simple Earn Binance, pools DeFi (Jupiter, Orca, Raydium, Hyperliquid) et
- *  correspondance entre les fonctions Binance et ce que Boussole fait déjà (ou où le faire). */
-import { DEFI_PROJECTS } from '../api/yields';
+/** Onglet « Earn & plateformes » : Simple Earn Binance, pools DeFi (DEX majeurs + explorateur multi-DEX DefiLlama) et
+ *  correspondance entre les fonctions plateforme et ce que Boussole fait déjà. */
 
 const BINANCE_MAP: { binance: string; boussole: string; to?: string }[] = [
   { binance: 'Spot', boussole: 'Signaux, DCA et portefeuille suivis ici', to: '/marche' },
@@ -107,6 +106,7 @@ const BINANCE_MAP: { binance: string; boussole: string; to?: string }[] = [
 
 function Earn() {
   const binanceKey = useStore((s) => s.settings.binanceApiKey);
+  const [extraSlug, setExtraSlug] = useState('');
   const earn = useQuery({ queryKey: ['binanceEarn', binanceKey.slice(-6)], queryFn: () => getBinanceFlexibleEarn(binanceKey || undefined), staleTime: 30 * 60_000, retry: 1 });
   const projects = useQuery({
     queryKey: ['defiProjects'],
@@ -115,6 +115,14 @@ function Earn() {
       for (const p of DEFI_PROJECTS) out.push({ ...p, pools: await getProjectTopPools(p.slug) });
       return out;
     },
+    staleTime: 30 * 60_000,
+    retry: 1,
+  });
+  const extraMeta = EXTRA_DEFI_PROJECTS.find((p) => p.slug === extraSlug);
+  const extraPools = useQuery({
+    queryKey: ['defiProjectExtra', extraSlug],
+    queryFn: () => getProjectTopPools(extraSlug, 8),
+    enabled: !!extraSlug,
     staleTime: 30 * 60_000,
     retry: 1,
   });
@@ -158,6 +166,30 @@ function Earn() {
             )}
           </div>
         ))}
+        <div className="mt-4 border-t border-line pt-3">
+          <p className="mb-2 text-xs font-medium text-ink-2">Explorer un autre DEX du catalogue ({EXTRA_DEFI_PROJECTS.length} protocoles DefiLlama) :</p>
+          <Select value={extraSlug} onChange={(e) => setExtraSlug(e.target.value)} aria-label="Explorer un autre DEX">
+            <option value="">Choisir un protocole (Meteora, GMX, Cetus, STON.fi, Osmosis, Shadow…)</option>
+            {EXTRA_DEFI_PROJECTS.map((p) => <option key={p.slug} value={p.slug}>{p.label}</option>)}
+          </Select>
+          {extraSlug && extraMeta && (
+            <div className="mt-3">
+              <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-ink hover:underline" onClick={() => openExternal(extraMeta.url)}>{extraMeta.label} <ExternalLink className="size-3 text-muted" /></button>
+              {extraPools.isLoading && <div className="mt-1"><Spinner label="Lecture des pools…" /></div>}
+              {!extraPools.isLoading && (!extraPools.data || !extraPools.data.length) && <p className="mt-1 text-xs text-muted">Aucun pool trouvé sur DefiLlama pour le moment.</p>}
+              {extraPools.data && extraPools.data.length > 0 && (
+                <ul className="mt-1 divide-y divide-line">
+                  {extraPools.data.map((pool) => (
+                    <li key={pool.pool} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                      <span className="min-w-0 truncate text-ink-2">{pool.symbol} <span className="text-xs text-muted">{pool.chain}</span></span>
+                      <span className="tnum shrink-0 text-ink">{pool.apy != null ? `${fmtNum(pool.apy, 2)} %` : '—'}<span className="text-xs text-muted"> · {pool.tvlUsd != null ? `${fmtNum(pool.tvlUsd / 1e6, 1)} M$` : ''}</span></span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       </Card>
 
       <Card title="Binance ↔ Boussole : à quoi servent tes fonctions Binance ici ?" subtitle="Boussole ne remplace pas Binance : elle t’évite de devoir y aller pour décider">

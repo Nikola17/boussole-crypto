@@ -12,7 +12,8 @@ import { unlinkedOverlap } from '../lib/accounts';
 import { missingStock } from '../lib/stock';
 import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtPrice, fmtQty, shortAddress, uid } from '../lib/format';
 import { saveTextFile } from '../lib/platform';
-import { detectChain, EVM_CHAINS } from '../api/wallets';
+import { detectChainCandidates, EVM_CHAINS, normalizeWalletAddress } from '../api/wallets';
+import { CHAIN_LABEL, DEX_PLATFORMS, findPlatform, WALLET_PLATFORMS } from '../lib/platforms';
 import { Link, setQuery, useHashPath } from '../router';
 import {
   Badge, Banner, Button, Card, CoinIcon, Delta, Empty, Field, Input, Modal, NumberInput, PageHeader, Segmented,
@@ -99,7 +100,7 @@ function Positions() {
   if (!pf.holdings.length) {
     return (
       <Empty icon={<Wallet className="size-8" />} title="Ton portefeuille est vide" action={<Link to="/portefeuille?tab=wallets" className="text-sm font-medium text-accent hover:underline">Ajouter une adresse de wallet</Link>}>
-        Ajoute tes achats avec le bouton « Transaction » (recommandé : calcul des plus-values et de la fiscalité) ou suis une adresse publique Bitcoin, Ethereum/EVM ou Solana.
+        Ajoute tes achats avec le bouton « Transaction » (recommandé : calcul des plus-values et de la fiscalité) ou suis une adresse publique Bitcoin, EVM, Solana, TON, Sui, Aptos, Cosmos ou Hyperliquid.
       </Empty>
     );
   }
@@ -280,27 +281,64 @@ function Wallets() {
   const remove = useStore((s) => s.removeWallet);
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [providerId, setProviderId] = useState('');
   const [label, setLabel] = useState('');
   const [address, setAddress] = useState('');
+  const [chainOverride, setChainOverride] = useState<WalletAddress['chain'] | ''>('');
   const [chains, setChains] = useState<string[]>(['ethereum', 'base', 'arbitrum']);
   const [include, setInclude] = useState(true);
   const [btcScript, setBtcScript] = useState<BtcScriptChoice>('auto');
-  const detected = detectChain(address);
+  const candidates = detectChainCandidates(address);
+  const provider = providerId ? findPlatform(providerId) : null;
+  const detected: WalletAddress['chain'] | null =
+    (chainOverride && candidates.includes(chainOverride) ? chainOverride : null)
+    ?? (provider ? candidates.find((c) => provider.chains.includes(c)) ?? null : null)
+    ?? candidates[0]
+    ?? null;
   const isXpub = isExtendedKey(address);
   const isPrivate = isExtendedPrivateKey(address);
 
+  function selectProvider(id: string) {
+    setProviderId(id);
+    const p = findPlatform(id);
+    if (!p) return;
+    if (!label.trim()) setLabel(p.name.replace(/\s*\([^)]*\)/g, ''));
+    if (p.defaultEvmChains?.length) setChains(p.defaultEvmChains);
+    if (p.chains.length === 1 && candidates.includes(p.chains[0])) setChainOverride(p.chains[0]);
+  }
+
   function save() {
     if (!detected) return;
-    const w: WalletAddress = { id: uid(), label: label.trim() || (detected === 'bitcoin' ? (isXpub ? 'Compte Bitcoin (xpub)' : 'Wallet Bitcoin') : detected === 'solana' ? 'Wallet Solana' : 'Wallet EVM'), chain: detected, address: address.trim(), evmChains: detected === 'evm' ? chains : undefined, btcScript: isXpub ? btcScript : undefined, includeInTotal: include, createdAt: new Date().toISOString() };
+    const cleanAddr = normalizeWalletAddress(address);
+    const defaultLabel = provider?.name.replace(/\s*\([^)]*\)/g, '')
+      ?? (detected === 'bitcoin' ? (isXpub ? 'Compte Bitcoin (xpub)' : 'Wallet Bitcoin') : `Wallet ${CHAIN_LABEL[detected].split(' ')[0]}`);
+    const w: WalletAddress = {
+      id: uid(),
+      label: label.trim() || defaultLabel,
+      chain: detected,
+      address: cleanAddr,
+      ...(providerId ? { providerId } : {}),
+      evmChains: detected === 'evm' ? chains : undefined,
+      btcScript: isXpub ? btcScript : undefined,
+      includeInTotal: include,
+      createdAt: new Date().toISOString(),
+    };
     upsert(w);
     setOpen(false);
+    setProviderId('');
     setLabel('');
     setAddress('');
+    setChainOverride('');
   }
+
+  const walletSubtitle = (w: WalletAddress) => {
+    const net = w.chain === 'evm' ? `EVM · ${(w.evmChains ?? []).join(', ')}` : CHAIN_LABEL[w.chain];
+    return `${net} · ${shortAddress(w.address)}`;
+  };
 
   return (
     <div className="space-y-4">
-      <Banner tone="info" title="Lecture seule, 100 % sûr">Boussole ne lit que des adresses publiques et des clés publiques étendues (xpub). Il ne te demandera JAMAIS ta phrase secrète (seed) ni ta clé privée : quiconque te la demande essaie de te voler. À savoir : le suivi d'une xpub Bitcoin interroge mempool.space adresse par adresse — cette adresse IP demande donc pour toi, ce qui relie momentanément ton IP à tes adresses (c'est aussi ce que fait Ledger Live, mais via ses propres serveurs).</Banner>
+      <Banner tone="info" title="Lecture seule, 100 % sûr — 50 portefeuilles + DEX on-chain">Boussole ne lit que des adresses publiques et des clés publiques étendues (xpub). Il ne te demandera JAMAIS ta phrase secrète (seed) ni ta clé privée : quiconque te la demande essaie de te voler. Réseaux lus en direct sans clé API : <b>Bitcoin (+ xpub), 10 réseaux EVM, Solana, TON, Sui, Aptos, Cosmos / Osmosis / dYdX et Hyperliquid</b>.</Banner>
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setOpen(true)}>Ajouter une adresse</Button>
         <Button icon={<RefreshCw className="size-4" />} onClick={() => void qc.invalidateQueries({ queryKey: ['wallet'] }).then(() => qc.invalidateQueries({ queryKey: ['binanceAccount'] }))}>Actualiser les soldes</Button>
@@ -308,12 +346,12 @@ function Wallets() {
       {/* Les comptes plateforme (Binance…) sont des « wallets » synthétiques : on ne les liste pas ici (ils ont leur carte compte). */}
       {(() => { const real = pf.wallets.map((w, i) => ({ w, r: pf.walletResults[i], data: pf.walletData[i] })).filter((x) => !x.w.id.startsWith('exchange:')); return (
       <>
-      {!real.length && <Empty icon={<Wallet className="size-8" />} title="Aucun wallet suivi">Ajoute une adresse Bitcoin (bc1…, 1…, 3…), Ethereum / EVM (0x…, scanne aussi Base, Arbitrum, BNB Chain…) ou Solana.</Empty>}
+      {!real.length && <Empty icon={<Wallet className="size-8" />} title="Aucun wallet suivi">Ajoute une adresse Bitcoin (bc1…, xpub…), EVM (0x…, ronin:…), Solana, TON (EQ…/UQ…), Sui, Aptos, Cosmos/Osmosis (cosmos1…, osmo1…, dydx1…) ou Hyperliquid (0x…).</Empty>}
       <div className="grid gap-4 lg:grid-cols-2">
         {real.map(({ w, r, data }) => {
           const total = (data?.totalUsd ?? 0) * pf.rate;
           return (
-            <Card key={w.id} title={w.label} subtitle={`${w.chain === 'bitcoin' ? 'Bitcoin' : w.chain === 'solana' ? 'Solana' : `EVM · ${(w.evmChains ?? []).join(', ')}`} · ${shortAddress(w.address)}`} actions={<Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} aria-label="Supprimer" onClick={() => remove(w.id)} />}>
+            <Card key={w.id} title={w.label} subtitle={walletSubtitle(w)} actions={<Button size="sm" variant="ghost" icon={<Trash2 className="size-3.5" />} aria-label="Supprimer" onClick={() => remove(w.id)} />}>
               {r?.isLoading && <Spinner label="Lecture de la blockchain…" />}
               {r?.error && <Banner tone="warn">{(r.error as Error).message}</Banner>}
               {data && (
@@ -342,9 +380,30 @@ function Wallets() {
       ); })()}
       <Modal open={open} onClose={() => setOpen(false)} title="Suivre une adresse publique" footer={<><Button variant="ghost" onClick={() => setOpen(false)}>Annuler</Button><Button variant="primary" disabled={!detected || isPrivate} onClick={save}>Ajouter</Button></>}>
         <div className="space-y-3">
-          <Field label="Adresse publique ou clé publique étendue (xpub)" hint={address ? (isPrivate ? 'Clé privée : refusée' : isXpub ? 'Clé publique étendue : toutes les adresses de ton compte Bitcoin seront lues' : detected ? `Détectée : ${detected === 'evm' ? 'EVM (Ethereum & compatibles)' : detected === 'bitcoin' ? 'Bitcoin' : 'Solana'}` : 'Format non reconnu') : 'Bitcoin (adresse ou xpub), EVM (0x…) ou Solana. Pour tout ton Ledger Bitcoin, utilise la clé publique étendue du compte : Ledger Live l’affiche dans les réglages avancés du compte (selon la version).'}>
-            <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="bc1…, xpub…, 0x… ou adresse Solana" autoComplete="off" spellCheck={false} />
+          <Field label="Portefeuille ou protocole (facultatif)" hint={provider?.note ?? 'Pré-remplit le nom et les réseaux recommandés parmi les 50 portefeuilles et DEX compatibles.'}>
+            <Select value={providerId} onChange={(e) => selectProvider(e.target.value)}>
+              <option value="">Détection automatique par l’adresse</option>
+              <optgroup label="Portefeuilles (50)">
+                {WALLET_PLATFORMS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </optgroup>
+              <optgroup label="Protocoles décentralisés on-chain (Hyperliquid, dYdX, Osmosis…)">
+                {DEX_PLATFORMS.filter((p) => p.onchainReadable).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </optgroup>
+            </Select>
           </Field>
+          <Field label="Adresse publique ou clé publique étendue (xpub)" hint={address ? (isPrivate ? 'Clé privée : refusée' : isXpub ? 'Clé publique étendue : toutes les adresses de ton compte Bitcoin seront lues' : detected ? `Détectée : ${CHAIN_LABEL[detected]}` : 'Format non reconnu') : 'Bitcoin (adresse ou xpub/zpub), EVM / Hyperliquid (0x… ou ronin:…), Solana, TON (EQ…/UQ…), Sui / Aptos (0x… 64 hex) ou Cosmos / Osmosis / dYdX.'}>
+            <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="bc1…, xpub…, 0x…, EQ…, osmo1… ou adresse Solana" autoComplete="off" spellCheck={false} />
+          </Field>
+          {candidates.length > 1 && (
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-ink-2">Ce format d’adresse existe sur plusieurs réseaux — choisis celui à lire :</p>
+              <div className="flex flex-wrap gap-2">
+                {candidates.map((c) => (
+                  <button key={c} type="button" onClick={() => setChainOverride(c)} className={`rounded-lg border px-2.5 py-1 text-xs ${detected === c ? 'border-accent bg-accent/10 font-medium text-ink' : 'border-line text-ink-2'}`}>{CHAIN_LABEL[c]}</button>
+                ))}
+              </div>
+            </div>
+          )}
           {isPrivate && <Banner tone="danger" title="Ceci est une clé PRIVÉE (xprv)">Ne la colle jamais ici ni ailleurs : elle donne accès à tes fonds. Utilise la clé publique du compte (xpub, ypub ou zpub).</Banner>}
           {isXpub && (
             <Field label="Format des adresses" hint="zpub = Native SegWit, ypub = SegWit. Pour un xpub, « Automatique » repère le format qui contient des fonds (Native SegWit d’abord, le choix par défaut de Ledger Live).">
@@ -354,10 +413,10 @@ function Wallets() {
               </Select>
             </Field>
           )}
-          <Field label="Nom"><Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Ex : Ledger, MetaMask, Phantom" /></Field>
+          <Field label="Nom"><Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Ex : Ledger, Rabby, Phantom, Tonkeeper, Hyperliquid" /></Field>
           {detected === 'evm' && (
             <div>
-              <p className="mb-2 text-xs font-medium text-ink-2">Réseaux à scanner</p>
+              <p className="mb-2 text-xs font-medium text-ink-2">Réseaux EVM à scanner ({EVM_CHAINS.length} disponibles)</p>
               <div className="flex flex-wrap gap-2">
                 {EVM_CHAINS.map((c) => (
                   <button key={c.key} type="button" onClick={() => setChains(chains.includes(c.key) ? chains.filter((x) => x !== c.key) : [...chains, c.key])} className={`rounded-lg border px-2.5 py-1 text-xs ${chains.includes(c.key) ? 'border-accent bg-accent/10 text-ink' : 'border-line text-ink-2'}`}>{c.label}</button>
@@ -385,7 +444,7 @@ function Transactions({ onImport }: { onImport: () => void }) {
   if (!txs.length) {
     return (
       <div className="space-y-4">
-        <Empty icon={<Landmark className="size-8" />} title="Aucune transaction" action={<Button icon={<FileUp className="size-4" />} onClick={onImport}>Importer l’historique Crypto.com (CSV)</Button>}>Saisis tes achats et ventes, ou importe ton historique : Boussole calcule ton prix moyen, tes plus-values et ta fiscalité.</Empty>
+        <Empty icon={<Landmark className="size-8" />} title="Aucune transaction" action={<Button icon={<FileUp className="size-4" />} onClick={onImport}>Importer un historique CSV</Button>}>Saisis tes achats et ventes, ou importe l’historique CSV de ta plateforme : Boussole calcule ton prix moyen, tes plus-values et ta fiscalité.</Empty>
         <RealFeesCard />
       </div>
     );

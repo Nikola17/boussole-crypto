@@ -112,7 +112,11 @@ const CORS_HOSTS = new Set([
   'lite-api.jup.ag', 'api.gopluslabs.io', 'api.rugcheck.xyz', 'mempool.space', 'api.crypto.com', 'api.github.com',
   'ethereum-rpc.publicnode.com', 'base-rpc.publicnode.com', 'arbitrum-one-rpc.publicnode.com', 'bsc-rpc.publicnode.com',
   'polygon-bor-rpc.publicnode.com', 'avalanche-c-chain-rpc.publicnode.com', 'optimism-rpc.publicnode.com',
+  'sonic-rpc.publicnode.com', 'zksync-era-rpc.publicnode.com', 'cronos-evm-rpc.publicnode.com',
   'solana-rpc.publicnode.com', 'api.mainnet-beta.solana.com',
+  'toncenter.com', 'fullnode.mainnet.sui.io', 'fullnode.mainnet.aptoslabs.com',
+  'cosmos-rest.publicnode.com', 'osmosis-rest.publicnode.com', 'dydx-rest.publicnode.com',
+  'injective-rest.publicnode.com', 'celestia-rest.publicnode.com', 'api.hyperliquid.xyz',
   'www.coindesk.com', 'cointelegraph.com', 'decrypt.co', 'www.theblock.co',
 ]);
 

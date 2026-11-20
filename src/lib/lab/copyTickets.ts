@@ -2,10 +2,11 @@
 // calcule le montant réel adapté au capital de l'utilisateur, fournit les bornes anti-chase / stop / TP,
 // génère les liens directs vers Binance / Crypto.com et rapproche chaque ordre des transactions et trades réels.
 
-import type { PaperDayLog, PaperFill, PaperPortfolio, TradeEntry, Transaction } from '../../types';
+import type { Account, PaperDayLog, PaperFill, PaperPortfolio, TradeEntry, Transaction } from '../../types';
 import { addDays } from './clock';
 import { copySize } from './copy';
 import type { TrustVerdict } from './trust';
+import { findPlatform, tradeLinkFor } from '../platforms';
 
 export interface CopyTicket {
   id: string;
@@ -60,6 +61,25 @@ export function exchangeLinks(symbol: string): { binanceUrl: string; cryptoComUr
     binanceUrl: `https://www.binance.com/fr/trade/${s}_USDC?type=spot`,
     cryptoComUrl: `https://crypto.com/exchange/trade/${s}_USD`,
   };
+}
+
+/** Retourne les liens de trading directs pour les comptes CEX/DEX configurés par l'utilisateur (avec Binance & Crypto.com en secours). */
+export function tradeLinksForAccounts(symbol: string, accounts: Account[]): { id: string; label: string; url: string }[] {
+  const out: { id: string; label: string; url: string }[] = [];
+  const seen = new Set<string>();
+  for (const a of accounts) {
+    if (a.kind !== 'exchange' && a.kind !== 'dex') continue;
+    const p = findPlatform(a.platformId ?? a.name);
+    if (!p || seen.has(p.id)) continue;
+    const url = tradeLinkFor(p, symbol);
+    if (!url) continue;
+    seen.add(p.id);
+    out.push({ id: p.id, label: p.name.replace(/\s*\([^)]*\)/g, ''), url });
+  }
+  const defaults = exchangeLinks(symbol);
+  if (!seen.has('binance')) out.push({ id: 'binance', label: 'Binance', url: defaults.binanceUrl });
+  if (!seen.has('cryptocom')) out.push({ id: 'cryptocom', label: 'Crypto.com', url: defaults.cryptoComUrl });
+  return out.slice(0, 6);
 }
 
 const copyKey = (portfolioId: string, day: string, coinId: string, side: 'buy' | 'sell') =>
