@@ -2,6 +2,7 @@
 // inconnus) lus sans clé API (Blockscout + RPC publics). Boussole ne signe jamais de révocation.
 
 import { ExternalLink, ShieldAlert } from 'lucide-react';
+import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useStore } from '../store/useStore';
 import { getEvmApprovals } from '../api/approvals';
@@ -10,7 +11,8 @@ import { openExternal } from '../lib/platform';
 import { Badge, Banner, Card, Spinner } from './ui';
 
 export function SecurityCard() {
-  const wallets = useStore((s) => s.wallets.filter((w) => w.chain === 'evm'));
+  const allWallets = useStore((s) => s.wallets);
+  const wallets = useMemo(() => allWallets.filter((w) => w.chain === 'evm'), [allWallets]);
   const results = useQueries({
     queries: wallets.map((w) => ({
       queryKey: ['approvals', w.id, w.address, (w.evmChains ?? []).join(',')],
